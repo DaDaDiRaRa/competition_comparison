@@ -1,8 +1,9 @@
 import shutil
 import tempfile
+import traceback
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 
 from config import settings, FACILITY_TYPES
@@ -19,11 +20,14 @@ router = APIRouter()
 async def run_diagnosis(
     facility_type: str = Form(...),
     competition_name: str = Form(""),
-    brief_pdf: UploadFile = File(...),
-    submission_pdf: UploadFile = File(...),
+    brief_pdf: bytes = File(...),
+    submission_pdf: bytes = File(...),
 ):
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
+
+    brief_bytes = brief_pdf
+    submission_bytes = submission_pdf
 
     async def event_stream():
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_diag_"))
@@ -36,7 +40,7 @@ async def run_diagnosis(
             # --- BRIEF ---
             yield sse({"type": "stage", "stage": "brief", "msg": "지침서 분석 중"})
             brief_path = tmp_root / "brief.pdf"
-            brief_path.write_bytes(await brief_pdf.read())
+            brief_path.write_bytes(brief_bytes)
 
             yield sse({"type": "progress", "step": "classify_brief", "page": 0, "total": 1})
             brief_cls = await classify_all_pages(brief_path)
@@ -58,7 +62,7 @@ async def run_diagnosis(
             # --- SUBMISSION ---
             yield sse({"type": "stage", "stage": "submission", "msg": "자사 제안서 분석 중"})
             sub_path = tmp_root / "submission.pdf"
-            sub_path.write_bytes(await submission_pdf.read())
+            sub_path.write_bytes(submission_bytes)
 
             yield sse({"type": "progress", "step": "classify_sub", "page": 0, "total": 1})
             sub_cls = await classify_all_pages(sub_path)
@@ -103,7 +107,7 @@ async def run_diagnosis(
             yield sse({"type": "complete", "result": diagnosis})
 
         except Exception as e:
-            yield sse({"type": "error", "message": str(e)})
+            yield sse({"type": "error", "message": str(e), "detail": traceback.format_exc()})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
 

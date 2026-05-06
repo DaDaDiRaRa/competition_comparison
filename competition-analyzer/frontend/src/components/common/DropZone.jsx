@@ -2,7 +2,8 @@ import { useRef, useState } from 'react'
 
 const s = {
   zone: {
-    border: '2px dashed #4a5568', borderRadius: 8, padding: 24,
+    borderWidth: 2, borderStyle: 'dashed', borderColor: '#4a5568',
+    borderRadius: 8, padding: 24,
     textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
     background: '#1a1f2e',
   },

@@ -355,24 +355,29 @@ def should_extract(page_type: str, priority_limit: int = 2) -> bool:
 
 
 def merge_extracted_data(page_classifications: list[dict], extractions: list[dict]) -> dict:
-    """Merge per-page extractions by type, same as Node 2 merge_by_type."""
+    """페이지별 분류 및 추출 데이터를 유형별로 병합"""
+    # extractions는 이제 [{"page": 1, "type": "...", "data": {...}}, ...] 형식
     merged: dict[str, dict] = {}
+
     for cls, ext in zip(page_classifications, extractions):
         pt = cls.get("primary_type", "UNKNOWN")
         if pt not in merged:
             merged[pt] = {"count": 0, "pages": [], "combined_data": []}
         merged[pt]["count"] += 1
         merged[pt]["pages"].append(cls.get("page", 0))
-        merged[pt]["combined_data"].append({**ext, "_page": cls.get("page", 0)})
 
-    # Flat shortcut: first occurrence of each critical type
+        # ext의 'data' 필드를 추출 (또는 ext 전체가 데이터일 수도 있음)
+        ext_data = ext.get("data", ext) if "data" in ext else ext
+        merged[pt]["combined_data"].append({**ext_data, "_page": cls.get("page", 0)})
+
+    # 유형별로 평탄화
     result: dict = {"_by_type": merged}
     for pt, bucket in merged.items():
         key = pt.lower()
         items = bucket["combined_data"]
         result[key] = items[0] if len(items) == 1 else items
 
-    # Aggregate quantitative fields from AREA_TABLE + SITE_PLAN
+    # 정량 데이터 집계 (AREA_TABLE + SITE_PLAN에서)
     quant: dict = {}
     for src_key in ("area_table", "site_plan"):
         src = result.get(src_key, {})

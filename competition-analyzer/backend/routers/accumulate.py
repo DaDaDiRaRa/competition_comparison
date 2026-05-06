@@ -1,9 +1,10 @@
 import json
 import shutil
 import tempfile
+import traceback
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 
 from config import settings, FACILITY_TYPES
@@ -57,9 +58,9 @@ async def run_pipeline(
     year: int = Form(...),
     client: str = Form(...),
     location: str = Form(...),
-    brief_pdf: UploadFile = File(...),
+    brief_pdf: bytes = File(...),
     submissions_json: str = Form(...),
-    submission_pdfs: list[UploadFile] = File(...),
+    submission_pdfs: list[bytes] = File(...),
 ):
     """
     submissions_json: JSON array of {company, result} matching submission_pdfs order.
@@ -74,6 +75,9 @@ async def run_pipeline(
     if len(sub_meta) != len(submission_pdfs):
         raise HTTPException(400, "submissions_json length must match submission_pdfs count")
 
+    brief_bytes = brief_pdf
+    sub_bytes_list = list(submission_pdfs)
+
     async def event_stream():
         cid = make_competition_id(year, competition_name)
         save_project_meta(cid, facility_type, competition_name, year, client, location)
@@ -82,7 +86,7 @@ async def run_pipeline(
             # --- BRIEF (classify + extract) ---
             yield sse({"type": "stage", "stage": "brief", "msg": "지침서 PDF 처리 중"})
             brief_path = tmp_root / "brief.pdf"
-            brief_path.write_bytes(await brief_pdf.read())
+            brief_path.write_bytes(brief_bytes)
 
             yield sse({"type": "progress", "step": "classify_brief", "page": 0, "total": 1})
             brief_classifications = await classify_all_pages(brief_path)
@@ -105,7 +109,7 @@ async def run_pipeline(
 
             # --- SUBMISSIONS ---
             processed_submissions = []
-            for idx, (pdf_file, meta) in enumerate(zip(submission_pdfs, sub_meta)):
+            for idx, (sub_bytes, meta) in enumerate(zip(sub_bytes_list, sub_meta)):
                 company = meta.get("company", f"company_{idx+1}")
                 result = meta.get("result", "lose")
                 yield sse({"type": "stage", "stage": "submission",
@@ -115,7 +119,7 @@ async def run_pipeline(
                 sub_dir = tmp_root / f"sub_{idx}"
                 sub_dir.mkdir(exist_ok=True)
                 sub_path = sub_dir / "submission.pdf"
-                sub_path.write_bytes(await pdf_file.read())
+                sub_path.write_bytes(sub_bytes)
 
                 yield sse({"type": "progress", "step": "classify_sub",
                            "company": company, "page": 0, "total": 1})
@@ -171,7 +175,7 @@ async def run_pipeline(
                            for s in processed_submissions
                        ]})
         except Exception as e:
-            yield sse({"type": "error", "message": str(e)})
+            yield sse({"type": "error", "message": str(e), "detail": traceback.format_exc()})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
 

@@ -17,7 +17,7 @@ function eventToText(ev) {
   if (ev.type === 'done') return `✓ ${ev.step} 완료 (${ev.total_pages || ''} pages)`
   if (ev.type === 'info') return `  패턴: ${ev.win_count}개 당선작 로드됨`
   if (ev.type === 'complete') return '✅ 분석 완료'
-  if (ev.type === 'error') return `❌ 오류: ${ev.message}`
+  if (ev.type === 'error') return `❌ 오류: ${ev.message}${ev.detail ? '\n' + ev.detail : ''}`
   return JSON.stringify(ev)
 }
 
@@ -39,7 +39,7 @@ export default function ProgressLog({ events }) {
       {events.length === 0
         ? <span style={{ color: '#4a5568' }}>분석 로그가 여기에 표시됩니다...</span>
         : events.map((ev, i) => (
-          <div key={i} style={{ color: ev.type === 'error' ? '#fc8181' : ev.type === 'complete' ? '#68d391' : undefined }}>
+          <div key={i} style={{ color: ev.type === 'error' ? '#fc8181' : ev.type === 'complete' ? '#68d391' : undefined, whiteSpace: 'pre-wrap' }}>
             {eventToText(ev)}
           </div>
         ))
