@@ -33,7 +33,7 @@ COMPARISON_AXES = [
     "concept", "mass", "landscape", "program", "facade", "technical", "quantitative"
 ]
 
-MODEL_ID = "claude-sonnet-4-20250514"
+MODEL_ID = "claude-sonnet-4-6"
 
 RASTER_DPI_CLASSIFY = 72
 RASTER_DPI_EXTRACT = 150

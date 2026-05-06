@@ -4,7 +4,7 @@ from pathlib import Path
 import anthropic
 
 from config import settings
-from services.utils import encode_pdf, parse_json_response
+from services.utils import parse_json_response, rasterize_pdf
 
 SYSTEM_PROMPT = (
     "You are an architectural document data extractor for Korean design competition reports "
@@ -303,44 +303,58 @@ def _get_schema_mapping() -> str:
     return "\n".join(items)
 
 
-def _extract_pdf_sync(pdf_path: Path) -> list[dict]:
-    """PDF에서 모든 페이지 데이터 추출"""
-    client = anthropic.Anthropic(api_key=settings.api_key)
-    pdf_data = encode_pdf(pdf_path)
+EXTRACT_BATCH_SIZE = 10
 
-    schema_mapping = _get_schema_mapping()
-    prompt = EXTRACT_PROMPT.format(schema_mapping=schema_mapping)
+
+def _extract_batch(client, batch: list[tuple[bytes, int]], prompt: str) -> list[dict]:
+    """이미지 배치에서 데이터 추출"""
+    import base64
+
+    content = []
+    for img_bytes, _ in batch:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
+            },
+        })
+    content.append({"type": "text", "text": prompt})
 
     response = client.messages.create(
         model=settings.model_id,
-        max_tokens=4000,
+        max_tokens=8000,
         temperature=0,
         system=SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": pdf_data,
-                        },
-                    },
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ],
+        messages=[{"role": "user", "content": content}],
     )
 
     try:
         results = parse_json_response(response.content[0].text)
         if not isinstance(results, list):
             results = [results]
-        return results
     except Exception as e:
-        return [{"page": 1, "error": f"추출 실패: {str(e)}"}]
+        return [{"page": batch[0][1], "error": f"추출 실패: {str(e)}"}]
+
+    for i, r in enumerate(results):
+        r["page"] = batch[i][1] if i < len(batch) else batch[0][1] + i
+    return results
+
+
+def _extract_pdf_sync(pdf_path: Path) -> list[dict]:
+    """PDF를 150 DPI 이미지로 변환 후 배치 단위로 데이터 추출"""
+    client = anthropic.Anthropic(api_key=settings.api_key)
+    pages = rasterize_pdf(pdf_path, dpi=150)
+
+    schema_mapping = _get_schema_mapping()
+    prompt = EXTRACT_PROMPT.format(schema_mapping=schema_mapping)
+
+    all_results = []
+    for batch_start in range(0, len(pages), EXTRACT_BATCH_SIZE):
+        batch = pages[batch_start:batch_start + EXTRACT_BATCH_SIZE]
+        all_results.extend(_extract_batch(client, batch, prompt))
+    return all_results
 
 
 async def extract_pdf(pdf_path: Path) -> list[dict]:

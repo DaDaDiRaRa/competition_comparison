@@ -20,8 +20,9 @@ const s = {
   tab: (active) => ({
     padding: '16px 18px', cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400,
     color: active ? '#90cdf4' : '#718096',
+    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
     borderBottom: active ? '2px solid #90cdf4' : '2px solid transparent',
-    background: 'none', border: 'none', transition: 'all 0.15s',
+    background: 'none', transition: 'all 0.15s',
     display: 'flex', alignItems: 'center', gap: 6,
   }),
   content: { maxWidth: 1100, margin: '0 auto', padding: 24 },

@@ -174,6 +174,16 @@ def get_winning_submissions(facility_type: str) -> list[dict]:
     return winners
 
 
+def save_report(facility_type: str, competition_id: str, html: str):
+    comp_dir = get_competition_dir(facility_type, competition_id)
+    path = comp_dir / "_report.html"
+    path.write_text(html, encoding="utf-8")
+
+
+def get_report_path(facility_type: str, competition_id: str) -> Path:
+    return get_competition_dir(facility_type, competition_id) / "_report.html"
+
+
 def save_pattern(facility_type: str, pattern: dict):
     path = settings.db_path / "_patterns" / f"{facility_type}.json"
     _atomic_write(path, pattern)

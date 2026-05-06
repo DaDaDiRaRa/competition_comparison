@@ -47,6 +47,10 @@ export async function rebuildPattern(facilityType) {
   return r.json()
 }
 
+export function getReportUrl(facilityType, competitionId) {
+  return `${BASE}/accumulate/projects/${facilityType}/${competitionId}/report`
+}
+
 /**
  * Run accumulation pipeline. Returns an EventSource-like async iterator.
  * formData must include: competition_name, facility_type, year, client, location,

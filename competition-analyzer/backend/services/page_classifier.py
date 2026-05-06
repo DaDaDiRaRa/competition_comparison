@@ -1,10 +1,13 @@
 import asyncio
+import base64
 from pathlib import Path
 
 import anthropic
 
 from config import settings, PAGE_TYPES
-from services.utils import encode_pdf, parse_json_response
+from services.utils import parse_json_response, rasterize_pdf
+
+BATCH_SIZE = 10  # 한 번에 처리할 최대 페이지 수
 
 SYSTEM_PROMPT = (
     "You are an architectural document page classifier. "
@@ -14,12 +17,13 @@ SYSTEM_PROMPT = (
 )
 
 CLASSIFY_PROMPT = """\
-TASK: Classify all pages in this PDF document.
+TASK: Classify each provided page image in order.
 
 RULES:
-- For each page, select exactly ONE primary type from the list below
-- If page contains multiple types (e.g., rendering + diagram), pick the DOMINANT one
+- For each image, select exactly ONE primary type from the list below
+- If a page contains multiple types, pick the DOMINANT one
 - Confidence: 0.0-1.0
+- Return exactly one JSON object per image, in the same order as provided
 
 PAGE_TYPES:
 - COVER: 표지, registration code, competition title only
@@ -40,13 +44,13 @@ PAGE_TYPES:
 - AREA_TABLE: area breakdown tables, cost estimates, data tables
 - SUSTAINABILITY: green/ESG/energy/environmental strategies
 
-RESPOND JSON ONLY as an array, one object per page:
+RESPOND JSON ONLY as an array, one object per image:
 [
   {"page":1,"type":"PAGE_TYPE","confidence":0.0,"sub_elements":["list","of","visible","elements"],"has_text":true,"has_drawing":true,"has_rendering":false,"has_table":false},
   {"page":2,"type":"PAGE_TYPE","confidence":0.0,"sub_elements":[...],...}
 ]"""
 
-_SEMAPHORE = asyncio.Semaphore(6)
+_SEMAPHORE = asyncio.Semaphore(3)
 
 
 def _normalise_result(raw: dict) -> dict:
@@ -66,44 +70,46 @@ def _normalise_result(raw: dict) -> dict:
 
 
 def _classify_pdf_sync(pdf_path: Path) -> list[dict]:
-    """PDF를 Claude API로 분류 (모든 페이지)"""
+    """PDF를 150 DPI 이미지로 변환 후 배치 단위로 분류"""
     client = anthropic.Anthropic(api_key=settings.api_key)
-    pdf_data = encode_pdf(pdf_path)
+    pages = rasterize_pdf(pdf_path, dpi=150)
 
-    response = client.messages.create(
-        model=settings.model_id,
-        max_tokens=2000,
-        temperature=0,
-        system=SYSTEM_PROMPT,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "application/pdf",
-                            "data": pdf_data,
-                        },
-                    },
-                    {"type": "text", "text": CLASSIFY_PROMPT},
-                ],
-            }
-        ],
-    )
+    all_results = []
+    for batch_start in range(0, len(pages), BATCH_SIZE):
+        batch = pages[batch_start:batch_start + BATCH_SIZE]
 
-    try:
-        results = parse_json_response(response.content[0].text)
-        if not isinstance(results, list):
-            results = [results]
-    except Exception as e:
-        return [{"page": 1, "error": f"분류 실패: {str(e)}"}]
+        content = []
+        for img_bytes, _ in batch:
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
+                },
+            })
+        content.append({"type": "text", "text": CLASSIFY_PROMPT})
 
-    return [
-        {**_normalise_result(r), "page": r.get("page", i + 1)}
-        for i, r in enumerate(results)
-    ]
+        response = client.messages.create(
+            model=settings.model_id,
+            max_tokens=3000,
+            temperature=0,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content}],
+        )
+
+        try:
+            results = parse_json_response(response.content[0].text)
+            if not isinstance(results, list):
+                results = [results]
+        except Exception:
+            results = [{}] * len(batch)
+
+        for i, r in enumerate(results):
+            actual_page = batch[i][1] if i < len(batch) else batch_start + i + 1
+            all_results.append({**_normalise_result(r), "page": actual_page})
+
+    return all_results
 
 
 async def classify_all_pages(pdf_path: Path) -> list[dict]:

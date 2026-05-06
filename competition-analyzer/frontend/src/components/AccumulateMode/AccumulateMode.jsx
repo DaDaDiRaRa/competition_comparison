@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getFacilityTypes, runAccumulatePipeline } from '../../api/client'
+import { getFacilityTypes, runAccumulatePipeline, getReportUrl } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
@@ -213,7 +213,23 @@ export default function AccumulateMode() {
 
       {result && (
         <div style={{ marginTop: 24 }}>
-          <div style={s.sectionTitle}>분석 결과</div>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <div style={s.sectionTitle}>분석 결과</div>
+            {result.report_available && (
+              <a
+                href={getReportUrl(result.facility_type, result.competition_id)}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  marginLeft: 'auto', background: '#2b6cb0', color: '#fff',
+                  borderRadius: 6, padding: '7px 16px', fontSize: 13, fontWeight: 600,
+                  textDecoration: 'none', display: 'inline-block',
+                }}
+              >
+                HTML 비교 리포트 열기
+              </a>
+            )}
+          </div>
           {result.submissions?.map(sub => (
             <div key={sub.company} style={s.subCard}>
               <div style={s.subHeader}>

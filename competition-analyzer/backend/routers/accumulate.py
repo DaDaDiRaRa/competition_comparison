@@ -5,18 +5,19 @@ import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from config import settings, FACILITY_TYPES
 from services.db_manager import (
     make_competition_id, save_project_meta, save_brief,
     save_submission, save_comparison, load_brief, load_project_meta,
-    list_projects, list_submissions,
+    list_projects, list_submissions, save_report, get_report_path,
 )
 from services.page_classifier import classify_all_pages
 from services.data_extractor import extract_pdf, merge_extracted_data
 from services.comparator import compare_submissions
 from services.pattern_builder import build_pattern
+from services.report_generator import generate_comparison_report
 from services.utils import sse
 
 router = APIRouter()
@@ -49,6 +50,15 @@ async def create_project(
     cid = make_competition_id(year, competition_name)
     save_project_meta(cid, facility_type, competition_name, year, client, location)
     return {"ok": True, "competition_id": cid}
+
+
+@router.get("/projects/{facility_type}/{competition_id}/report")
+def get_report(facility_type: str, competition_id: str):
+    path = get_report_path(facility_type, competition_id)
+    if not path.exists():
+        raise HTTPException(404, "Report not found")
+    return FileResponse(path, media_type="text/html",
+                        filename=f"{competition_id}_report.html")
 
 
 @router.post("/run")
@@ -166,7 +176,22 @@ async def run_pipeline(
             yield sse({"type": "stage", "stage": "pattern", "msg": "당선 패턴 업데이트 중"})
             build_pattern(facility_type)
 
+            # --- HTML REPORT ---
+            yield sse({"type": "stage", "stage": "report", "msg": "HTML 비교 리포트 생성 중"})
+            meta = {"competition_name": competition_name, "facility_type": facility_type,
+                    "year": year, "client": client, "location": location}
+            report_subs = [
+                {"company": s["company"], "result": s["result"],
+                 "total_pages": s["total_pages"]}
+                for s in processed_submissions
+            ]
+            html = generate_comparison_report(meta, report_subs, comparison)
+            save_report(facility_type, cid, html)
+            yield sse({"type": "done", "step": "report"})
+
             yield sse({"type": "complete", "competition_id": cid,
+                       "facility_type": facility_type,
+                       "report_available": True,
                        "comparison": comparison,
                        "submissions": [
                            {"company": s["company"], "result": s["result"],
