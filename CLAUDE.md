@@ -23,6 +23,7 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
    - Extracts design information using Claude AI
    - Stores patterns for facility types
    - Streams progress via Server-Sent Events
+   - `GET /projects/{facility_type}/{competition_id}/report` serves saved `_report.html` via `FileResponse`
 
 2. **`routers/diagnose.py`** - New proposal diagnosis
    - Analyzes a single submission against accumulated patterns
@@ -39,10 +40,12 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
    - Returns facility types and configuration
 
 **Core Services:**
-- `services/db_manager.py` - JSON-based database for projects and patterns
+
+- `services/db_manager.py` - JSON-based database for projects, patterns, and reports
 - `services/page_classifier.py` - Classifies PDF pages (cover, floor plan, section, etc.)
 - `services/data_extractor.py` - Extracts structured design data from pages
 - `services/comparator.py` - Compares proposals against accumulated patterns
+- `services/report_generator.py` - Generates HTML comparison reports from comparison data (no extra Claude API calls; uses existing comparison JSON)
 - `services/pdf_rasterizer.py` - Converts PDF pages to images for processing
 
 **Configuration:**
@@ -57,6 +60,7 @@ Located in `competition-analyzer/frontend/`, the app has three main tabs:
    - Processes each submission to extract and store patterns
    - Shows real-time progress
    - Stores data in `~/competition_db`
+   - After pipeline completes, shows "HTML 비교 리포트 열기" button (opens `_report.html` in new tab)
 
 2. **DiagnoseMode** - Analyzes new submissions
    - Upload facility type, brief PDF, and a single submission PDF
@@ -68,8 +72,10 @@ Located in `competition-analyzer/frontend/`, the app has three main tabs:
    - View facility types and manage patterns (rebuild, view)
 
 **API Communication:**
+
 - `src/api/client.js` - All backend communication
 - Uses Server-Sent Events (SSE) for streaming pipeline progress
+- `getReportUrl(facilityType, competitionId)` returns URL for opening saved HTML report
 - Endpoints: `/api/accumulate`, `/api/diagnose`, `/api/patterns`, `/api/settings`
 
 **Styling:**
@@ -123,14 +129,18 @@ Test with curl or Postman by uploading files to:
 ### Key Data Flow Patterns
 
 **Accumulate Pipeline:**
+
 1. Upload brief PDF + submissions JSON + submission PDFs
 2. Backend classifies pages (page_classifier)
 3. Extracts design data from each page (data_extractor)
-4. Stores project in database (db_manager)
-5. Rebuilds patterns for facility type (pattern_builder)
-6. Frontend receives progress updates via SSE
+4. Compares all submissions against each other (comparator)
+5. Stores project in database (db_manager)
+6. Rebuilds patterns for facility type (pattern_builder)
+7. **Generates HTML comparison report** (report_generator) — saved as `_report.html`, no extra Claude API call
+8. Frontend receives `complete` SSE event with `report_available: true`; shows "HTML 비교 리포트 열기" button
 
 **Diagnose Pipeline:**
+
 1. Upload facility type + brief PDF + submission PDF
 2. Classify and extract data from submission
 3. Retrieve accumulated patterns for facility type
@@ -155,11 +165,13 @@ Test with curl or Postman by uploading files to:
 
 ## Important Notes
 
-- **Database Location:** User-configurable, defaults to `~/competition_db`. Stores projects and patterns as JSON.
-- **Claude Model:** Currently set to claude-sonnet-4 in config.py. Update `MODEL_ID` to change.
+- **Database Location:** User-configurable, defaults to `~/competition_db`. Each competition is stored under `{db_path}/{facility_type}/{competition_id}/` with files: `_meta.json`, `_brief.json`, `_comparison.json`, `_report.html`, `submissions/*.json`.
+- **Claude Model:** Currently set to `claude-sonnet-4-20250514` in config.py. Update `MODEL_ID` to change.
 - **DPI Settings:** Classify uses 72 DPI (fast), extract uses 150 DPI (detailed).
 - **CORS:** Vite dev server (5173) and localhost:3000 are allowed.
 - **File Naming:** Components follow PascalCase. API paths are kebab-case.
 - **Facility Types:** 12 types defined in config.py (public, residential, office, etc.)
 - **Page Types:** 16 classification categories (cover, floor plan, section, elevation, etc.)
 - **Comparison Axes:** 7 dimensions for analysis (concept, mass, landscape, program, facade, technical, quantitative)
+- **HTML Report:** Generated at end of accumulate pipeline using existing comparison JSON — no extra Claude API calls. Report includes: submission cards, 7-axis comparison table with score bars and compliance tags (지침충족/부분충족/미충족), ranking, key differentiators, winner strength analysis. Winner entries highlighted in gold.
+- **Report Generation Rule:** `report_generator.py` must not make any Claude API calls. It only renders existing data from `comparison` dict into HTML.
