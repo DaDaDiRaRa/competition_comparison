@@ -12,9 +12,8 @@ from services.db_manager import (
     save_submission, save_comparison, load_brief, load_project_meta,
     list_projects, list_submissions,
 )
-from services.pdf_rasterizer import rasterize_pdf
 from services.page_classifier import classify_all_pages
-from services.data_extractor import extract_page, merge_extracted_data
+from services.data_extractor import extract_pdf, merge_extracted_data
 from services.comparator import compare_submissions
 from services.pattern_builder import build_pattern
 from services.utils import sse
@@ -85,22 +84,18 @@ async def run_pipeline(
             brief_path = tmp_root / "brief.pdf"
             brief_path.write_bytes(await brief_pdf.read())
 
-            brief_pages, _ = rasterize_pdf(brief_path, settings.dpi_classify, tmp_root / "brief_cls")
-            total_brief = len(brief_pages)
-            yield sse({"type": "progress", "step": "classify_brief", "page": 0, "total": total_brief})
+            yield sse({"type": "progress", "step": "classify_brief", "page": 0, "total": 1})
+            brief_classifications = await classify_all_pages(brief_path)
+            total_brief = len(brief_classifications)
 
-            brief_classifications = await classify_all_pages(brief_pages)
             for cls in brief_classifications:
                 yield sse({"type": "progress", "step": "classify_brief",
                            "page": cls["page"], "total": total_brief,
                            "page_type": cls["primary_type"]})
 
             yield sse({"type": "stage", "stage": "brief_extract", "msg": "지침서 데이터 추출 중"})
-            brief_extractions = []
-            for i, (img, cls) in enumerate(zip(brief_pages, brief_classifications)):
-                ext = await extract_page(img, cls["primary_type"])
-                brief_extractions.append(ext)
-                yield sse({"type": "progress", "step": "extract_brief", "page": i + 1, "total": total_brief})
+            brief_extractions = await extract_pdf(brief_path)
+            yield sse({"type": "progress", "step": "extract_brief", "page": 1, "total": 1})
 
             brief_data = merge_extracted_data(brief_classifications, brief_extractions)
             brief_data["page_map"] = brief_classifications
@@ -122,23 +117,21 @@ async def run_pipeline(
                 sub_path = sub_dir / "submission.pdf"
                 sub_path.write_bytes(await pdf_file.read())
 
-                # Classify at low DPI (parallel)
-                cls_imgs, _ = rasterize_pdf(sub_path, settings.dpi_classify, sub_dir / "cls")
-                total_sub = len(cls_imgs)
-                sub_classifications = await classify_all_pages(cls_imgs)
+                yield sse({"type": "progress", "step": "classify_sub",
+                           "company": company, "page": 0, "total": 1})
+                sub_classifications = await classify_all_pages(sub_path)
+                total_sub = len(sub_classifications)
+
                 for cls in sub_classifications:
                     yield sse({"type": "progress", "step": "classify_sub",
                                "company": company, "page": cls["page"], "total": total_sub,
                                "page_type": cls["primary_type"]})
 
-                # Extract at high DPI (sequential — heavy per-page)
-                ext_imgs, _ = rasterize_pdf(sub_path, settings.dpi_extract, sub_dir / "ext")
-                sub_extractions = []
-                for i, (img, cls) in enumerate(zip(ext_imgs, sub_classifications)):
-                    ext = await extract_page(img, cls["primary_type"])
-                    sub_extractions.append(ext)
-                    yield sse({"type": "progress", "step": "extract_sub",
-                               "company": company, "page": i + 1, "total": total_sub})
+                yield sse({"type": "progress", "step": "extract_sub",
+                           "company": company, "page": 0, "total": 1})
+                sub_extractions = await extract_pdf(sub_path)
+                yield sse({"type": "progress", "step": "extract_sub",
+                           "company": company, "page": 1, "total": 1})
 
                 page_dist = {}
                 for cls in sub_classifications:

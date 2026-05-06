@@ -4,7 +4,7 @@ from pathlib import Path
 import anthropic
 
 from config import settings
-from services.utils import encode_image, parse_json_response
+from services.utils import encode_pdf, parse_json_response
 
 SYSTEM_PROMPT = (
     "You are an architectural document data extractor for Korean design competition reports "
@@ -272,14 +272,48 @@ EXTRACT key information from this page. Respond JSON ONLY.
 }
 
 
-def _extract_page_sync(image_path: Path, page_type: str) -> dict:
-    prompt_cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
+EXTRACT_PROMPT = """\
+TASK: Extract data from all pages of this PDF document.
+
+For each page, identify its type and extract relevant data according to the type-specific schema below.
+Output a JSON array with one object per page.
+
+PAGE_TYPE_SCHEMAS:
+{schema_mapping}
+
+RULES:
+- Extract ONLY what is visually present on each page
+- Numbers must be exact if visible, null if not visible
+- For multiple pages of the same type, analyze each separately
+- Use Korean for Korean text, English for English text
+
+RESPOND JSON ONLY as an array:
+[
+  {{"page": 1, "type": "PAGE_TYPE", "data": {{...extracted_fields...}}}},
+  {{"page": 2, "type": "PAGE_TYPE", "data": {{...extracted_fields...}}}},
+]"""
+
+
+def _get_schema_mapping() -> str:
+    """페이지 타입별 스키마를 포맷팅"""
+    items = []
+    for page_type, cfg in EXTRACTION_PROMPTS.items():
+        schema_example = cfg["instruction"].split("Respond JSON ONLY.")[1].strip() if "Respond JSON ONLY." in cfg["instruction"] else "{}"
+        items.append(f"- {page_type}: {schema_example}")
+    return "\n".join(items)
+
+
+def _extract_pdf_sync(pdf_path: Path) -> list[dict]:
+    """PDF에서 모든 페이지 데이터 추출"""
     client = anthropic.Anthropic(api_key=settings.api_key)
-    img_data, media_type = encode_image(image_path)
+    pdf_data = encode_pdf(pdf_path)
+
+    schema_mapping = _get_schema_mapping()
+    prompt = EXTRACT_PROMPT.format(schema_mapping=schema_mapping)
 
     response = client.messages.create(
         model=settings.model_id,
-        max_tokens=800,
+        max_tokens=4000,
         temperature=0,
         system=SYSTEM_PROMPT,
         messages=[
@@ -287,20 +321,32 @@ def _extract_page_sync(image_path: Path, page_type: str) -> dict:
                 "role": "user",
                 "content": [
                     {
-                        "type": "image",
-                        "source": {"type": "base64", "media_type": media_type, "data": img_data},
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": pdf_data,
+                        },
                     },
-                    {"type": "text", "text": prompt_cfg["instruction"]},
+                    {"type": "text", "text": prompt},
                 ],
             }
         ],
     )
 
-    return parse_json_response(response.content[0].text)
+    try:
+        results = parse_json_response(response.content[0].text)
+        if not isinstance(results, list):
+            results = [results]
+        return results
+    except Exception as e:
+        return [{"page": 1, "error": f"추출 실패: {str(e)}"}]
 
 
-async def extract_page(image_path: Path, page_type: str) -> dict:
-    return await asyncio.to_thread(_extract_page_sync, image_path, page_type)
+async def extract_pdf(pdf_path: Path) -> list[dict]:
+    """PDF 전체 데이터 추출"""
+    async with asyncio.Semaphore(6):
+        return await asyncio.to_thread(_extract_pdf_sync, pdf_path)
 
 
 def should_extract(page_type: str, priority_limit: int = 2) -> bool:

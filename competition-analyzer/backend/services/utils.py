@@ -3,12 +3,11 @@ import json
 from pathlib import Path
 
 
-def encode_image(image_path: Path) -> tuple[str, str]:
-    ext = image_path.suffix.lower()
-    media_type = "image/png" if ext == ".png" else "image/jpeg"
-    with open(image_path, "rb") as f:
+def encode_pdf(pdf_path: Path) -> str:
+    """PDF 파일을 base64로 인코딩"""
+    with open(pdf_path, "rb") as f:
         data = base64.standard_b64encode(f.read()).decode("utf-8")
-    return data, media_type
+    return data
 
 
 def parse_json_response(text: str) -> dict:

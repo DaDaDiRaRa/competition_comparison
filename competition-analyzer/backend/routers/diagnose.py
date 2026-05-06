@@ -7,9 +7,8 @@ from fastapi.responses import StreamingResponse
 
 from config import settings, FACILITY_TYPES
 from services.db_manager import load_pattern
-from services.pdf_rasterizer import rasterize_pdf
 from services.page_classifier import classify_all_pages
-from services.data_extractor import extract_page, merge_extracted_data
+from services.data_extractor import extract_pdf, merge_extracted_data
 from services.comparator import diagnose_submission
 from services.utils import sse
 
@@ -39,18 +38,17 @@ async def run_diagnosis(
             brief_path = tmp_root / "brief.pdf"
             brief_path.write_bytes(await brief_pdf.read())
 
-            brief_imgs, _ = rasterize_pdf(brief_path, settings.dpi_classify, tmp_root / "brief_cls")
-            total_brief = len(brief_imgs)
-            brief_cls = await classify_all_pages(brief_imgs)
+            yield sse({"type": "progress", "step": "classify_brief", "page": 0, "total": 1})
+            brief_cls = await classify_all_pages(brief_path)
+            total_brief = len(brief_cls)
+
             for c in brief_cls:
                 yield sse({"type": "progress", "step": "classify_brief",
                            "page": c["page"], "total": total_brief, "page_type": c["primary_type"]})
 
-            brief_exts = []
-            for i, (img, c) in enumerate(zip(brief_imgs, brief_cls)):
-                ext = await extract_page(img, c["primary_type"])
-                brief_exts.append(ext)
-                yield sse({"type": "progress", "step": "extract_brief", "page": i + 1, "total": total_brief})
+            yield sse({"type": "progress", "step": "extract_brief", "page": 0, "total": 1})
+            brief_exts = await extract_pdf(brief_path)
+            yield sse({"type": "progress", "step": "extract_brief", "page": 1, "total": 1})
 
             brief_data = merge_extracted_data(brief_cls, brief_exts)
             brief_data["page_map"] = brief_cls
@@ -62,21 +60,17 @@ async def run_diagnosis(
             sub_path = tmp_root / "submission.pdf"
             sub_path.write_bytes(await submission_pdf.read())
 
-            # Classify at low DPI (parallel)
-            cls_imgs, _ = rasterize_pdf(sub_path, settings.dpi_classify, tmp_root / "sub_cls")
-            total_sub = len(cls_imgs)
-            sub_cls = await classify_all_pages(cls_imgs)
+            yield sse({"type": "progress", "step": "classify_sub", "page": 0, "total": 1})
+            sub_cls = await classify_all_pages(sub_path)
+            total_sub = len(sub_cls)
+
             for c in sub_cls:
                 yield sse({"type": "progress", "step": "classify_sub",
                            "page": c["page"], "total": total_sub, "page_type": c["primary_type"]})
 
-            # Extract at high DPI
-            ext_imgs, _ = rasterize_pdf(sub_path, settings.dpi_extract, tmp_root / "sub_ext")
-            sub_exts = []
-            for i, (img, c) in enumerate(zip(ext_imgs, sub_cls)):
-                ext = await extract_page(img, c["primary_type"])
-                sub_exts.append(ext)
-                yield sse({"type": "progress", "step": "extract_sub", "page": i + 1, "total": total_sub})
+            yield sse({"type": "progress", "step": "extract_sub", "page": 0, "total": 1})
+            sub_exts = await extract_pdf(sub_path)
+            yield sse({"type": "progress", "step": "extract_sub", "page": 1, "total": 1})
 
             page_dist = {}
             for c in sub_cls:

@@ -4,5 +4,3 @@ anthropic>=0.40.0
 python-multipart==0.0.12
 pydantic==2.9.0
 aiofiles==24.1.0
-pillow==11.0.0
-pdf2image==1.17.0
