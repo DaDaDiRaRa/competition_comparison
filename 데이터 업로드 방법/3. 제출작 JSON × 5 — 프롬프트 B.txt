@@ -1,0 +1,161 @@
+3. 제출작 JSON × 5 — 프롬프트 B
+각 제출작 PDF를 하나씩 업로드하고 아래 프롬프트 사용:
+
+(파일명과 result만 바꿔서 5번 반복)
+
+이 PDF는 건축설계공모 제출작입니다.
+회사명: 건원_공공지평
+결과: winner
+(→ 낙선작은 각각 a_Civic_Terrace/loser, b_Layered_Scape/loser, c_Commons_Platform/loser, d_Forged_Future/loser 로 변경)
+
+아래 형식 그대로 JSON을 출력하세요.
+규칙:
+- 페이지에 실제로 보이는 것만 추출, 추측 금지
+- 숫자는 보이면 정확히, 안 보이면 null
+- 한국어 텍스트는 한국어로
+- JSON만 출력, 설명 없음
+
+PAGE_TYPES 분류 기준:
+- COVER: 표지
+- TOC_HERO: 목차+메인 렌더링
+- SITE_CONTEXT: 도시분석, 대지현황
+- CONCEPT: 설계개념 다이어그램
+- SPECIAL_SPACE: 공간 프로그램
+- RENDERING_EXT: 외부 투시도
+- RENDERING_INT: 내부 투시도
+- SITE_PLAN: 배치도
+- LANDSCAPE: 조경계획
+- FLOOR_PLAN: 평면도
+- SECTION: 단면도
+- ELEVATION: 입면도
+- CIRCULATION: 동선 다이어그램
+- HEALTH_CENTER: 보건소 관련
+- TECHNICAL: 구조/설비/친환경
+- AREA_TABLE: 면적표/공사비
+- SUSTAINABILITY: 녹색/에너지 전략
+
+출력 형식:
+{
+  "company": "건원_공공지평",
+  "result": "winner",
+  "competition_id": "2025_영등포구_통합_신청사_국제설계공모",
+  "facility_type": "public",
+  "total_pages": 전체페이지수,
+  "page_map": [
+    {
+      "page": 1,
+      "primary_type": "PAGE_TYPE",
+      "confidence": 0.95,
+      "key_elements": ["보이는 요소들"],
+      "has_text": true,
+      "has_drawing": false,
+      "has_rendering": false,
+      "has_table": false
+    }
+  ],
+  "page_distribution": {
+    "COVER": 1,
+    "CONCEPT": 3
+  },
+  "extracted_data": {
+    "_by_type": {
+      "CONCEPT": {
+        "count": 0,
+        "pages": [],
+        "combined_data": []
+      }
+    },
+    "concept": {
+      "concept_name_ko": "",
+      "concept_name_en": "",
+      "keywords": [],
+      "massing_type": "horizontal|vertical|stepped|stacked|hybrid|formal_tower",
+      "main_strategy": "",
+      "sub_strategies": [],
+      "metaphor_reference": "",
+      "target_user": []
+    },
+    "site_plan": {
+      "site_area_sqm": null,
+      "building_area_sqm": null,
+      "total_floor_area_sqm": null,
+      "building_coverage_ratio_pct": null,
+      "floor_area_ratio_pct": null,
+      "building_height_m": null,
+      "floors_above": null,
+      "floors_below": null,
+      "parking_count": null,
+      "main_entrance_direction": "",
+      "vehicle_access_direction": "",
+      "open_space_strategy": ""
+    },
+    "floor_plan": {
+      "floor_level": "",
+      "main_programs": [],
+      "core_count": 0,
+      "core_type": "center|side|dual|distributed",
+      "public_programs_on_this_floor": [],
+      "special_spaces": [],
+      "has_outdoor_terrace": false
+    },
+    "section": {
+      "total_height_m": null,
+      "typical_floor_height_m": null,
+      "underground_levels": null,
+      "atrium_present": false,
+      "key_spatial_features": []
+    },
+    "elevation": {
+      "primary_material": "",
+      "secondary_material": "",
+      "facade_system": "curtain_wall|precast|brick|stone|metal_panel|louver|mega_panel|unitized",
+      "shading_device": "",
+      "transparency_ratio": "high|medium|low",
+      "facade_rhythm": "uniform|varied|gradient"
+    },
+    "landscape": {
+      "green_area_ratio_pct": null,
+      "tree_types": [],
+      "outdoor_programs": [],
+      "water_feature": false,
+      "key_landscape_concept": ""
+    },
+    "area_table": {
+      "total_floor_area_sqm": null,
+      "site_area_sqm": null,
+      "building_coverage_ratio_pct": null,
+      "floor_area_ratio_pct": null,
+      "parking_count": null,
+      "floors_above": null,
+      "floors_below": null,
+      "program_areas": []
+    },
+    "technical": {
+      "structural_system": "",
+      "energy_strategies": [],
+      "green_certification_target": "",
+      "smart_building_features": []
+    },
+    "sustainability": {
+      "green_certification": "",
+      "energy_grade_target": "",
+      "renewable_energy": [],
+      "key_sustainability_concept": ""
+    },
+    "_quantitative": {
+      "total_floor_area_sqm": null,
+      "site_area_sqm": null,
+      "building_area_sqm": null,
+      "building_coverage_ratio_pct": null,
+      "floor_area_ratio_pct": null,
+      "floors_above": null,
+      "floors_below": null,
+      "parking_count": null
+    }
+  }
+}
+
+page_map은 전체 페이지를 순서대로 빠짐없이 분류하세요.
+page_distribution은 유형별 페이지 수를 카운트해서 넣으세요.
+extracted_data의 _by_type은 실제 등장한 유형만 포함하세요.
+PDF에 없는 유형의 키는 생략해도 됩니다.

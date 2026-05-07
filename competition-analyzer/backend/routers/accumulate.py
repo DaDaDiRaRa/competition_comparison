@@ -61,6 +61,55 @@ def get_report(facility_type: str, competition_id: str):
                         filename=f"{competition_id}_report.html")
 
 
+@router.post("/projects/{facility_type}/{competition_id}/rerun-compare")
+async def rerun_compare(facility_type: str, competition_id: str):
+    """기존 저장된 데이터로 비교분석 + 리포트만 재실행. SSE 스트리밍."""
+    meta = load_project_meta(facility_type, competition_id)
+    if not meta:
+        raise HTTPException(404, "Project not found")
+    brief_data = load_brief(facility_type, competition_id)
+    if not brief_data:
+        raise HTTPException(400, "지침서 데이터 없음. 전체 분석을 먼저 실행하세요.")
+    submissions_data = list_submissions(facility_type, competition_id)
+    if not submissions_data:
+        raise HTTPException(400, "제안서 데이터 없음. 전체 분석을 먼저 실행하세요.")
+
+    async def event_stream():
+        try:
+            yield sse({"type": "stage", "stage": "compare", "msg": "비교분석 중"})
+            comparison = await compare_submissions(brief_data, submissions_data)
+            comparison["competition_id"] = competition_id
+            save_comparison(facility_type, competition_id, comparison)
+
+            yield sse({"type": "stage", "stage": "pattern", "msg": "당선 패턴 업데이트 중"})
+            build_pattern(facility_type)
+
+            yield sse({"type": "stage", "stage": "report", "msg": "HTML 비교 리포트 생성 중"})
+            report_subs = [
+                {"company": s["company"], "result": s["result"],
+                 "total_pages": s["total_pages"]}
+                for s in submissions_data
+            ]
+            html = generate_comparison_report(meta, report_subs, comparison)
+            save_report(facility_type, competition_id, html)
+            yield sse({"type": "done", "step": "report"})
+
+            yield sse({"type": "complete", "competition_id": competition_id,
+                       "facility_type": facility_type,
+                       "report_available": True,
+                       "comparison": comparison,
+                       "submissions": [
+                           {"company": s["company"], "result": s["result"],
+                            "total_pages": s["total_pages"],
+                            "page_distribution": s.get("page_distribution", {})}
+                           for s in submissions_data
+                       ]})
+        except Exception as e:
+            yield sse({"type": "error", "message": str(e), "detail": traceback.format_exc()})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/run")
 async def run_pipeline(
     competition_name: str = Form(...),

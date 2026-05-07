@@ -95,6 +95,8 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 .diff-list { display: flex; flex-direction: column; gap: 8px; }
 .diff-item { background: #0d1117; border-radius: 6px; padding: 10px 14px; font-size: 13px;
              border-left: 3px solid #90cdf4; }
+.diff-win  { border-left-color: #68d391; }
+.diff-lose { border-left-color: #fc8181; }
 
 .winner-box { background: rgba(246,216,96,0.05); border: 1px solid rgba(246,216,96,0.2);
               border-radius: 8px; padding: 16px; margin-bottom: 12px; }
@@ -119,10 +121,12 @@ def generate_comparison_report(
     location     = meta.get("location", "")
     facility_label = FACILITY_TYPES.get(facility_type, facility_type)
 
-    comp_subs  = comparison.get("submissions", {})
-    ranking    = comparison.get("ranking", [])
-    key_diff   = comparison.get("key_differentiators", [])
-    winners    = [s["company"] for s in submissions if s.get("result") == "win"]
+    comp_subs        = comparison.get("submissions", {})
+    ranking          = comparison.get("ranking", [])
+    key_diff         = comparison.get("key_differentiators", [])
+    winner_strengths = comparison.get("winner_strengths", [])
+    loser_weaknesses = comparison.get("loser_weaknesses", [])
+    winners          = [s["company"] for s in submissions if s.get("result") == "win"]
 
     # ── 헤더 ──────────────────────────────────────────────
     header = f"""
@@ -217,6 +221,18 @@ def generate_comparison_report(
         if key_diff else ""
     )
 
+    # ── 당선/낙선 요약 ───────────────────────────────────
+    ws_items = "".join(f'<div class="diff-item diff-win">{w}</div>' for w in winner_strengths)
+    lw_items = "".join(f'<div class="diff-item diff-lose">{w}</div>' for w in loser_weaknesses)
+    ws_section = (
+        f'<div class="sec"><div class="sec-title">당선작 우월 요인</div><div class="diff-list">{ws_items}</div></div>'
+        if ws_items else ""
+    )
+    lw_section = (
+        f'<div class="sec"><div class="sec-title">낙선작 공통 약점</div><div class="diff-list">{lw_items}</div></div>'
+        if lw_items else ""
+    )
+
     # ── 당선작 강점 분석 ──────────────────────────────────
     winner_boxes = ""
     for winner in winners:
@@ -266,6 +282,8 @@ def generate_comparison_report(
 {table_section}
 {ranking_section}
 {diff_section}
+{ws_section}
+{lw_section}
 {winner_section}
 <div class="footer">Competition Analyzer — 자동 생성 비교 리포트 · {comp_name}</div>
 </div>

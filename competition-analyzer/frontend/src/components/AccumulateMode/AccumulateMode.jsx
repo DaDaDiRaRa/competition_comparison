@@ -4,6 +4,7 @@ import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
 import ComparisonDashboard from './ComparisonDashboard'
+import ProjectList from './ProjectList'
 
 const s = {
   panel: { background: '#1a1f2e', borderRadius: 12, padding: 24 },
@@ -138,6 +139,8 @@ export default function AccumulateMode() {
   }
 
   return (
+    <>
+    <ProjectList />
     <div style={s.panel}>
       <div style={s.title}>데이터 축적 모드</div>
 
@@ -251,5 +254,6 @@ export default function AccumulateMode() {
         </div>
       )}
     </div>
+    </>
   )
 }

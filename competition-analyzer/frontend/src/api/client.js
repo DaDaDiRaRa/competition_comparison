@@ -51,6 +51,10 @@ export function getReportUrl(facilityType, competitionId) {
   return `${BASE}/accumulate/projects/${facilityType}/${competitionId}/report`
 }
 
+export function rerunCompare(facilityType, competitionId) {
+  return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/rerun-compare`)
+}
+
 /**
  * Run accumulation pipeline. Returns an EventSource-like async iterator.
  * formData must include: competition_name, facility_type, year, client, location,
@@ -68,7 +72,7 @@ export function runDiagnosePipeline(formData) {
 }
 
 async function* streamSSE(url, formData) {
-  const response = await fetch(url, { method: 'POST', body: formData })
+  const response = await fetch(url, { method: 'POST', body: formData ?? undefined })
   if (!response.ok) {
     const err = await response.text()
     throw new Error(`HTTP ${response.status}: ${err}`)

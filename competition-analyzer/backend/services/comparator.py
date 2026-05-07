@@ -15,18 +15,29 @@ TEMPERATURE: 0
 BRIEF_DATA:
 {brief_json}
 
+ACTUAL_RESULTS:
+{results_json}
+
 SUBMISSIONS:
 {submissions_json}
 
+ACTUAL_RESULTS shows the real competition outcome (win/lose) for each submission.
+Use this when writing winner_strengths (based on actual winners) and loser_weaknesses (based on actual losers).
+Ranking and scores are your analytical assessment and may differ from actual results.
+
 COMPARE_EACH_SUBMISSION_AGAINST_BRIEF_AND_EACH_OTHER:
-For each axis evaluate all submissions.
+For each axis evaluate all submissions. Cite actual data from the extracted content.
 
 axis_keys: concept|mass|landscape|program|facade|technical|quantitative
 
-SCORING: 0.0-10.0 per axis per submission
-STRENGTHS: max_3_keywords
-WEAKNESSES: max_3_keywords
+SCORING: 0.0-10.0 per axis per submission (use decimals, e.g. 7.3)
+STRENGTHS: max_5 items, each a specific Korean phrase (~15-30 chars), cite actual data
+WEAKNESSES: max_5 items, each a specific Korean phrase (~15-30 chars), cite actual data
 BRIEF_COMPLIANCE: yes|partial|no|unclear per axis
+NOTES: max_120_chars, specific evidence-based observation with actual numbers/names where available (Korean)
+key_differentiators: max_5 sentences (~50 chars each) explaining what separated winners from losers
+winner_strengths: max_5 sentences (~50 chars each) on why winner won
+loser_weaknesses: max_5 sentences (~50 chars each) on common loser failure patterns
 
 OUTPUT_ONLY_JSON:
 {
@@ -42,7 +53,9 @@ OUTPUT_ONLY_JSON:
     }
   },
   "ranking": ["<company1>","<company2>"],
-  "key_differentiators": ["<max_5>"]
+  "key_differentiators": ["<max_5>"],
+  "winner_strengths": ["<max_5>"],
+  "loser_weaknesses": ["<max_5>"]
 }"""
 
 DIAGNOSE_PROMPT_TEMPLATE = """\
@@ -105,6 +118,39 @@ def _compact(obj: dict) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
 
 
+def _trim_extracted(data: dict) -> dict:
+    """extracted_data에서 비교에 필요한 핵심 필드만 추출해 토큰을 줄인다."""
+    keep_keys = {
+        "concept", "toc_hero", "site_plan", "floor_plan", "section",
+        "elevation", "area_table", "sustainability", "circulation",
+        "special_space", "_quantitative",
+    }
+    trimmed = {k: v for k, v in data.items() if k in keep_keys}
+    # _by_type 등 내부 집계 키 제거
+    trimmed.pop("_by_type", None)
+    # combined_data 내의 _page 필드 제거 (불필요한 메타)
+    for key, val in trimmed.items():
+        if isinstance(val, list):
+            for item in val:
+                if isinstance(item, dict):
+                    item.pop("_page", None)
+        elif isinstance(val, dict):
+            val.pop("_page", None)
+    return trimmed
+
+
+def _trim_brief(data: dict) -> dict:
+    """brief_data에서 비교에 필요한 핵심 필드만 추출한다."""
+    keep_keys = {
+        "special_space", "area_table", "circulation", "_quantitative",
+        "total_pages", "page_distribution",
+    }
+    trimmed = {k: v for k, v in data.items() if k in keep_keys}
+    trimmed.pop("_by_type", None)
+    trimmed.pop("page_map", None)
+    return trimmed
+
+
 _ANALYST_SYSTEM = (
     "You are an expert architectural competition analyst. "
     "Compare multiple design competition entries based on structured extracted data. "
@@ -114,15 +160,16 @@ _ANALYST_SYSTEM = (
 
 
 def _run_compare_sync(brief_data: dict, submissions: list[dict]) -> dict:
-    sub_map = {s["company"]: s.get("extracted_data", {}) for s in submissions}
-    prompt = COMPARE_PROMPT_TEMPLATE.format(
-        brief_json=_compact(brief_data),
-        submissions_json=_compact(sub_map),
-    )
+    sub_map = {s["company"]: _trim_extracted(s.get("extracted_data", {})) for s in submissions}
+    results_map = {s["company"]: s.get("result", "unknown") for s in submissions}
+    prompt = (COMPARE_PROMPT_TEMPLATE
+              .replace("{brief_json}", _compact(_trim_brief(brief_data)))
+              .replace("{results_json}", _compact(results_map))
+              .replace("{submissions_json}", _compact(sub_map)))
     client = anthropic.Anthropic(api_key=settings.api_key)
     response = client.messages.create(
         model=settings.model_id,
-        max_tokens=4096,
+        max_tokens=16000,
         temperature=0,
         system=_ANALYST_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
@@ -140,16 +187,15 @@ def _run_diagnose_sync(
     brief_data: dict,
     submission_data: dict,
 ) -> dict:
-    prompt = DIAGNOSE_PROMPT_TEMPLATE.format(
-        facility_type=facility_type,
-        patterns_json=_compact(winning_patterns),
-        brief_json=_compact(brief_data),
-        submission_json=_compact(submission_data),
-    )
+    prompt = (DIAGNOSE_PROMPT_TEMPLATE
+              .replace("{facility_type}", facility_type)
+              .replace("{patterns_json}", _compact(winning_patterns))
+              .replace("{brief_json}", _compact(brief_data))
+              .replace("{submission_json}", _compact(submission_data)))
     client = anthropic.Anthropic(api_key=settings.api_key)
     response = client.messages.create(
         model=settings.model_id,
-        max_tokens=4096,
+        max_tokens=8192,
         temperature=0,
         system=_ANALYST_SYSTEM,
         messages=[{"role": "user", "content": prompt}],

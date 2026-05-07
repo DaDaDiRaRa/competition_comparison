@@ -1,0 +1,37 @@
+4. _patterns/public.json — 프롬프트 C
+건원 제출작 JSON(위 3번에서 만든 것)을 붙여넣고 아래 프롬프트 사용:
+
+아래는 건축설계공모 당선작의 JSON 데이터입니다.
+이 데이터를 분석해서 패턴 통계 파일을 만들어주세요.
+
+[건원_공공지평_winner.json 전체 내용 붙여넣기]
+
+아래 형식 그대로 JSON을 출력하세요. JSON만 출력, 설명 없음.
+
+{
+  "facility_type": "public",
+  "win_count": 1,
+  "page_distribution": {
+    "COVER": {"mean": null, "std": 0.0, "n": 1},
+    "CONCEPT": {"mean": null, "std": 0.0, "n": 1},
+    "COVER_ratio": {"mean": null, "std": 0.0, "n": 1},
+    "CONCEPT_ratio": {"mean": null, "std": 0.0, "n": 1}
+  },
+  "quantitative": {
+    "total_floor_area": {"mean": null, "std": null, "n": 0},
+    "site_area": {"mean": null, "std": null, "n": 0},
+    "building_area": {"mean": null, "std": null, "n": 0},
+    "floor_area_ratio": {"mean": null, "std": null, "n": 0},
+    "coverage_ratio": {"mean": null, "std": null, "n": 0},
+    "above_ground_floors": {"mean": null, "std": null, "n": 0},
+    "underground_floors": {"mean": null, "std": null, "n": 0},
+    "parking_count": {"mean": null, "std": null, "n": 0}
+  },
+  "concept_keywords": {},
+  "mass_types": {}
+}
+
+page_distribution: 각 PAGE_TYPE별 등장 횟수와 비율(count/total_pages)의 mean/std/n을 계산하세요. n=1이면 std=0.0.
+quantitative: extracted_data._quantitative의 수치를 float으로 변환해서 채우세요. 값이 없으면 해당 키를 생략하세요.
+concept_keywords: extracted_data.concept.keywords 배열의 각 키워드를 {키워드: 빈도비율} 형식으로 (n=1이면 모두 1.0).
+mass_types: extracted_data.concept.massing_type을 {타입명: 비율} 형식으로.

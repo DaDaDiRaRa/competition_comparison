@@ -1,0 +1,85 @@
+2. _brief.json — 프롬프트 A
+지침서 PDF만 업로드하고 아래 프롬프트 사용:
+
+지침서 PDF를 분석해서 아래 형식 그대로 JSON을 출력하세요.
+
+규칙:
+- 페이지에 실제로 보이는 것만 추출 (추측 금지)
+- 숫자는 보이면 정확히, 안 보이면 null
+- 모든 텍스트는 한국어로
+- JSON만 출력, 설명 없음
+
+출력 형식:
+{
+  "total_pages": 전체_페이지수,
+  "page_map": [
+    {
+      "page": 1,
+      "primary_type": "COVER|TOC_HERO|SITE_CONTEXT|CONCEPT|SPECIAL_SPACE|RENDERING_EXT|RENDERING_INT|SITE_PLAN|LANDSCAPE|FLOOR_PLAN|SECTION|ELEVATION|CIRCULATION|HEALTH_CENTER|TECHNICAL|AREA_TABLE|SUSTAINABILITY",
+      "confidence": 0.0~1.0,
+      "key_elements": [],
+      "has_text": true,
+      "has_drawing": false,
+      "has_rendering": false,
+      "has_table": false
+    }
+  ],
+  "_by_type": {
+    "AREA_TABLE": {"count": 0, "pages": [], "combined_data": []},
+    "SITE_CONTEXT": {"count": 0, "pages": [], "combined_data": []}
+  },
+  "area_table": {
+    "total_floor_area_sqm": null,
+    "site_area_sqm": null,
+    "building_area_sqm": null,
+    "building_coverage_ratio_pct": null,
+    "floor_area_ratio_pct": null,
+    "parking_count": null,
+    "floors_above": null,
+    "floors_below": null,
+    "estimated_total_cost": "",
+    "program_areas": []
+  },
+  "site_context": {
+    "site_issues": [],
+    "surrounding_facilities": [],
+    "urban_strategy": "",
+    "transportation_connections": [],
+    "historical_context": "",
+    "green_network": ""
+  },
+  "concept": {
+    "concept_name_ko": "",
+    "keywords": [],
+    "main_strategy": "",
+    "sub_strategies": [],
+    "target_user": []
+  },
+  "technical": {
+    "technical_domain": "",
+    "energy_strategies": [],
+    "green_certification_target": "",
+    "smart_building_features": []
+  },
+  "sustainability": {
+    "green_certification": "",
+    "energy_grade_target": "",
+    "renewable_energy": [],
+    "carbon_reduction_strategies": [],
+    "key_sustainability_concept": ""
+  },
+  "_quantitative": {
+    "total_floor_area_sqm": null,
+    "site_area_sqm": null,
+    "building_area_sqm": null,
+    "building_coverage_ratio_pct": null,
+    "floor_area_ratio_pct": null,
+    "floors_above": null,
+    "floors_below": null,
+    "parking_count": null
+  }
+}
+
+page_map은 모든 페이지를 하나씩 분류해서 빠짐없이 배열에 넣으세요.
+_by_type은 페이지 유형별로 등장한 페이지 번호와 추출 데이터를 모아서 넣으세요.
+실제 등장한 유형만 포함하면 됩니다.
