@@ -84,7 +84,7 @@ def _classify_pdf_sync(pdf_path: Path) -> list[dict]:
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": "image/jpeg",
+                    "media_type": "image/png",
                     "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
                 },
             })
