@@ -15,7 +15,7 @@ import { useState, useMemo } from 'react'
 const AXIS_LABEL = {
   concept: { label: '설계 컨셉', icon: '◈' },
   mass:    { label: '매스 전략', icon: '◼' },
-  landscape: { label: '공이·조경 연계', icon: '◉' },
+  landscape: { label: '공원·조경 연계', icon: '◉' },
   program: { label: '프로그램 구성', icon: '▲' },
   facade:  { label: '파사드·외관', icon: '◧' },
   technical: { label: '구조·기술', icon: '⚙' },
