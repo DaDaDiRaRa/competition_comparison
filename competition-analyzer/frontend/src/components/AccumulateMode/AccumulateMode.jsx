@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getFacilityTypes, runAccumulatePipeline, getReportUrl } from '../../api/client'
+import { getFacilityTypes, runAccumulatePipeline } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
@@ -125,6 +125,7 @@ export default function AccumulateMode() {
     fd.append('client', form.client)
     fd.append('location', form.location)
     if (briefFile) fd.append('brief_pdf', briefFile)
+
     fd.append('submissions_json', JSON.stringify(
       submissions.map(s => ({ company: s.company, result: s.result }))
     ))
@@ -170,14 +171,20 @@ export default function AccumulateMode() {
             onChange={e => setFormField('year', Number(e.target.value))} />
         </div>
         <div style={s.group}>
-          <label style={s.label}>발주처</label>
+          <label style={s.label}>
+            발주처
+            <span style={{ fontSize: 11, color: '#4a5568', marginLeft: 4 }}>(선택 사항)</span>
+          </label>
           <input style={s.input} value={form.client}
             onChange={e => setFormField('client', e.target.value)} />
         </div>
       </div>
 
       <div style={s.group}>
-        <label style={s.label}>대지위치</label>
+        <label style={s.label}>
+          대지위치
+          <span style={{ fontSize: 11, color: '#4a5568', marginLeft: 4 }}>(선택 사항)</span>
+        </label>
         <input style={s.input} value={form.location}
           onChange={e => setFormField('location', e.target.value)}
           placeholder="예: 서울시 영등포구 당산동" />

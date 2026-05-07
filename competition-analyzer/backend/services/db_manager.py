@@ -144,6 +144,16 @@ def list_projects(facility_type: str | None = None) -> list[dict]:
     return projects
 
 
+def load_submission(facility_type: str, competition_id: str, company: str) -> dict:
+    sub_dir = get_competition_dir(facility_type, competition_id) / "submissions"
+    if sub_dir.exists():
+        for f in sub_dir.glob("*.json"):
+            data = _read_json(f)
+            if data.get("company") == company:
+                return data
+    return {}
+
+
 def list_submissions(facility_type: str, competition_id: str) -> list[dict]:
     comp_dir = get_competition_dir(facility_type, competition_id)
     sub_dir = comp_dir / "submissions"

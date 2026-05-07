@@ -22,7 +22,7 @@ from config import settings, FACILITY_TYPES
 from services.db_manager import (
     make_competition_id, save_project_meta, save_brief,
     save_submission, save_comparison, load_brief, load_project_meta,
-    list_projects, list_submissions, save_report, get_report_path, load_pattern,
+    list_projects, list_submissions, load_submission, save_report, get_report_path, load_pattern,
 )
 from services.page_classifier import classify_all_pages
 from services.data_extractor import extract_pdf, merge_extracted_data
@@ -502,5 +502,49 @@ async def run_single_pipeline(
                        "detail": traceback.format_exc(), "_timestamp": ts})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+# ── 교차 비교 ──────────────────────────────────────────────────────────────────
+
+@router.post("/cross-compare")
+async def cross_compare(
+    items_json: str = Form(...),  # [{facility_type, competition_id, company}]
+):
+    """여러 프로젝트에서 선택한 제안서들을 교차 비교분석."""
+    items = json.loads(items_json)
+
+    async def event_stream():
+        ts = int(time.time() * 1000)
+        try:
+            yield sse({"type": "stage", "stage": "load",
+                       "msg": "제안서 데이터 로딩 중", "_timestamp": ts})
+
+            submissions = []
+            brief_data = {}
+            for item in items:
+                ft = item["facility_type"]
+                cid = item["competition_id"]
+                company = item["company"]
+                if not brief_data:
+                    brief_data = load_brief(ft, cid) or {}
+                sub = load_submission(ft, cid, company)
+                if sub:
+                    submissions.append(sub)
+
+            if len(submissions) < 2:
+                yield sse({"type": "error",
+                           "message": "비교할 제안서를 2개 이상 선택해주세요.", "_timestamp": ts})
+                return
+
+            yield sse({"type": "stage", "stage": "compare",
+                       "msg": f"{len(submissions)}개 제안서 비교분석 중 (시간이 걸릴 수 있습니다)", "_timestamp": ts})
+            comparison = await compare_submissions(brief_data, submissions)
+
+            yield sse({"type": "complete", "comparison": comparison, "_timestamp": ts})
+
+        except Exception as e:
+            yield sse({"type": "error", "message": str(e),
+                       "detail": traceback.format_exc(), "_timestamp": ts})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

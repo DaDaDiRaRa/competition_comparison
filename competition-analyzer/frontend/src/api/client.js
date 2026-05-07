@@ -84,6 +84,16 @@ export function runMyProjectPipeline(formData) {
   return streamSSE(`${BASE}/accumulate/run-single`, formData)
 }
 
+/**
+ * Cross-compare selected submissions across projects.
+ * items: [{facility_type, competition_id, company}]
+ */
+export function crossCompare(items) {
+  const fd = new FormData()
+  fd.append('items_json', JSON.stringify(items))
+  return streamSSE(`${BASE}/accumulate/cross-compare`, fd)
+}
+
 async function* streamSSE(url, formData) {
   const response = await fetch(url, { method: 'POST', body: formData ?? undefined })
   if (!response.ok) {

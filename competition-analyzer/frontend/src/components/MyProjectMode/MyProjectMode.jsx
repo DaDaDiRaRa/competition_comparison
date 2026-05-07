@@ -246,14 +246,20 @@ export default function MyProjectMode() {
               onChange={e => set('year', Number(e.target.value))} />
           </div>
           <div style={s.group}>
-            <label style={s.label}>발주처</label>
+            <label style={s.label}>
+              발주처
+              <span style={s.optLabel}>(선택 사항)</span>
+            </label>
             <input style={s.input} value={form.client}
               onChange={e => set('client', e.target.value)} />
           </div>
         </div>
 
         <div style={s.group}>
-          <label style={s.label}>대지위치</label>
+          <label style={s.label}>
+            대지위치
+            <span style={s.optLabel}>(선택 사항)</span>
+          </label>
           <input style={s.input} value={form.location}
             onChange={e => set('location', e.target.value)}
             placeholder="예: 서울시 영등포구 당산동" />

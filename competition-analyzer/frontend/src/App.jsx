@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import AccumulateMode from './components/AccumulateMode/AccumulateMode'
+import CrossCompareMode from './components/CrossCompare/CrossCompareMode'
 import DiagnoseMode from './components/DiagnoseMode/DiagnoseMode'
-import MyProjectMode from './components/MyProjectMode/MyProjectMode'
 import SettingsPanel from './components/Settings/SettingsPanel'
 
 const TABS = [
   { id: 'accumulate', label: '데이터 축적', icon: '🗄' },
-  { id: 'myproject', label: '내 프로젝트', icon: '📁' },
+  { id: 'crosscompare', label: '교차 비교', icon: '⚖' },
   { id: 'diagnose', label: '신규 진단', icon: '🔍' },
   { id: 'settings', label: '설정', icon: '⚙' },
 ]
@@ -58,7 +58,7 @@ export default function App() {
 
       <main style={s.content}>
         {activeTab === 'accumulate' && <AccumulateMode />}
-        {activeTab === 'myproject' && <MyProjectMode />}
+        {activeTab === 'crosscompare' && <CrossCompareMode />}
         {activeTab === 'diagnose' && <DiagnoseMode />}
         {activeTab === 'settings' && <SettingsPanel />}
       </main>
