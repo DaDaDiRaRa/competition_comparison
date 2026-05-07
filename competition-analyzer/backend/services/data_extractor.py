@@ -207,10 +207,6 @@ FALLBACK_PROMPT = {
 # 타일 분할 적용 대상: 정보 밀도가 높아 전체 페이지 전송 시 숫자 오독 위험
 TILE_PAGE_TYPES = {"AREA_TABLE", "TECHNICAL"}
 
-# 배치 크기: Claude API 1회 호출당 최대 이미지 수
-EXTRACT_BATCH_SIZE = 10
-
-
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 def _b64(img_bytes: bytes) -> str:
     return base64.standard_b64encode(img_bytes).decode("utf-8")
@@ -240,77 +236,25 @@ def _call_claude(client: anthropic.Anthropic, content: list, max_tokens: int = 4
     return response.content[0].text
 
 
-# ── 일반 배치 추출 ─────────────────────────────────────────────────────────────
-_BATCH_PROMPT_TEMPLATE = (
-    "TASK: Extract data from each page shown below.\n\n"
-    "For each page, identify its type and extract relevant data.\n"
-    "Output a JSON array, one object per page.\n\n"
-    "PAGE_TYPE_SCHEMAS:\n"
-    "SCHEMA_PLACEHOLDER\n\n"
-    "RULES:\n"
-    "- Extract ONLY what is visually present\n"
-    "- Numbers must be exact if visible, null if not visible\n"
-    "- Use Korean for Korean text, English for English text\n\n"
-    'RESPOND JSON ONLY:\n'
-    '[{"page":1,"type":"PAGE_TYPE","data":{...}}, ...]'
-)
-
-
-def _build_batch_prompt(page_map: list[dict] | None) -> str:
-    """
-    page_map이 있으면 이미 분류된 타입 정보를 프롬프트에 포함.
-    → Claude가 타입 추측 없이 추출에만 집중할 수 있음.
-    .replace() 사용 — JSON 중괄호로 인한 KeyError 방지 (CLAUDE.md 규칙).
-    """
-    if page_map:
-        schema_lines = []
-        seen = set()
-        for p in page_map:
-            pt = p.get("primary_type", "UNKNOWN")
-            if pt not in seen and pt in EXTRACTION_PROMPTS:
-                seen.add(pt)
-                cfg = EXTRACTION_PROMPTS[pt]
-                schema_lines.append(f"- {pt}: {cfg['instruction'].split(chr(10))[-1]}")
-        schema_str = "\n".join(schema_lines)
-    else:
-        schema_str = "\n".join(
-            f"- {pt}: {cfg['instruction'].split(chr(10))[-1]}"
-            for pt, cfg in EXTRACTION_PROMPTS.items()
-        )
-
-    return _BATCH_PROMPT_TEMPLATE.replace("SCHEMA_PLACEHOLDER", schema_str)
-
-
-def _extract_batch(
+# ── 개별 페이지 추출 ──────────────────────────────────────────────────────────
+def _extract_page_sync(
     client: anthropic.Anthropic,
-    batch: list[tuple[bytes, int]],
-    page_map: list[dict] | None,
-) -> list[dict]:
-    """
-    이미지 배치 → Claude → JSON 리스트 반환.
-    page_map이 있으면 각 이미지 앞에 페이지 번호/타입 레이블 추가.
-    """
-    prompt = _build_batch_prompt(page_map)
-
-    content: list[dict] = []
-    for idx, (img_bytes, page_num) in enumerate(batch):
-        if page_map and idx < len(page_map):
-            pt = page_map[idx].get("primary_type", "UNKNOWN")
-            content.append({"type": "text", "text": f"[Page {page_num} — {pt}]"})
-        content.append(_image_block(img_bytes))
-    content.append({"type": "text", "text": prompt})
-
+    img_bytes: bytes,
+    page_num: int,
+    page_type: str,
+) -> dict:
+    """단일 페이지를 타입 전용 프롬프트로 개별 추출. 배치 없이 1페이지 = 1 API 호출."""
+    prompt_cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
+    content = [
+        _image_block(img_bytes),
+        {"type": "text", "text": prompt_cfg["instruction"]},
+    ]
     try:
-        raw = _call_claude(client, content, max_tokens=8000)
-        results = parse_json_response(raw)
-        if not isinstance(results, list):
-            results = [results]
+        raw = _call_claude(client, content, max_tokens=2000)
+        data = parse_json_response(raw)
     except Exception as e:
-        return [{"page": batch[0][1], "type": "UNKNOWN", "data": {}, "error": str(e)}]
-
-    for i, r in enumerate(results):
-        r["page"] = batch[i][1] if i < len(batch) else batch[0][1] + i
-    return results
+        data = {"error": str(e)}
+    return {"page": page_num, "type": page_type, "data": data}
 
 
 # ── 타일 분할 추출 (AREA_TABLE · TECHNICAL) ────────────────────────────────────
@@ -367,72 +311,41 @@ def _extract_tiled(
 
 
 # ── 메인 추출 로직 ─────────────────────────────────────────────────────────────
-def _extract_pdf_sync(pdf_path: Path, page_map: list[dict] | None = None) -> list[dict]:
-    """
-    PDF 전체 추출.
+async def extract_pdf(pdf_path: Path, page_map: list[dict] | None = None) -> list[dict]:
+    """PDF 전체 데이터 추출.
 
-    Parameters
-    ----------
-    pdf_path : Path
-        추출할 PDF 경로.
-    page_map : list[dict] | None
-        page_classifier 결과. 있으면 타입별 최적화 적용.
-        형식: [{"page":1, "primary_type":"COVER", ...}, ...]
-
-    Returns
-    -------
-    list[dict]
-        [{"page":N, "type":"...", "data":{...}}, ...]
+    모든 페이지를 1페이지 = 1 API 호출로 개별 처리.
+    TILE_PAGE_TYPES 페이지는 2×2 타일 분할 추출 자동 적용.
+    최대 4페이지 동시 처리로 속도와 정확도 균형 유지.
     """
     client = anthropic.Anthropic(api_key=settings.api_key)
-
-    # 1. 전체 페이지 PNG 래스터라이즈 (150 DPI, 무손실)
     all_pages: list[tuple[bytes, int]] = rasterize_pdf(pdf_path, dpi=150, fmt="png")
 
-    # 2. 타일 분할 대상 페이지 인덱스 파악
-    tile_indices: set[int] = set()
-    if page_map:
-        for entry in page_map:
-            pt = entry.get("primary_type", "")
-            pg = entry.get("page", 0)
-            if pt in TILE_PAGE_TYPES and pg > 0:
-                tile_indices.add(pg - 1)  # 0-based index
-
-    # 3. 일반 배치 추출 (타일 대상 페이지 제외)
-    normal_pages = [p for p in all_pages if (p[1] - 1) not in tile_indices]
-    all_results: list[dict] = []
-
-    for batch_start in range(0, len(normal_pages), EXTRACT_BATCH_SIZE):
-        batch = normal_pages[batch_start:batch_start + EXTRACT_BATCH_SIZE]
-
-        # 해당 배치의 page_map 슬라이싱
-        batch_page_nums = {p[1] for p in batch}
-        batch_map = (
-            [e for e in page_map if e.get("page", 0) in batch_page_nums]
-            if page_map else None
-        )
-
-        all_results.extend(_extract_batch(client, batch, batch_map))
-
-    # 4. 타일 분할 추출 (AREA_TABLE · TECHNICAL)
+    type_by_page: dict[int, str] = {}
+    tile_page_nums: set[int] = set()
     if page_map:
         for entry in page_map:
             pg = entry.get("page", 0)
-            idx = pg - 1
-            if idx in tile_indices:
-                pt = entry.get("primary_type", "AREA_TABLE")
-                tiled_result = _extract_tiled(client, pdf_path, idx, pg, pt)
-                all_results.append(tiled_result)
+            pt = entry.get("primary_type", "CONCEPT")
+            type_by_page[pg] = pt
+            if pt in TILE_PAGE_TYPES:
+                tile_page_nums.add(pg)
 
-    # 5. 페이지 번호 순 정렬
-    all_results.sort(key=lambda r: r.get("page", 0))
-    return all_results
+    sem = asyncio.Semaphore(4)
 
+    async def extract_one(img_bytes: bytes, page_num: int) -> dict:
+        page_type = type_by_page.get(page_num, "CONCEPT")
+        async with sem:
+            if page_num in tile_page_nums:
+                return await asyncio.to_thread(
+                    _extract_tiled, client, pdf_path, page_num - 1, page_num, page_type
+                )
+            return await asyncio.to_thread(
+                _extract_page_sync, client, img_bytes, page_num, page_type
+            )
 
-async def extract_pdf(pdf_path: Path, page_map: list[dict] | None = None) -> list[dict]:
-    """PDF 전체 데이터 추출 (비동기 진입점)."""
-    async with asyncio.Semaphore(6):
-        return await asyncio.to_thread(_extract_pdf_sync, pdf_path, page_map)
+    results = await asyncio.gather(*[extract_one(img, pnum) for img, pnum in all_pages])
+    return sorted(results, key=lambda r: r.get("page", 0))
 
 
 # ── 유틸리티 ──────────────────────────────────────────────────────────────────
