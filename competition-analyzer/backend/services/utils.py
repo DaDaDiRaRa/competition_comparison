@@ -96,21 +96,24 @@ def rasterize_page_tiled(
 
     page = doc[page_index]
     matrix = fitz.Matrix(dpi / 72, dpi / 72)
-    full_pix = page.get_pixmap(matrix=matrix)
 
-    w, h = full_pix.width, full_pix.height
-    tile_w = w // cols
-    tile_h = h // rows
+    # 페이지 좌표(point) 기준으로 분할 → page.get_pixmap(clip=...)에 직접 전달.
+    # 픽셀 단위 Pixmap(source, IRect) 생성자는 일부 PyMuPDF 버전에서 시그니처
+    # 매칭이 깨지므로 사용 금지.
+    page_w = page.rect.width
+    page_h = page.rect.height
+    tile_w = page_w / cols
+    tile_h = page_h / rows
 
     tiles = []
     for r in range(rows):
         for c in range(cols):
             x0 = c * tile_w
             y0 = r * tile_h
-            x1 = x0 + tile_w if c < cols - 1 else w
-            y1 = y0 + tile_h if r < rows - 1 else h
-            clip = fitz.IRect(x0, y0, x1, y1)
-            tile_pix = fitz.Pixmap(full_pix, clip)
+            x1 = page_w if c == cols - 1 else (c + 1) * tile_w
+            y1 = page_h if r == rows - 1 else (r + 1) * tile_h
+            clip = fitz.Rect(x0, y0, x1, y1)
+            tile_pix = page.get_pixmap(matrix=matrix, clip=clip)
             tiles.append(tile_pix.tobytes(fmt))
 
     doc.close()

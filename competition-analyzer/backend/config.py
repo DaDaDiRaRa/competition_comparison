@@ -34,6 +34,7 @@ COMPARISON_AXES = [
 ]
 
 MODEL_ID = "claude-sonnet-4-6"
+MODEL_ID_CLASSIFY = "claude-haiku-4-5-20251001"  # 분류는 단순 작업 → Haiku로 비용/속도 최적화
 
 RASTER_DPI_CLASSIFY = 72
 RASTER_DPI_EXTRACT = 150
@@ -53,6 +54,7 @@ class AppSettings:
             "raster_dpi_classify": RASTER_DPI_CLASSIFY,
             "raster_dpi_extract": RASTER_DPI_EXTRACT,
             "model_id": MODEL_ID,
+            "model_id_classify": MODEL_ID_CLASSIFY,
         }
 
     def save(self):
@@ -70,6 +72,10 @@ class AppSettings:
     @property
     def model_id(self) -> str:
         return self._data.get("model_id", MODEL_ID)
+
+    @property
+    def model_id_classify(self) -> str:
+        return self._data.get("model_id_classify", MODEL_ID_CLASSIFY)
 
     @property
     def dpi_classify(self) -> int:

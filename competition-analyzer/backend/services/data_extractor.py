@@ -204,6 +204,45 @@ FALLBACK_PROMPT = {
     ),
 }
 
+# ── 지침서(Brief) 전용 추출 스키마 ─────────────────────────────────────────────
+# 지침서의 AREA_TABLE은 설계 결과가 아닌 '요구사항'이므로 전용 스키마 사용.
+# 이 dict에 없는 타입은 기존 EXTRACTION_PROMPTS를 그대로 사용.
+EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
+    "AREA_TABLE": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT program requirements from this design competition brief area/program table. '
+            'Respond JSON ONLY. Use exact numbers if visible, null if not visible.\n'
+            '{"site_area_sqm":null,"total_required_area_sqm":null,'
+            '"building_coverage_limit_pct":null,"floor_area_ratio_limit_pct":null,'
+            '"max_floors_above":null,"max_floors_below":null,"parking_required":null,'
+            '"estimated_budget":"",'
+            '"room_program":[{"name":"","area_sqm":null,"count":1,"notes":""}],'
+            '"zone_summary":[{"zone":"","area_sqm":null}]}'
+        ),
+    },
+    "TECHNICAL": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT technical requirements from this design competition brief. Respond JSON ONLY.\n'
+            '{"required_structural_system":"","required_energy_grade":"",'
+            '"required_certifications":[],"special_requirements":[]}'
+        ),
+    },
+    "SPECIAL_SPACE": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT required special space specifications from this competition brief. '
+            'Respond JSON ONLY.\n'
+            '{"space_name":"","required_area_sqm":null,"required_count":1,'
+            '"required_features":[],"design_guidelines":[]}'
+        ),
+    },
+}
+
+# 분류 신뢰도 하한: 이 미만이면 TILE_PAGE_TYPES도 일반 추출로 다운그레이드
+CONFIDENCE_DOWNGRADE_THRESHOLD = 0.7
+
 # 타일 분할 적용 대상: 정보 밀도가 높아 전체 페이지 전송 시 숫자 오독 위험
 TILE_PAGE_TYPES = {"AREA_TABLE", "TECHNICAL"}
 
@@ -242,9 +281,11 @@ def _extract_page_sync(
     img_bytes: bytes,
     page_num: int,
     page_type: str,
+    prompt_cfg: dict | None = None,
 ) -> dict:
     """단일 페이지를 타입 전용 프롬프트로 개별 추출. 배치 없이 1페이지 = 1 API 호출."""
-    prompt_cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
+    if prompt_cfg is None:
+        prompt_cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
     content = [
         _image_block(img_bytes),
         {"type": "text", "text": prompt_cfg["instruction"]},
@@ -311,37 +352,59 @@ def _extract_tiled(
 
 
 # ── 메인 추출 로직 ─────────────────────────────────────────────────────────────
-async def extract_pdf(pdf_path: Path, page_map: list[dict] | None = None) -> list[dict]:
+async def extract_pdf(
+    pdf_path: Path,
+    page_map: list[dict] | None = None,
+    is_brief: bool = False,
+) -> list[dict]:
     """PDF 전체 데이터 추출.
 
-    모든 페이지를 1페이지 = 1 API 호출로 개별 처리.
-    TILE_PAGE_TYPES 페이지는 2×2 타일 분할 추출 자동 적용.
-    최대 4페이지 동시 처리로 속도와 정확도 균형 유지.
+    is_brief=True: 지침서(지침서) 모드. AREA_TABLE/TECHNICAL/SPECIAL_SPACE에
+                   brief 전용 요구사항 스키마 적용, 타일 분할 비활성화.
+    is_brief=False: 제안서 모드. 신뢰도 >= CONFIDENCE_DOWNGRADE_THRESHOLD인
+                    TILE_PAGE_TYPES 페이지만 타일 분할 추출 적용.
     """
     client = anthropic.Anthropic(api_key=settings.api_key)
     all_pages: list[tuple[bytes, int]] = rasterize_pdf(pdf_path, dpi=150, fmt="png")
 
     type_by_page: dict[int, str] = {}
+    confidence_by_page: dict[int, float] = {}
     tile_page_nums: set[int] = set()
     if page_map:
         for entry in page_map:
             pg = entry.get("page", 0)
             pt = entry.get("primary_type", "CONCEPT")
+            conf = float(entry.get("confidence", 1.0))
             type_by_page[pg] = pt
-            if pt in TILE_PAGE_TYPES:
+            confidence_by_page[pg] = conf
+            # 타일 분할: 제안서이고 신뢰도 충분한 경우만
+            if pt in TILE_PAGE_TYPES and not is_brief and conf >= CONFIDENCE_DOWNGRADE_THRESHOLD:
                 tile_page_nums.add(pg)
 
     sem = asyncio.Semaphore(4)
 
     async def extract_one(img_bytes: bytes, page_num: int) -> dict:
         page_type = type_by_page.get(page_num, "CONCEPT")
+        confidence = confidence_by_page.get(page_num, 1.0)
+
+        # 신뢰도 낮은 TILE 타입은 일반 타입으로 다운그레이드
+        effective_type = page_type
+        if page_type in TILE_PAGE_TYPES and confidence < CONFIDENCE_DOWNGRADE_THRESHOLD:
+            effective_type = "CONCEPT"
+
+        # 프롬프트 선택: brief 전용 → 일반
+        if is_brief and effective_type in EXTRACTION_PROMPTS_BRIEF:
+            prompt_cfg = EXTRACTION_PROMPTS_BRIEF[effective_type]
+        else:
+            prompt_cfg = EXTRACTION_PROMPTS.get(effective_type, FALLBACK_PROMPT)
+
         async with sem:
             if page_num in tile_page_nums:
                 return await asyncio.to_thread(
-                    _extract_tiled, client, pdf_path, page_num - 1, page_num, page_type
+                    _extract_tiled, client, pdf_path, page_num - 1, page_num, effective_type
                 )
             return await asyncio.to_thread(
-                _extract_page_sync, client, img_bytes, page_num, page_type
+                _extract_page_sync, client, img_bytes, page_num, effective_type, prompt_cfg
             )
 
     results = await asyncio.gather(*[extract_one(img, pnum) for img, pnum in all_pages])
@@ -361,20 +424,33 @@ def merge_extracted_data(
     """
     페이지별 분류·추출 결과를 타입별로 병합.
 
-    정량 데이터 우선순위:
-      AREA_TABLE (타일 추출, 가장 정확) > SITE_PLAN > 나머지
+    - 페이지 번호 키 기반 매칭: zip 대신 dict lookup으로 중복 분류 결과 안전 처리
+    - list 방어: 모델이 JSON 배열을 반환한 경우 {"_items": [...]}로 래핑
+    정량 데이터 우선순위: AREA_TABLE > SITE_PLAN
     """
-    merged: dict[str, dict] = {}
+    # 추출 결과를 페이지 번호로 인덱싱
+    ext_by_page: dict[int, dict] = {e.get("page", 0): e for e in extractions}
 
-    for cls, ext in zip(page_classifications, extractions):
+    merged: dict[str, dict] = {}
+    seen_pages: set[int] = set()
+
+    for cls in page_classifications:
+        pg = cls.get("page", 0)
+        if pg in seen_pages:
+            continue  # Haiku 배치 응답에서 발생하는 중복 페이지 스킵
+        seen_pages.add(pg)
+
         pt = cls.get("primary_type", "UNKNOWN")
         if pt not in merged:
             merged[pt] = {"count": 0, "pages": [], "combined_data": []}
         merged[pt]["count"] += 1
-        merged[pt]["pages"].append(cls.get("page", 0))
+        merged[pt]["pages"].append(pg)
 
-        ext_data = ext.get("data", ext)
-        merged[pt]["combined_data"].append({**ext_data, "_page": cls.get("page", 0)})
+        ext = ext_by_page.get(pg, {})
+        ext_data = ext.get("data", {})
+        if isinstance(ext_data, list):
+            ext_data = {"_items": ext_data}  # 모델이 배열 반환 시 안전 래핑
+        merged[pt]["combined_data"].append({**ext_data, "_page": pg})
 
     result: dict = {"_by_type": merged}
     for pt, bucket in merged.items():

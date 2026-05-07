@@ -51,7 +51,7 @@ async def run_diagnosis(
                            "page": c["page"], "total": total_brief, "page_type": c["primary_type"]})
 
             yield sse({"type": "progress", "step": "extract_brief", "page": 0, "total": 1})
-            brief_exts = await extract_pdf(brief_path)
+            brief_exts = await extract_pdf(brief_path, page_map=brief_cls, is_brief=True)
             yield sse({"type": "progress", "step": "extract_brief", "page": 1, "total": 1})
 
             brief_data = merge_extracted_data(brief_cls, brief_exts)
@@ -73,7 +73,7 @@ async def run_diagnosis(
                            "page": c["page"], "total": total_sub, "page_type": c["primary_type"]})
 
             yield sse({"type": "progress", "step": "extract_sub", "page": 0, "total": 1})
-            sub_exts = await extract_pdf(sub_path)
+            sub_exts = await extract_pdf(sub_path, page_map=sub_cls)
             yield sse({"type": "progress", "step": "extract_sub", "page": 1, "total": 1})
 
             page_dist = {}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { getProjects, rerunCompare, getReportUrl } from '../../api/client'
+import { getProjects, rerunCompare, getReportUrl, addSubmission } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
+import DropZone from '../common/DropZone'
 
 const FACILITY_KR = {
   public: '공공청사', residential: '공동주택', office: '업무시설',
@@ -8,6 +9,12 @@ const FACILITY_KR = {
   sports: '체육시설', religious: '종교시설', commercial: '상업시설',
   industrial: '산업시설', mixed: '복합시설', other: '기타',
 }
+
+const RESULT_OPTIONS = [
+  { value: 'win', label: '당선', color: '#d4af37', bg: '#2d2410' },
+  { value: 'contracted', label: '수의계약', color: '#68d391', bg: '#1a2e1a' },
+  { value: 'lose', label: '낙선', color: '#718096', bg: '#1a1f2e' },
+]
 
 const s = {
   panel: { background: '#1a1f2e', borderRadius: 12, padding: 24, marginBottom: 16 },
@@ -29,24 +36,139 @@ const s = {
     background: '#2b4c7e', color: '#90cdf4', fontWeight: 600,
   },
   meta: { fontSize: 12, color: '#718096' },
-  actions: { display: 'flex', gap: 8, marginTop: 10 },
+  actions: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   rerunBtn: {
     background: '#2f855a', color: '#fff', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
-  reportBtn: {
+  addBtn: {
     background: '#2b6cb0', color: '#fff', border: 'none', borderRadius: 6,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+  },
+  reportBtn: {
+    background: '#44337a', color: '#e9d8fd', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
   logWrap: { marginTop: 10 },
+  addForm: {
+    marginTop: 12, padding: 14, background: '#111827',
+    border: '1px solid #2d3748', borderRadius: 8,
+  },
+  addFormTitle: { fontSize: 13, fontWeight: 600, color: '#90cdf4', marginBottom: 10 },
+  row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 },
+  label: { fontSize: 12, color: '#a0aec0', marginBottom: 4, display: 'block' },
+  input: {
+    width: '100%', background: '#0d1117', border: '1px solid #2d3748',
+    borderRadius: 6, padding: '7px 10px', color: '#e2e8f0', fontSize: 13,
+    boxSizing: 'border-box',
+  },
+  resultPicker: { display: 'flex', gap: 6 },
+  resultBtn: (opt, selected) => ({
+    flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+    fontWeight: 600, textAlign: 'center',
+    border: selected ? `2px solid ${opt.color}` : '2px solid #2d3748',
+    background: selected ? opt.bg : '#0d1117',
+    color: selected ? opt.color : '#4a5568',
+  }),
+  submitBtn: (active) => ({
+    width: '100%', marginTop: 10, padding: '9px 0', borderRadius: 6,
+    border: 'none', cursor: active ? 'pointer' : 'not-allowed', fontSize: 13,
+    fontWeight: 700, background: active ? '#2b6cb0' : '#1a2535', color: active ? '#fff' : '#4a5568',
+  }),
+  cancelBtn: {
+    background: 'none', border: 'none', color: '#718096', cursor: 'pointer',
+    fontSize: 12, marginLeft: 'auto',
+  },
+}
+
+function AddSubmissionForm({ project, onDone, onCancel }) {
+  const [company, setCompany] = useState('')
+  const [result, setResult] = useState('lose')
+  const [file, setFile] = useState(null)
+  const [running, setRunning] = useState(false)
+  const [events, setEvents] = useState([])
+  const [done, setDone] = useState(false)
+
+  const canSubmit = company && file && !running && !done
+
+  const handleSubmit = async () => {
+    setRunning(true)
+    setEvents([])
+    const fd = new FormData()
+    fd.append('company', company)
+    fd.append('result', result)
+    fd.append('submission_pdf', file)
+
+    try {
+      for await (const ev of addSubmission(project.facility_type, project.competition_id, fd)) {
+        setEvents(prev => [...prev, ev])
+        if (ev.type === 'complete') { setDone(true); onDone?.() }
+        if (ev.type === 'error') break
+      }
+    } catch (e) {
+      setEvents(prev => [...prev, { type: 'error', message: e.message }])
+    }
+    setRunning(false)
+  }
+
+  return (
+    <div style={s.addForm}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+        <span style={s.addFormTitle}>제안서 추가</span>
+        {!running && <button style={s.cancelBtn} onClick={onCancel}>✕ 닫기</button>}
+      </div>
+
+      {!done && (
+        <>
+          <div style={s.row}>
+            <div>
+              <label style={s.label}>회사명</label>
+              <input style={s.input} value={company}
+                onChange={e => setCompany(e.target.value)}
+                placeholder="예: 군원건축" disabled={running} />
+            </div>
+            <div>
+              <label style={s.label}>결과</label>
+              <div style={s.resultPicker}>
+                {RESULT_OPTIONS.map(opt => (
+                  <div key={opt.value} style={s.resultBtn(opt, result === opt.value)}
+                    onClick={() => !running && setResult(opt.value)}>
+                    {opt.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DropZone label="제안서 PDF 드래그 또는 클릭" onFiles={setFile} />
+          {file && <div style={{ fontSize: 11, color: '#68d391', marginTop: 4 }}>✓ {file.name}</div>}
+          <button style={s.submitBtn(canSubmit)} onClick={canSubmit ? handleSubmit : undefined}>
+            {running ? '처리 중...' : '추출 시작'}
+          </button>
+        </>
+      )}
+
+      {events.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <ProgressLog events={events} />
+        </div>
+      )}
+
+      {done && (
+        <div style={{ marginTop: 8, fontSize: 12, color: '#68d391' }}>
+          ✓ {company} 제안서 저장 완료. 비교분석 재실행 버튼으로 분석을 갱신하세요.
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ProjectCard({ project, onRerunDone }) {
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [done, setDone] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
 
   const hasReport = project.report_available
 
@@ -68,7 +190,7 @@ function ProjectCard({ project, onRerunDone }) {
   }
 
   const subs = project.submissions || []
-  const winCount = subs.filter(s => s.result === 'win').length
+  const winCount = subs.filter(s => s.result === 'win' || s.result === 'contracted').length
 
   return (
     <div style={s.card}>
@@ -87,6 +209,13 @@ function ProjectCard({ project, onRerunDone }) {
         >
           {running ? '분석 중...' : '비교분석 재실행'}
         </button>
+        <button
+          style={{ ...s.addBtn, ...(running ? s.disabledBtn : {}) }}
+          onClick={running ? undefined : () => setShowAdd(v => !v)}
+          disabled={running}
+        >
+          {showAdd ? '추가 닫기' : '+ 제안서 추가'}
+        </button>
         {(hasReport || done) && (
           <a
             href={getReportUrl(project.facility_type, project.competition_id)}
@@ -98,6 +227,15 @@ function ProjectCard({ project, onRerunDone }) {
           </a>
         )}
       </div>
+
+      {showAdd && (
+        <AddSubmissionForm
+          project={project}
+          onDone={() => { onRerunDone?.() }}
+          onCancel={() => setShowAdd(false)}
+        />
+      )}
+
       {events.length > 0 && (
         <div style={s.logWrap}>
           <ProgressLog events={events} />

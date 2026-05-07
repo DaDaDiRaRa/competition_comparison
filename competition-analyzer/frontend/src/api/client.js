@@ -55,6 +55,10 @@ export function rerunCompare(facilityType, competitionId) {
   return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/rerun-compare`)
 }
 
+export function addSubmission(facilityType, competitionId, formData) {
+  return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/add-submission`, formData)
+}
+
 /**
  * Run accumulation pipeline. Returns an EventSource-like async iterator.
  * formData must include: competition_name, facility_type, year, client, location,

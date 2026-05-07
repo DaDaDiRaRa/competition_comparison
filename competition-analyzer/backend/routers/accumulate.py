@@ -79,6 +79,84 @@ def get_report(facility_type: str, competition_id: str):
     )
 
 
+# ── 제안서 단건 추가 ──────────────────────────────────────────────────────────
+
+@router.post("/projects/{facility_type}/{competition_id}/add-submission")
+async def add_submission(
+    facility_type: str,
+    competition_id: str,
+    company: str = Form(...),
+    result: str = Form(...),  # "win" | "contracted" | "lose"
+    submission_pdf: bytes = File(...),
+):
+    """기존 프로젝트에 제안서 1개 추가. 분류→추출→저장만. 비교분석 없음."""
+    meta = load_project_meta(facility_type, competition_id)
+    if not meta:
+        raise HTTPException(404, "Project not found")
+
+    async def event_stream():
+        ts = int(time.time() * 1000)
+        tmp_root = Path(tempfile.mkdtemp(prefix="comp_addsub_"))
+        try:
+            yield sse({"type": "stage", "stage": "submission", "company": company,
+                       "msg": f"제안서 처리: {company}", "_timestamp": ts})
+
+            sub_path = tmp_root / "submission.pdf"
+            sub_path.write_bytes(submission_pdf)
+
+            sub_classifications = await classify_all_pages(sub_path)
+            total_sub = len(sub_classifications)
+            for cls in sub_classifications:
+                yield sse({"type": "progress", "step": "classify_sub",
+                           "company": company, "page": cls["page"], "total": total_sub,
+                           "page_type": cls["primary_type"], "_timestamp": ts})
+
+            yield sse({"type": "stage", "stage": "extract",
+                       "msg": "제안서 데이터 추출 중", "_timestamp": ts})
+            sub_extractions = await extract_pdf(sub_path, page_map=sub_classifications)
+
+            page_dist: dict[str, int] = {}
+            for cls in sub_classifications:
+                pt = cls["primary_type"]
+                page_dist[pt] = page_dist.get(pt, 0) + 1
+
+            extracted = merge_extracted_data(sub_classifications, sub_extractions)
+            extracted["page_distribution"] = page_dist
+            extracted["total_pages"] = total_sub
+
+            sub_doc = {
+                "company": company,
+                "result": result,
+                "competition_id": competition_id,
+                "facility_type": facility_type,
+                "total_pages": total_sub,
+                "page_map": sub_classifications,
+                "page_distribution": page_dist,
+                "extracted_data": extracted,
+            }
+            save_submission(facility_type, competition_id, company, result, sub_doc)
+            yield sse({"type": "done", "step": "submission",
+                       "company": company, "_timestamp": ts})
+
+            yield sse({
+                "type": "complete",
+                "competition_id": competition_id,
+                "facility_type": facility_type,
+                "company": company,
+                "result": result,
+                "total_pages": total_sub,
+                "page_distribution": page_dist,
+                "_timestamp": ts,
+            })
+        except Exception as e:
+            yield sse({"type": "error", "message": str(e),
+                       "detail": traceback.format_exc(), "_timestamp": ts})
+        finally:
+            shutil.rmtree(tmp_root, ignore_errors=True)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 # ── 비교분석 재실행 ────────────────────────────────────────────────────────────
 
 @router.post("/projects/{facility_type}/{competition_id}/rerun-compare")
@@ -203,7 +281,7 @@ async def run_pipeline(
                 #   → AREA_TABLE·TECHNICAL 페이지는 자동으로 2×2 타일 분할 추출 적용
                 yield sse({"type": "stage", "stage": "brief_extract",
                            "msg": "지침서 데이터 추출 중", "_timestamp": ts})
-                brief_extractions = await extract_pdf(brief_path, page_map=brief_classifications)
+                brief_extractions = await extract_pdf(brief_path, page_map=brief_classifications, is_brief=True)
                 yield sse({"type": "progress", "step": "extract_brief",
                            "page": 1, "total": 1, "_timestamp": ts})
 
@@ -369,7 +447,7 @@ async def run_single_pipeline(
 
                 yield sse({"type": "stage", "stage": "brief_extract",
                            "msg": "지침서 데이터 추출 중", "_timestamp": ts})
-                brief_extractions = await extract_pdf(brief_path, page_map=brief_classifications)
+                brief_extractions = await extract_pdf(brief_path, page_map=brief_classifications, is_brief=True)
 
                 brief_data = merge_extracted_data(brief_classifications, brief_extractions)
                 brief_data["page_map"] = brief_classifications
