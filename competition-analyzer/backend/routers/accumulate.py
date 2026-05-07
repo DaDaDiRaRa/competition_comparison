@@ -58,8 +58,8 @@ async def create_project(
     competition_name: str = Form(...),
     facility_type: str = Form(...),
     year: int = Form(...),
-    client: str = Form(...),
-    location: str = Form(...),
+    client: str = Form(""),
+    location: str = Form(""),
 ):
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
@@ -224,8 +224,8 @@ async def run_pipeline(
     competition_name: str = Form(...),
     facility_type: str = Form(...),
     year: int = Form(...),
-    client: str = Form(...),
-    location: str = Form(...),
+    client: str = Form(""),
+    location: str = Form(""),
     brief_pdf: bytes | None = File(None),
     submissions_json: str = Form(...),
     submission_pdfs: list[bytes] = File(...),
@@ -348,43 +348,11 @@ async def run_pipeline(
                 yield sse({"type": "done", "step": "submission",
                            "company": company, "_timestamp": ts})
 
-            # ── 비교분석 ──────────────────────────────────────────────────────
-            yield sse({"type": "stage", "stage": "compare",
-                       "msg": "비교분석 중", "_timestamp": ts})
-            comparison = await compare_submissions(brief_data, processed_submissions)
-            comparison["competition_id"] = cid
-            save_comparison(facility_type, cid, comparison)
-
-            # ── 패턴 업데이트 ─────────────────────────────────────────────────
-            yield sse({"type": "stage", "stage": "pattern",
-                       "msg": "당선 패턴 업데이트 중", "_timestamp": ts})
-            build_pattern(facility_type)
-
-            # ── HTML 리포트 생성 ──────────────────────────────────────────────
-            yield sse({"type": "stage", "stage": "report",
-                       "msg": "HTML 비교 리포트 생성 중", "_timestamp": ts})
-            comp_meta = {
-                "competition_name": competition_name,
-                "facility_type": facility_type,
-                "year": year,
-                "client": client,
-                "location": location,
-            }
-            report_subs = [
-                {"company": s["company"], "result": s["result"],
-                 "total_pages": s["total_pages"]}
-                for s in processed_submissions
-            ]
-            html = generate_comparison_report(comp_meta, report_subs, comparison)
-            save_report(facility_type, cid, html)
-            yield sse({"type": "done", "step": "report", "_timestamp": ts})
-
             yield sse({
                 "type": "complete",
                 "competition_id": cid,
                 "facility_type": facility_type,
-                "report_available": True,
-                "comparison": comparison,
+                "report_available": False,
                 "_timestamp": ts,
                 "submissions": [
                     {"company": s["company"], "result": s["result"],
@@ -410,8 +378,8 @@ async def run_single_pipeline(
     competition_name: str = Form(...),
     facility_type: str = Form(...),
     year: int = Form(...),
-    client: str = Form(...),
-    location: str = Form(...),
+    client: str = Form(""),
+    location: str = Form(""),
     company: str = Form(...),
     result: str = Form(...),  # "win" | "contracted" | "lose"
     brief_pdf: bytes | None = File(None),

@@ -14,7 +14,6 @@ class SettingsUpdateRequest(BaseModel):
     raster_dpi_classify: Optional[int] = None
     raster_dpi_extract: Optional[int] = None
     model_id: Optional[str] = None
-    provider: Optional[str] = None  # "api" or "sdk"
 
 
 @router.get("")

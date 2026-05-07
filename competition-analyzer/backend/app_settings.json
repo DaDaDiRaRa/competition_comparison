@@ -3,6 +3,5 @@
   "anthropic_api_key": "put-your-anthropic_api_key",
   "raster_dpi_classify": 72,
   "raster_dpi_extract": 150,
-  "model_id": "claude-sonnet-4-6",
-  "provider": "sdk"
+  "model_id": "claude-sonnet-4-6"
 }

@@ -1,6 +1,5 @@
 import asyncio
 import json
-from json import JSONDecodeError
 
 from config import settings, COMPARISON_AXES
 from services.llm_client import call_messages
@@ -159,30 +158,19 @@ _ANALYST_SYSTEM = (
 )
 
 
-_LIMITS_API = dict(
-    max_strengths="5", max_weaknesses="5", strength_chars="15-30",
-    notes_chars="120", max_global="5", global_chars="50",
-)
-_LIMITS_SDK = dict(
-    max_strengths="3", max_weaknesses="3", strength_chars="15",
-    notes_chars="60", max_global="3", global_chars="40",
-)
-
-
 def _build_compare_prompt(brief_data: dict, submissions: list[dict]) -> str:
-    limits = _LIMITS_SDK if settings.provider == "sdk" else _LIMITS_API
     sub_map = {s["company"]: _trim_extracted(s.get("extracted_data", {})) for s in submissions}
     results_map = {s["company"]: s.get("result", "unknown") for s in submissions}
     return (COMPARE_PROMPT_TEMPLATE
             .replace("{brief_json}", _compact(_trim_brief(brief_data)))
             .replace("{results_json}", _compact(results_map))
             .replace("{submissions_json}", _compact(sub_map))
-            .replace("{max_strengths}", limits["max_strengths"])
-            .replace("{max_weaknesses}", limits["max_weaknesses"])
-            .replace("{strength_chars}", limits["strength_chars"])
-            .replace("{notes_chars}", limits["notes_chars"])
-            .replace("{max_global}", limits["max_global"])
-            .replace("{global_chars}", limits["global_chars"]))
+            .replace("{max_strengths}", "5")
+            .replace("{max_weaknesses}", "5")
+            .replace("{strength_chars}", "15-30")
+            .replace("{notes_chars}", "120")
+            .replace("{max_global}", "5")
+            .replace("{global_chars}", "50"))
 
 
 def _run_compare_sync(brief_data: dict, submissions: list[dict]) -> dict:
@@ -194,18 +182,7 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict]) -> dict:
         system=_ANALYST_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
-    try:
-        return parse_json_response(raw_text)
-    except JSONDecodeError as e:
-        if settings.provider == "sdk":
-            n = len(submissions)
-            raise RuntimeError(
-                f"SDK 출력 한도 초과로 비교 결과가 잘렸습니다 "
-                f"(제출작 {n}개, 응답 {len(raw_text):,}자). "
-                "app_settings.json에서 provider를 'api'로 변경하거나 "
-                "제출작 수를 줄이세요."
-            ) from e
-        raise
+    return parse_json_response(raw_text)
 
 
 async def compare_submissions(brief_data: dict, submissions: list[dict]) -> dict:

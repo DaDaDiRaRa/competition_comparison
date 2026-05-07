@@ -224,21 +224,10 @@ export default function AccumulateMode() {
       {result && (
         <div style={{ marginTop: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-            <div style={s.sectionTitle}>분석 결과</div>
-            {result.report_available && (
-              <a
-                href={getReportUrl(result.facility_type, result.competition_id)}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  marginLeft: 'auto', background: '#2b6cb0', color: '#fff',
-                  borderRadius: 6, padding: '7px 16px', fontSize: 13, fontWeight: 600,
-                  textDecoration: 'none', display: 'inline-block',
-                }}
-              >
-                HTML 비교 리포트 열기
-              </a>
-            )}
+            <div style={s.sectionTitle}>추출 완료</div>
+            <span style={{ marginLeft: 12, fontSize: 12, color: '#68d391' }}>
+              저장된 프로젝트에서 비교분석을 실행하세요
+            </span>
           </div>
           {result.submissions?.map(sub => (
             <div key={sub.company} style={s.subCard}>

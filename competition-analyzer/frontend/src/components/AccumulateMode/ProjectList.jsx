@@ -207,7 +207,7 @@ function ProjectCard({ project, onRerunDone }) {
           onClick={running ? undefined : handleRerun}
           disabled={running}
         >
-          {running ? '분석 중...' : '비교분석 재실행'}
+          {running ? '분석 중...' : '비교분석 실행'}
         </button>
         <button
           style={{ ...s.addBtn, ...(running ? s.disabledBtn : {}) }}
@@ -248,6 +248,7 @@ function ProjectCard({ project, onRerunDone }) {
 export default function ProjectList() {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [selectedType, setSelectedType] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -256,19 +257,52 @@ export default function ProjectList() {
 
   useEffect(() => { load() }, [])
 
+  // 실제 존재하는 시설 유형만 추출 (순서 유지)
+  const facilityTypes = [...new Set(projects.map(p => p.facility_type))]
+  const activeType = selectedType && facilityTypes.includes(selectedType)
+    ? selectedType
+    : facilityTypes[0] ?? null
+
+  const filtered = projects.filter(p => p.facility_type === activeType)
+
   return (
     <div style={s.panel}>
       <div style={s.header}>
         <div style={s.title}>저장된 프로젝트</div>
         <button style={s.refreshBtn} onClick={load}>새로고침</button>
       </div>
+
       {loading
         ? <div style={s.empty}>로딩 중...</div>
         : projects.length === 0
           ? <div style={s.empty}>저장된 프로젝트가 없습니다.</div>
-          : projects.map(p => (
-              <ProjectCard key={p.competition_id} project={p} onRerunDone={load} />
-            ))
+          : <>
+              {/* 시설 유형 탭 */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+                {facilityTypes.map(ft => (
+                  <button
+                    key={ft}
+                    onClick={() => setSelectedType(ft)}
+                    style={{
+                      padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', border: 'none',
+                      background: ft === activeType ? '#90cdf4' : '#2d3748',
+                      color: ft === activeType ? '#0d1117' : '#a0aec0',
+                    }}
+                  >
+                    {FACILITY_KR[ft] || ft}
+                    <span style={{ marginLeft: 5, opacity: 0.7 }}>
+                      {projects.filter(p => p.facility_type === ft).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* 선택된 시설 유형의 프로젝트 목록 */}
+              {filtered.map(p => (
+                <ProjectCard key={p.competition_id} project={p} onRerunDone={load} />
+              ))}
+            </>
       }
     </div>
   )
