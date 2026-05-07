@@ -167,10 +167,11 @@ def get_winning_submissions(facility_type: str) -> list[dict]:
         sub_dir = comp_dir / "submissions"
         if not sub_dir.exists():
             continue
-        for f in sub_dir.glob("*_win.json"):
-            data = _read_json(f)
-            if data:
-                winners.append(data)
+        for pattern in ("*_win.json", "*_contracted.json"):
+            for f in sub_dir.glob(pattern):
+                data = _read_json(f)
+                if data:
+                    winners.append(data)
     return winners
 
 

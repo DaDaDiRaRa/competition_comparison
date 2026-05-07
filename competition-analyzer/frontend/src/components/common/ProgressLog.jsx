@@ -3,8 +3,8 @@ import { PAGE_TYPE_KR } from '../../constants'
 
 const STAGE_KR = {
   brief: '지침서 처리', brief_extract: '지침서 추출', submission: '제안서 처리',
-  compare: '비교분석', pattern: '패턴 업데이트', load_patterns: '패턴 로드',
-  diagnose: 'AI 진단',
+  extract: '제안서 추출', compare: '비교분석', pattern: '패턴 업데이트',
+  load_patterns: '패턴 로드', diagnose: 'AI 진단', report: '리포트 생성',
 }
 
 function eventToText(ev) {

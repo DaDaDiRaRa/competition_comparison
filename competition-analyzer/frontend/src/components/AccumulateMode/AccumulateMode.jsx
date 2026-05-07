@@ -63,21 +63,25 @@ function SubmissionInput({ idx, onChange, onRemove }) {
           <label style={s.label}>회사명</label>
           <input style={s.input} value={company}
             onChange={e => { setCompany(e.target.value); update(e.target.value, result, file) }}
-            placeholder="예: 군원건축" />
+            placeholder="예: kunwon" />
         </div>
         <div style={s.group}>
-          <label style={s.label}>당선 여부</label>
+          <label style={s.label}>결과</label>
           <select style={s.select} value={result}
             onChange={e => { setResult(e.target.value); update(company, e.target.value, file) }}>
             <option value="win">당선</option>
+            <option value="contracted">수의계약</option>
             <option value="lose">낙선</option>
           </select>
         </div>
       </div>
       <DropZone label="제안서 PDF" onFiles={f => { setFile(f); update(company, result, f) }} />
       {file && <div style={{ fontSize: 12, color: '#68d391', marginTop: 4 }}>✓ {file.name}</div>}
-      {result === 'win' && (
-        <div style={{ ...s.tag, display: 'inline-block', marginTop: 8 }}>당선작</div>
+      {(result === 'win' || result === 'contracted') && (
+        <div style={{ ...s.tag, display: 'inline-block', marginTop: 8,
+          background: result === 'contracted' ? '#2b6cb0' : '#2f855a' }}>
+          {result === 'win' ? '당선작' : '수의계약'}
+        </div>
       )}
     </div>
   )
@@ -107,7 +111,7 @@ export default function AccumulateMode() {
   const addSub = () => setSubmissions(prev => [...prev, { company: '', result: 'lose', file: null }])
   const removeSub = (idx) => setSubmissions(prev => prev.filter((_, i) => i !== idx))
 
-  const canRun = briefFile && submissions.every(s => s.company && s.file) && !running
+  const canRun = form.competition_name && submissions.every(s => s.company && s.file) && !running
 
   const runPipeline = async () => {
     setRunning(true)
@@ -120,7 +124,7 @@ export default function AccumulateMode() {
     fd.append('year', form.year)
     fd.append('client', form.client)
     fd.append('location', form.location)
-    fd.append('brief_pdf', briefFile)
+    if (briefFile) fd.append('brief_pdf', briefFile)
     fd.append('submissions_json', JSON.stringify(
       submissions.map(s => ({ company: s.company, result: s.result }))
     ))
@@ -180,8 +184,11 @@ export default function AccumulateMode() {
       </div>
 
       <div style={s.section}>
-        <div style={s.sectionTitle}>지침서 PDF</div>
-        <DropZone label="지침서 PDF 드래그 또는 클릭" onFiles={setBriefFile} />
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 12 }}>
+          <div style={s.sectionTitle}>지침서 PDF</div>
+          <span style={{ fontSize: 11, color: '#4a5568' }}>(선택 사항)</span>
+        </div>
+        <DropZone label="지침서 PDF 드래그 또는 클릭 (없으면 건너뜀)" onFiles={setBriefFile} />
       </div>
 
       <div style={s.section}>
@@ -237,8 +244,12 @@ export default function AccumulateMode() {
             <div key={sub.company} style={s.subCard}>
               <div style={s.subHeader}>
                 <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{sub.company}</span>
-                <span style={{ ...s.tag, ...(sub.result === 'lose' ? s.tagLose : {}) }}>
-                  {sub.result === 'win' ? '당선' : '낙선'}
+                <span style={{
+                  ...s.tag,
+                  ...(sub.result === 'lose' ? s.tagLose : {}),
+                  ...(sub.result === 'contracted' ? { background: '#2b6cb0' } : {}),
+                }}>
+                  {sub.result === 'win' ? '당선' : sub.result === 'contracted' ? '수의계약' : '낙선'}
                 </span>
                 <span style={{ color: '#a0aec0', fontSize: 13 }}>{sub.total_pages}페이지</span>
               </div>

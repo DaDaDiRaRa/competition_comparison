@@ -71,6 +71,15 @@ export function runDiagnosePipeline(formData) {
   return streamSSE(`${BASE}/diagnose/run`, formData)
 }
 
+/**
+ * Run single-submission pipeline (내 프로젝트 등록).
+ * formData: competition_name, facility_type, year, client, location,
+ *   company, result ("win"|"contracted"|"lose"), brief_pdf, submission_pdf
+ */
+export function runMyProjectPipeline(formData) {
+  return streamSSE(`${BASE}/accumulate/run-single`, formData)
+}
+
 async function* streamSSE(url, formData) {
   const response = await fetch(url, { method: 'POST', body: formData ?? undefined })
   if (!response.ok) {
