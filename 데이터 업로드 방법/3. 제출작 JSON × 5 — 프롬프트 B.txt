@@ -1,12 +1,16 @@
 3. 제출작 JSON × 5 — 프롬프트 B
 각 제출작 PDF를 하나씩 업로드하고 아래 프롬프트 사용:
 
+
+
 (파일명과 result만 바꿔서 5번 반복)
+(→ 낙선작은 각각 a_Civic_Terrace/loser, b_Layered_Scape/loser, c_Commons_Platform/loser, d_Forged_Future/loser 로 변경)
+----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 이 PDF는 건축설계공모 제출작입니다.
-회사명: 건원_공공지평
-결과: winner
-(→ 낙선작은 각각 a_Civic_Terrace/loser, b_Layered_Scape/loser, c_Commons_Platform/loser, d_Forged_Future/loser 로 변경)
+
+회사명: c
+결과: lose
 
 아래 형식 그대로 JSON을 출력하세요.
 규칙:
