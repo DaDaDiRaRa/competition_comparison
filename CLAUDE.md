@@ -10,7 +10,7 @@ Competition Analyzer is a full-stack application for analyzing architectural com
 
 - Backend: FastAPI (Python 3.x)
 - Frontend: React 18 + Vite
-- AI: Anthropic Claude API (claude-sonnet-4-20250514)
+- AI: Anthropic Claude (claude-sonnet-4-6) — via API key or Claude Code SDK subscription
 - PDF Processing: PyMuPDF (fitz) — primary rasterizer in `services/utils.py`
 - Database: Custom JSON-based storage
 
@@ -47,7 +47,10 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
 - `services/db_manager.py` - JSON-based database for projects, patterns, and reports
 - `services/page_classifier.py` - Classifies PDF pages (cover, floor plan, section, etc.)
 - `services/data_extractor.py` - Extracts structured design data from pages
-- `services/comparator.py` - Compares proposals against accumulated patterns; uses `.replace()` (not `.format()`) for prompt templating to avoid KeyError with JSON braces
+- `services/llm_client.py` - Claude 호출 추상화 레이어. `settings.provider` 값에 따라 두 경로로 분기:
+  - `"api"`: `anthropic.Anthropic()` 직접 호출 (API 키 필요)
+  - `"sdk"`: `claude-agent-sdk` 경유 호출 (Claude Code 구독 사용, `claude login` 필요). `ClaudeAgentOptions`는 `max_tokens` 미지원 — 대신 `effort="xhigh"` (max_tokens ≥ 16000) / `"high"` 로 출력 길이 제어
+- `services/comparator.py` - Compares proposals against accumulated patterns; uses `.replace()` (not `.format()`) for prompt templating to avoid KeyError with JSON braces; `max_tokens=32000` for compare (응답 잘림 방지)
 - `services/report_generator.py` - Generates HTML comparison reports from comparison data (no extra Claude API calls; uses existing comparison JSON)
 - `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser
 - `services/pdf_rasterizer.py` - Legacy fallback rasterizer using pdftoppm/pdf2image (not used by default)
@@ -189,9 +192,13 @@ Test with curl or Postman by uploading files to:
   "anthropic_api_key": "sk-...",
   "raster_dpi_classify": 72,
   "raster_dpi_extract": 150,
-  "model_id": "claude-sonnet-4-20250514"
+  "model_id": "claude-sonnet-4-6",
+  "provider": "api"
 }
 ```
+
+- `provider`: `"api"` (Anthropic API 키 사용) 또는 `"sdk"` (Claude Code 구독 사용, `claude login` 필요)
+- `provider: "sdk"` 시 `anthropic_api_key`는 불필요
 
 **Environment fallback:**
 
@@ -200,7 +207,9 @@ Test with curl or Postman by uploading files to:
 ## Important Notes
 
 - **Database Location:** User-configurable, defaults to `~/competition_db`. Each competition is stored under `{db_path}/{facility_type}/{competition_id}/` with files: `_meta.json`, `_brief.json`, `_comparison.json`, `_report.html`, `submissions/*.json`.
-- **Claude Model:** Currently set to `claude-sonnet-4-20250514` in config.py. Update `MODEL_ID` to change.
+- **Claude Model:** Currently set to `claude-sonnet-4-6` in `app_settings.json`. `config.py`의 `MODEL_ID`는 기본값 fallback용.
+- **LLM Provider:** `app_settings.json`의 `provider` 필드로 제어. `"api"` = Anthropic API 키 직접 사용, `"sdk"` = Claude Code 구독 경유 (`claude login` 선행 필요). 모든 Claude 호출은 `services/llm_client.py::call_messages()`를 통해 이루어짐.
+- **SDK provider의 max_tokens:** `ClaudeAgentOptions`는 `max_tokens` 파라미터 미지원. `effort` 파라미터로 대체 — `max_tokens >= 16000`이면 `effort="xhigh"`, 미만이면 `"high"` 자동 설정.
 - **DPI Settings:** Classify uses 72 DPI (fast), extract uses 150 DPI (detailed). Set in `app_settings.json`.
 - **CORS:** Vite dev server (5173) and localhost:3000 are allowed.
 - **File Naming:** Components follow PascalCase. API paths are kebab-case.
@@ -212,3 +221,4 @@ Test with curl or Postman by uploading files to:
 - **Prompt Templating Rule:** `comparator.py` prompt templates use `.replace("{key}", value)` instead of `.format(key=value)` — the JSON schema examples in prompts contain literal braces that would cause `KeyError` with `.format()`.
 - **ProgressLog Events:** All SSE events passed to `ProgressLog` must include `_timestamp` (ms since epoch, set at pipeline start) for elapsed time display. The component uses `Date.now() - events[0]._timestamp` for the `+Ns` counter on the current item.
 - **PDF Rasterizer:** Primary rasterizer is `services/utils.py::rasterize_pdf` using PyMuPDF. `services/pdf_rasterizer.py` (pdftoppm/pdf2image) is legacy and not called by the current pipeline.
+- **New Machine Setup:** `git clone` 후 `pip install -r requirements.txt` + `npm install` 실행. `app_settings.json`의 `db_path`를 해당 컴퓨터 경로로 수정. `provider: "sdk"` 사용 시 `claude login` 필요.

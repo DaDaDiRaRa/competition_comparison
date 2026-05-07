@@ -106,30 +106,30 @@ def _call_via_sdk(
     prompt_str, temp_files = _flatten_messages_to_prompt(messages)
 
     try:
-        # SDK는 max_tokens 미지원 — effort로 출력 길이를 제어한다.
-        # max_tokens >= 16000이면 xhigh, 그 이하면 high.
-        effort = "xhigh" if max_tokens >= 16000 else "high"
         options = ClaudeAgentOptions(
             model=model,
             system_prompt=system,
             allowed_tools=["Read"] if temp_files else [],
             max_turns=3 if temp_files else 1,
-            effort=effort,
         )
 
         async def _run() -> str:
-            collected: list[str] = []
+            text_parts: list[str] = []
+            stop_reason: str | None = None
             async for message in query(prompt=prompt_str, options=options):
                 if isinstance(message, AssistantMessage):
+                    stop_reason = message.stop_reason
                     for block in message.content:
                         if isinstance(block, TextBlock):
-                            collected.append(block.text)
-                else:
-                    # ResultMessage 등 다른 타입에도 text 결과가 있는 SDK 버전 대응
-                    result = getattr(message, "result", None)
-                    if isinstance(result, str):
-                        collected.append(result)
-            return "".join(collected)
+                            text_parts.append(block.text)
+                # ResultMessage.result는 수집하지 않음 — AssistantMessage와 중복되어
+                # {json}{json} 형태가 되어 JSONDecodeError를 일으킬 수 있음
+            if stop_reason == "max_tokens":
+                raise RuntimeError(
+                    "SDK 응답이 max_tokens 한도로 잘렸습니다. "
+                    "app_settings.json에서 provider를 'api'로 변경하거나 제출작 수를 줄이세요."
+                )
+            return "".join(text_parts)
 
         return asyncio.run(_run())
     finally:
