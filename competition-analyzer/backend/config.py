@@ -39,6 +39,11 @@ MODEL_ID_CLASSIFY = "claude-haiku-4-5-20251001"  # 분류는 단순 작업 → H
 RASTER_DPI_CLASSIFY = 72
 RASTER_DPI_EXTRACT = 150
 
+# Claude 호출 경로:
+#   "api" - anthropic SDK 직접 호출 (API 토큰 차감)
+#   "sdk" - claude-agent-sdk 경유 (Claude Code 구독, claude login 필요)
+PROVIDER_DEFAULT = "api"
+
 
 class AppSettings:
     def __init__(self):
@@ -55,6 +60,7 @@ class AppSettings:
             "raster_dpi_extract": RASTER_DPI_EXTRACT,
             "model_id": MODEL_ID,
             "model_id_classify": MODEL_ID_CLASSIFY,
+            "provider": PROVIDER_DEFAULT,
         }
 
     def save(self):
@@ -84,6 +90,11 @@ class AppSettings:
     @property
     def dpi_extract(self) -> int:
         return int(self._data.get("raster_dpi_extract", RASTER_DPI_EXTRACT))
+
+    @property
+    def provider(self) -> str:
+        val = (self._data.get("provider") or PROVIDER_DEFAULT).lower()
+        return "sdk" if val == "sdk" else "api"
 
     def to_dict(self) -> dict:
         return {**self._data, "anthropic_api_key": "***" if self._data.get("anthropic_api_key") else ""}

@@ -2,9 +2,8 @@ import asyncio
 import base64
 from pathlib import Path
 
-import anthropic
-
 from config import settings, PAGE_TYPES
+from services.llm_client import call_messages
 from services.utils import parse_json_response, rasterize_pdf
 
 BATCH_SIZE = 10  # 한 번에 처리할 최대 페이지 수
@@ -73,7 +72,6 @@ def _classify_pdf_sync(pdf_path: Path) -> list[dict]:
     """PDF를 분류용 저해상도 이미지로 변환 후 배치 단위로 분류.
     - DPI: settings.dpi_classify (기본 72) — 페이지 타입 구분에 충분
     - Model: settings.model_id_classify (기본 Haiku) — 단순 분류 작업이라 Sonnet 불필요"""
-    client = anthropic.Anthropic(api_key=settings.api_key)
     pages = rasterize_pdf(pdf_path, dpi=settings.dpi_classify)
 
     all_results = []
@@ -92,7 +90,7 @@ def _classify_pdf_sync(pdf_path: Path) -> list[dict]:
             })
         content.append({"type": "text", "text": CLASSIFY_PROMPT})
 
-        response = client.messages.create(
+        raw_text = call_messages(
             model=settings.model_id_classify,
             max_tokens=3000,
             temperature=0,
@@ -101,7 +99,7 @@ def _classify_pdf_sync(pdf_path: Path) -> list[dict]:
         )
 
         try:
-            results = parse_json_response(response.content[0].text)
+            results = parse_json_response(raw_text)
             if not isinstance(results, list):
                 results = [results]
         except Exception:

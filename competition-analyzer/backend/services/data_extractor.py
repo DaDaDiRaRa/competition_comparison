@@ -14,9 +14,8 @@ import asyncio
 import base64
 from pathlib import Path
 
-import anthropic
-
 from config import settings
+from services.llm_client import call_messages
 from services.utils import parse_json_response, rasterize_pdf, rasterize_page_tiled
 
 # ── 시스템 프롬프트 ────────────────────────────────────────────────────────────
@@ -263,27 +262,25 @@ def _image_block(img_bytes: bytes) -> dict:
     }
 
 
-def _call_claude(client: anthropic.Anthropic, content: list, max_tokens: int = 4000) -> str:
-    """Claude API 단일 호출. temperature=0 고정으로 재현성 보장."""
-    response = client.messages.create(
+def _call_claude(content: list, max_tokens: int = 4000) -> str:
+    """Claude 단일 호출 (provider 추상화 경유). temperature=0 고정으로 재현성 보장."""
+    return call_messages(
         model=settings.model_id,
         max_tokens=max_tokens,
         temperature=0,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],
     )
-    return response.content[0].text
 
 
 # ── 개별 페이지 추출 ──────────────────────────────────────────────────────────
 def _extract_page_sync(
-    client: anthropic.Anthropic,
     img_bytes: bytes,
     page_num: int,
     page_type: str,
     prompt_cfg: dict | None = None,
 ) -> dict:
-    """단일 페이지를 타입 전용 프롬프트로 개별 추출. 배치 없이 1페이지 = 1 API 호출."""
+    """단일 페이지를 타입 전용 프롬프트로 개별 추출. 배치 없이 1페이지 = 1 호출."""
     if prompt_cfg is None:
         prompt_cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
     content = [
@@ -291,7 +288,7 @@ def _extract_page_sync(
         {"type": "text", "text": prompt_cfg["instruction"]},
     ]
     try:
-        raw = _call_claude(client, content, max_tokens=2000)
+        raw = _call_claude(content, max_tokens=2000)
         data = parse_json_response(raw)
     except Exception as e:
         data = {"error": str(e)}
@@ -315,7 +312,6 @@ _TILE_LABELS = ["[타일 1/4 — 좌상]", "[타일 2/4 — 우상]", "[타일 3
 
 
 def _extract_tiled(
-    client: anthropic.Anthropic,
     pdf_path: Path,
     page_index: int,
     page_num: int,
@@ -343,7 +339,7 @@ def _extract_tiled(
     content.append({"type": "text", "text": prompt})
 
     try:
-        raw = _call_claude(client, content, max_tokens=4000)
+        raw = _call_claude(content, max_tokens=4000)
         data = parse_json_response(raw)
     except Exception as e:
         data = {"error": str(e)}
@@ -364,7 +360,6 @@ async def extract_pdf(
     is_brief=False: 제안서 모드. 신뢰도 >= CONFIDENCE_DOWNGRADE_THRESHOLD인
                     TILE_PAGE_TYPES 페이지만 타일 분할 추출 적용.
     """
-    client = anthropic.Anthropic(api_key=settings.api_key)
     all_pages: list[tuple[bytes, int]] = rasterize_pdf(pdf_path, dpi=150, fmt="png")
 
     type_by_page: dict[int, str] = {}
@@ -401,10 +396,10 @@ async def extract_pdf(
         async with sem:
             if page_num in tile_page_nums:
                 return await asyncio.to_thread(
-                    _extract_tiled, client, pdf_path, page_num - 1, page_num, effective_type
+                    _extract_tiled, pdf_path, page_num - 1, page_num, effective_type
                 )
             return await asyncio.to_thread(
-                _extract_page_sync, client, img_bytes, page_num, effective_type, prompt_cfg
+                _extract_page_sync, img_bytes, page_num, effective_type, prompt_cfg
             )
 
     results = await asyncio.gather(*[extract_one(img, pnum) for img, pnum in all_pages])

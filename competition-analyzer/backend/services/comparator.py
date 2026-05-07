@@ -1,9 +1,8 @@
 import asyncio
 import json
 
-import anthropic
-
 from config import settings, COMPARISON_AXES
+from services.llm_client import call_messages
 from services.utils import parse_json_response
 
 COMPARE_PROMPT_TEMPLATE = """\
@@ -166,15 +165,14 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict]) -> dict:
               .replace("{brief_json}", _compact(_trim_brief(brief_data)))
               .replace("{results_json}", _compact(results_map))
               .replace("{submissions_json}", _compact(sub_map)))
-    client = anthropic.Anthropic(api_key=settings.api_key)
-    response = client.messages.create(
+    raw_text = call_messages(
         model=settings.model_id,
-        max_tokens=16000,
+        max_tokens=32000,
         temperature=0,
         system=_ANALYST_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
-    return parse_json_response(response.content[0].text)
+    return parse_json_response(raw_text)
 
 
 async def compare_submissions(brief_data: dict, submissions: list[dict]) -> dict:
@@ -192,15 +190,14 @@ def _run_diagnose_sync(
               .replace("{patterns_json}", _compact(winning_patterns))
               .replace("{brief_json}", _compact(brief_data))
               .replace("{submission_json}", _compact(submission_data)))
-    client = anthropic.Anthropic(api_key=settings.api_key)
-    response = client.messages.create(
+    raw_text = call_messages(
         model=settings.model_id,
         max_tokens=8192,
         temperature=0,
         system=_ANALYST_SYSTEM,
         messages=[{"role": "user", "content": prompt}],
     )
-    return parse_json_response(response.content[0].text)
+    return parse_json_response(raw_text)
 
 
 async def diagnose_submission(
