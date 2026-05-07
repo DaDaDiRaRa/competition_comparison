@@ -19,8 +19,7 @@ const s = {
 
 export default function SettingsPanel() {
   const [form, setForm] = useState({
-    db_path: '', anthropic_api_key: '', raster_dpi_classify: 72,
-    raster_dpi_extract: 150, model_id: '',
+    db_path: '', anthropic_api_key: '', model_id: '',
   })
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -30,8 +29,6 @@ export default function SettingsPanel() {
       setForm({
         db_path: data.db_path || '',
         anthropic_api_key: '',
-        raster_dpi_classify: data.raster_dpi_classify || 72,
-        raster_dpi_extract: data.raster_dpi_extract || 150,
         model_id: data.model_id || 'claude-sonnet-4-6',
       })
       setLoading(false)
@@ -71,19 +68,6 @@ export default function SettingsPanel() {
         <label style={s.label}>모델 ID</label>
         <input style={s.input} value={form.model_id}
           onChange={e => set('model_id', e.target.value)} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <div style={s.group}>
-          <label style={s.label}>분류 DPI (기본 72)</label>
-          <input style={s.input} type="number" value={form.raster_dpi_classify}
-            onChange={e => set('raster_dpi_classify', Number(e.target.value))} />
-        </div>
-        <div style={s.group}>
-          <label style={s.label}>추출 DPI (기본 150)</label>
-          <input style={s.input} type="number" value={form.raster_dpi_extract}
-            onChange={e => set('raster_dpi_extract', Number(e.target.value))} />
-        </div>
       </div>
 
       <button style={s.btn} onClick={save}>저장</button>

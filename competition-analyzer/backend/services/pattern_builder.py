@@ -34,9 +34,9 @@ def _build_page_distribution_stats(submissions: list[dict]) -> dict:
 
 def _build_quant_stats(submissions: list[dict]) -> dict:
     fields = [
-        "total_floor_area", "site_area", "building_area",
-        "floor_area_ratio", "coverage_ratio",
-        "above_ground_floors", "underground_floors", "parking_count",
+        "total_floor_area_sqm", "site_area_sqm", "building_area_sqm",
+        "floor_area_ratio_pct", "building_coverage_ratio_pct",
+        "floors_above", "floors_below", "parking_count",
     ]
     collected: dict[str, list[float]] = {f: [] for f in fields}
     for sub in submissions:
