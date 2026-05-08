@@ -84,6 +84,11 @@ class AppSettings:
     def dpi_extract(self) -> int:
         return int(self._data.get("raster_dpi_extract", RASTER_DPI_EXTRACT))
 
+    @property
+    def extraction_priority_limit(self) -> int:
+        # 2 = priority<=2만 추출 (표지·렌더링 스킵). 3 = 모든 페이지 추출 (기존 동작).
+        return int(self._data.get("extraction_priority_limit", 2))
+
     def to_dict(self) -> dict:
         return {**self._data, "anthropic_api_key": "***" if self._data.get("anthropic_api_key") else ""}
 

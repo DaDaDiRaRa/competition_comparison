@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 
 
@@ -118,6 +119,82 @@ def rasterize_page_tiled(
 
     doc.close()
     return tiles
+
+
+# ── PaddleOCR ─────────────────────────────────────────────────────────────────
+# 무료 로컬 OCR. PowerPoint→PDF 변환본(이미지 기반)처럼 임베디드 텍스트가 없는 PDF에서
+# Claude API 없이 텍스트/숫자를 인식한다.
+# 싱글턴 패턴: 첫 호출 시 모델 로드(~수 초), 이후 재사용.
+# 스레드 안전: asyncio.to_thread()로 병렬 호출될 수 있으므로 lock 보호.
+
+_paddle_ocr_lock = threading.Lock()
+_paddle_ocr_instance = None
+
+
+def _get_paddle_ocr():
+    global _paddle_ocr_instance
+    with _paddle_ocr_lock:
+        if _paddle_ocr_instance is None:
+            from paddleocr import PaddleOCR  # noqa: PLC0415
+            _paddle_ocr_instance = PaddleOCR(
+                use_angle_cls=True,
+                lang="korean",
+                show_log=False,
+            )
+    return _paddle_ocr_instance
+
+
+def ocr_page(pdf_path: Path, page_index: int, dpi: int = 300) -> str:
+    """
+    PaddleOCR로 PDF 페이지에서 텍스트 추출. 무료·로컬 실행.
+
+    - dpi=300 : 150 DPI 대비 2배 해상도 → 작은 숫자/한글 인식률 향상.
+    - 신뢰도 0.5 미만 라인은 제외.
+    - PaddleOCR 미설치 또는 오류 시 빈 문자열 반환 (vision fallback 유도).
+    """
+    import io
+
+    try:
+        import numpy as np
+        from PIL import Image as PILImage
+    except ImportError:
+        return ""
+
+    try:
+        ocr = _get_paddle_ocr()
+    except Exception:
+        return ""
+
+    try:
+        import fitz  # pymupdf
+
+        doc = fitz.open(str(pdf_path))
+        page = doc[page_index]
+        pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))
+        img_bytes = pix.tobytes("png")
+        doc.close()
+    except Exception:
+        return ""
+
+    try:
+        img_array = np.array(PILImage.open(io.BytesIO(img_bytes)).convert("RGB"))
+        result = ocr.ocr(img_array, cls=True)
+    except Exception:
+        return ""
+
+    if not result or not result[0]:
+        return ""
+
+    lines = []
+    for line in result[0]:
+        if line and len(line) >= 2:
+            text_conf = line[1]
+            if isinstance(text_conf, (list, tuple)) and len(text_conf) >= 2:
+                text, conf = text_conf[0], text_conf[1]
+                if conf >= 0.5:
+                    lines.append(str(text))
+
+    return "\n".join(lines)
 
 
 def has_embedded_text(pdf_path: Path, page_index: int, min_chars: int = 50) -> bool:
