@@ -16,7 +16,7 @@ from pathlib import Path
 
 from config import settings
 from services.llm_client import call_messages
-from services.utils import parse_json_response, rasterize_pdf, rasterize_page_tiled
+from services.utils import ocr_page, parse_json_response, rasterize_pdf, rasterize_page_tiled
 
 # ── 시스템 프롬프트 ────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
@@ -245,6 +245,17 @@ CONFIDENCE_DOWNGRADE_THRESHOLD = 0.7
 # 타일 분할 적용 대상: 정보 밀도가 높아 전체 페이지 전송 시 숫자 오독 위험
 TILE_PAGE_TYPES = {"AREA_TABLE", "TECHNICAL"}
 
+# ── 토큰 절감 설정 ────────────────────────────────────────────────────────────
+# OCR 우선 추출: PaddleOCR(무료·로컬)로 텍스트를 읽고 Haiku로 구조화.
+# Sonnet + 이미지 전송을 피해 페이지당 ~90% 비용 절감.
+# OCR 결과가 불충분(< OCR_MIN_CHARS)하면 자동으로 기존 vision 추출로 fallback.
+OCR_FIRST_TYPES = {"AREA_TABLE", "TECHNICAL", "SUSTAINABILITY"}
+OCR_MIN_CHARS = 80  # 이 글자수 미만이면 OCR 불충분 → vision fallback
+
+# 스킵 대상: 비교분석에 사용되지 않는 시각 위주 페이지.
+# settings.extraction_priority_limit=3으로 올리면 기존 동작(전 페이지 추출) 복원.
+SKIP_PAGE_TYPES = {"COVER", "RENDERING_EXT", "RENDERING_INT"}
+
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 def _b64(img_bytes: bytes) -> str:
     return base64.standard_b64encode(img_bytes).decode("utf-8")
@@ -347,6 +358,50 @@ def _extract_tiled(
     return {"page": page_num, "type": page_type, "data": data, "_tiled": True}
 
 
+# ── OCR 텍스트 추출 (이미지 토큰 0) ──────────────────────────────────────────
+def _extract_ocr_text_only(
+    pdf_path: Path,
+    page_index: int,
+    page_num: int,
+    page_type: str,
+    prompt_cfg: dict,
+) -> dict | None:
+    """
+    PaddleOCR(무료) → Haiku(저렴)로 페이지 추출.
+    이미지를 Claude에 전송하지 않으므로 입력 이미지 토큰이 0.
+
+    Returns None if OCR text is insufficient (< OCR_MIN_CHARS) → caller falls
+    back to vision extraction.
+    """
+    raw_text = ocr_page(pdf_path, page_index, dpi=300)
+    if len(raw_text.strip()) < OCR_MIN_CHARS:
+        return None  # OCR 불충분 → vision fallback
+
+    content = [
+        {
+            "type": "text",
+            "text": (
+                "다음 텍스트는 건축 설계공모 PDF 페이지에서 OCR 추출한 내용입니다.\n\n"
+                f"--- OCR 텍스트 ---\n{raw_text}\n---\n\n"
+                f"{prompt_cfg['instruction']}"
+            ),
+        }
+    ]
+    try:
+        raw = call_messages(
+            model=settings.model_id_classify,  # Haiku — 텍스트 구조화는 Sonnet 불필요
+            max_tokens=2000,
+            temperature=0,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content}],
+        )
+        data = parse_json_response(raw)
+    except Exception as e:
+        data = {"error": str(e)}
+
+    return {"page": page_num, "type": page_type, "data": data, "_source": "ocr_haiku"}
+
+
 # ── 메인 추출 로직 ─────────────────────────────────────────────────────────────
 async def extract_pdf(
     pdf_path: Path,
@@ -382,6 +437,12 @@ async def extract_pdf(
         page_type = type_by_page.get(page_num, "CONCEPT")
         confidence = confidence_by_page.get(page_num, 1.0)
 
+        # ── 스킵: 비교분석에 미사용 페이지 (COVER, RENDERING_EXT/INT)
+        priority_limit = settings.extraction_priority_limit
+        cfg_for_check = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
+        if cfg_for_check["priority"] > priority_limit or page_type in SKIP_PAGE_TYPES:
+            return {"page": page_num, "type": page_type, "data": {}, "_skipped": True}
+
         # 신뢰도 낮은 TILE 타입은 일반 타입으로 다운그레이드
         effective_type = page_type
         if page_type in TILE_PAGE_TYPES and confidence < CONFIDENCE_DOWNGRADE_THRESHOLD:
@@ -394,6 +455,18 @@ async def extract_pdf(
             prompt_cfg = EXTRACTION_PROMPTS.get(effective_type, FALLBACK_PROMPT)
 
         async with sem:
+            # ── OCR fast-path: AREA_TABLE / TECHNICAL / SUSTAINABILITY
+            # PaddleOCR(무료·로컬) → Haiku(저렴). 이미지 토큰 0.
+            # OCR 결과 불충분 시 자동으로 아래 vision 경로로 fallback.
+            if effective_type in OCR_FIRST_TYPES:
+                ocr_result = await asyncio.to_thread(
+                    _extract_ocr_text_only,
+                    pdf_path, page_num - 1, page_num, effective_type, prompt_cfg,
+                )
+                if ocr_result is not None:
+                    return ocr_result
+                # OCR 불충분 → 이하 vision 추출로 계속
+
             if page_num in tile_page_nums:
                 return await asyncio.to_thread(
                     _extract_tiled, pdf_path, page_num - 1, page_num, effective_type
