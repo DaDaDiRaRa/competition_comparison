@@ -245,6 +245,10 @@ CONFIDENCE_DOWNGRADE_THRESHOLD = 0.7
 # 타일 분할 적용 대상: 정보 밀도가 높아 전체 페이지 전송 시 숫자 오독 위험
 TILE_PAGE_TYPES = {"AREA_TABLE", "TECHNICAL"}
 
+# 추출 스킵 임계: priority가 이 값 이상이면 Claude 호출 생략 (토큰 절감)
+# priority=3 타입(COVER/RENDERING_EXT/RENDERING_INT)은 비교분석 입력에 거의 기여하지 않음
+SKIP_PRIORITY_THRESHOLD = 3
+
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 def _b64(img_bytes: bytes) -> str:
     return base64.standard_b64encode(img_bytes).decode("utf-8")
@@ -392,6 +396,10 @@ async def extract_pdf(
             prompt_cfg = EXTRACTION_PROMPTS_BRIEF[effective_type]
         else:
             prompt_cfg = EXTRACTION_PROMPTS.get(effective_type, FALLBACK_PROMPT)
+
+        # priority=3 페이지는 Claude 호출 없이 빈 데이터로 통과 (토큰 절감)
+        if prompt_cfg.get("priority", 3) >= SKIP_PRIORITY_THRESHOLD:
+            return {"page": page_num, "type": effective_type, "data": {}, "_skipped": True}
 
         async with sem:
             if page_num in tile_page_nums:
