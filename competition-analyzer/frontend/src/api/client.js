@@ -78,6 +78,15 @@ export function getSubmissionReportUrl(facilityType, competitionId, company) {
   return `${BASE}/accumulate/projects/${facilityType}/${competitionId}/submissions/${encodeURIComponent(company)}/report`
 }
 
+export function getCrossCompareReportUrl(filename) {
+  return `${BASE}/accumulate/cross-compare/reports/${encodeURIComponent(filename)}`
+}
+
+export async function listCrossCompareReports() {
+  const r = await fetch(`${BASE}/accumulate/cross-compare/reports`)
+  return r.json()
+}
+
 export function rerunCompare(facilityType, competitionId) {
   return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/rerun-compare`)
 }
@@ -100,6 +109,14 @@ export function runAccumulatePipeline(formData) {
  */
 export function runDiagnosePipeline(formData) {
   return streamSSE(`${BASE}/diagnose/run`, formData)
+}
+
+/**
+ * Run diagnosis against user-selected reference projects.
+ * formData: facility_type, competition_name, reference_items_json, submission_pdf, brief_pdf (선택)
+ */
+export function runDiagnoseVsProjects(formData) {
+  return streamSSE(`${BASE}/diagnose/run-vs-projects`, formData)
 }
 
 /**

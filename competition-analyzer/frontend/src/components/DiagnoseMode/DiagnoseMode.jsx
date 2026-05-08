@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
-import { getFacilityTypes, runDiagnosePipeline, getPattern } from '../../api/client'
+import {
+  getFacilityTypes, runDiagnosePipeline, runDiagnoseVsProjects,
+  getPattern, getProjects,
+} from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import DiagnosisResult from './DiagnosisResult'
@@ -46,6 +49,10 @@ export default function DiagnoseMode() {
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)
+  // 진단 모드: 'pattern' (기본 — DB 패턴) | 'projects' (특정 공모 선택)
+  const [refMode, setRefMode] = useState('pattern')
+  const [allProjects, setAllProjects] = useState([])
+  const [selectedRefs, setSelectedRefs] = useState([])  // [{facility_type, competition_id, company}]
 
   useEffect(() => {
     getFacilityTypes().then(setFacilityTypes)
@@ -55,7 +62,24 @@ export default function DiagnoseMode() {
     getPattern(facilityType).then(p => setPattern(p && p.win_count > 0 ? p : null))
   }, [facilityType])
 
-  const canRun = briefFile && submissionFile && !running
+  useEffect(() => {
+    if (refMode === 'projects') {
+      getProjects().then(setAllProjects).catch(() => {})
+    }
+  }, [refMode])
+
+  const refKey = (item) => `${item.competition_id}__${item.company}`
+  const toggleRef = (item) => {
+    setSelectedRefs(prev =>
+      prev.some(s => refKey(s) === refKey(item))
+        ? prev.filter(s => refKey(s) !== refKey(item))
+        : [...prev, item]
+    )
+  }
+  const isRefSelected = (item) => selectedRefs.some(s => refKey(s) === refKey(item))
+
+  const canRun = submissionFile && !running &&
+    (refMode === 'pattern' || selectedRefs.length > 0)
 
   const run = async () => {
     setRunning(true)
@@ -65,11 +89,21 @@ export default function DiagnoseMode() {
     const fd = new FormData()
     fd.append('facility_type', facilityType)
     fd.append('competition_name', competitionName)
-    fd.append('brief_pdf', briefFile)
     fd.append('submission_pdf', submissionFile)
+    if (briefFile) fd.append('brief_pdf', briefFile)
+
+    const stream = refMode === 'projects'
+      ? (() => {
+          fd.append('reference_items_json', JSON.stringify(
+            selectedRefs.map(({ facility_type, competition_id, company }) =>
+              ({ facility_type, competition_id, company }))
+          ))
+          return runDiagnoseVsProjects(fd)
+        })()
+      : runDiagnosePipeline(fd)
 
     try {
-      for await (const ev of runDiagnosePipeline(fd)) {
+      for await (const ev of stream) {
         setEvents(prev => [...prev, ev])
         if (ev.type === 'complete') setResult(ev.result)
         if (ev.type === 'error') break
@@ -79,6 +113,8 @@ export default function DiagnoseMode() {
     }
     setRunning(false)
   }
+
+  const filteredProjects = allProjects.filter(p => p.facility_type === facilityType)
 
   return (
     <div style={s.panel}>
@@ -93,10 +129,11 @@ export default function DiagnoseMode() {
               <option key={k} value={k}>{v} ({k})</option>
             ))}
           </select>
-          {pattern
-            ? <div style={s.patternBadge}>✓ DB 패턴: 당선작 {pattern.win_count}개 보유</div>
-            : <div style={s.noPattern}>⚠ 해당 유형 당선 데이터 없음 (데이터 축적 필요)</div>
-          }
+          {refMode === 'pattern' && (
+            pattern
+              ? <div style={s.patternBadge}>✓ DB 패턴: 당선작 {pattern.win_count}개 보유</div>
+              : <div style={s.noPattern}>⚠ 해당 유형 당선 데이터 없음 (데이터 축적 필요)</div>
+          )}
         </div>
 
         <div style={s.group}>
@@ -107,10 +144,105 @@ export default function DiagnoseMode() {
         </div>
       </div>
 
+      {/* 진단 기준 모드 토글 */}
+      <div style={s.group}>
+        <label style={s.label}>진단 기준</label>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[
+            { v: 'pattern', label: '전체 당선 패턴 (자동)' },
+            { v: 'projects', label: '특정 공모 선택' },
+          ].map(opt => (
+            <button
+              key={opt.v}
+              onClick={() => setRefMode(opt.v)}
+              style={{
+                flex: 1, padding: '9px 0', borderRadius: 6, fontSize: 13,
+                fontWeight: 600, cursor: 'pointer',
+                border: refMode === opt.v ? '2px solid #b794f4' : '2px solid #2d3748',
+                background: refMode === opt.v ? '#2d2050' : '#0d1117',
+                color: refMode === opt.v ? '#e9d8fd' : '#718096',
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 특정 공모 선택 모드 — 프로젝트 리스트 */}
+      {refMode === 'projects' && (
+        <div style={s.group}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+            <label style={{ ...s.label, marginBottom: 0, flex: 1 }}>
+              참조할 공모 선택 ({facilityTypes[facilityType] || facilityType})
+            </label>
+            <span style={{ fontSize: 12, color: '#90cdf4', fontWeight: 600 }}>
+              {selectedRefs.length}개 선택됨
+            </span>
+          </div>
+          <div style={{
+            maxHeight: 240, overflowY: 'auto',
+            background: '#0d1117', border: '1px solid #2d3748',
+            borderRadius: 6, padding: 8,
+          }}>
+            {filteredProjects.length === 0 ? (
+              <div style={{ padding: 12, fontSize: 12, color: '#4a5568', textAlign: 'center' }}>
+                해당 유형의 저장된 공모가 없습니다.
+              </div>
+            ) : filteredProjects.map(p => (
+              <div key={p.competition_id} style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 12, color: '#a0aec0', padding: '6px 8px', fontWeight: 600 }}>
+                  {p.competition_name || p.competition_id}
+                  <span style={{ marginLeft: 6, fontSize: 11, color: '#4a5568', fontWeight: 400 }}>
+                    {p.year}
+                  </span>
+                </div>
+                {(p.submissions || []).map(sub => {
+                  const item = { facility_type: p.facility_type, competition_id: p.competition_id, company: sub.company }
+                  const checked = isRefSelected(item)
+                  return (
+                    <div
+                      key={sub.company}
+                      onClick={() => toggleRef(item)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '6px 12px', marginLeft: 8, cursor: 'pointer',
+                        borderRadius: 4,
+                        background: checked ? '#1a2535' : 'transparent',
+                        border: checked ? '1px solid #2b6cb0' : '1px solid transparent',
+                      }}
+                    >
+                      <div style={{
+                        width: 14, height: 14, borderRadius: 3, flexShrink: 0,
+                        border: checked ? '2px solid #90cdf4' : '2px solid #4a5568',
+                        background: checked ? '#90cdf4' : 'transparent',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, color: '#0d1117', fontWeight: 700,
+                      }}>{checked ? '✓' : ''}</div>
+                      <span style={{ fontSize: 12, color: '#e2e8f0', flex: 1 }}>{sub.company}</span>
+                      <span style={{
+                        fontSize: 10, padding: '1px 6px', borderRadius: 10,
+                        color: sub.result === 'win' || sub.result === 'contracted' ? '#d4af37' : '#718096',
+                        background: '#1a1f2e',
+                      }}>
+                        {sub.result === 'win' ? '당선' : sub.result === 'contracted' ? '수의계약' : '낙선'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={s.grid2}>
         <div style={s.group}>
-          <label style={s.label}>지침서 PDF</label>
-          <DropZone label="지침서 PDF" onFiles={setBriefFile} />
+          <label style={s.label}>
+            지침서 PDF
+            <span style={{ fontSize: 11, color: '#4a5568', marginLeft: 4 }}>(선택 사항)</span>
+          </label>
+          <DropZone label="지침서 PDF (선택)" onFiles={setBriefFile} />
         </div>
         <div style={s.group}>
           <label style={s.label}>자사 제안서 PDF</label>

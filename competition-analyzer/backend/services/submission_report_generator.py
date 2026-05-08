@@ -465,6 +465,11 @@ def _render_page_dist(page_dist: dict, total: int) -> str:
         "CIRCULATION": "동선", "HEALTH_CENTER": "건강센터", "TECHNICAL": "기술",
         "AREA_TABLE": "면적표", "SUSTAINABILITY": "지속가능성",
         "UNIT_PLAN": "단위세대", "INCENTIVE_TABLE": "인센티브표", "BRANDING": "브랜딩",
+        # 재건축 전용 타입
+        "BUSINESS_VIABILITY": "사업성", "AREA_INCREASE": "면적증가",
+        "VIEW_ANALYSIS": "조망분석", "COMMUNITY_PROGRAM": "커뮤니티",
+        "COMPANY_PORTFOLIO": "회사실적", "CONSTRUCTION_PLAN": "시공계획",
+        "UNIT_PLAN_PENTHOUSE": "펜트하우스",
     }
     sorted_dist = sorted(page_dist.items(), key=lambda x: x[1], reverse=True)
     bars = ""
@@ -484,6 +489,922 @@ def _render_page_dist(page_dist: dict, total: int) -> str:
         f'<div class="dist-bar-wrap">{bars}</div>'
         f'</div>'
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PATCH #3-1/5 — 재건축 전용 helper utilities + 핵심메시지 + 사업성 renderer
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _to_list(val) -> list:
+    """dict / list / None 모두 list로 정규화. _safe_list의 dict-미지원 보완."""
+    if val is None:
+        return []
+    if isinstance(val, dict):
+        return [val]
+    if isinstance(val, list):
+        return [v for v in val if v]
+    return []
+
+
+def _won_str(won):
+    """원 단위 숫자 → 한국식 축약 (150_000_000_000 → '1,500억'). null-safe."""
+    if won is None:
+        return None
+    try:
+        v = float(won)
+    except (TypeError, ValueError):
+        return str(won)
+    sign = '-' if v < 0 else ''
+    v = abs(v)
+    if v >= 1e12:
+        return f'{sign}{v / 1e12:,.1f}조'
+    if v >= 1e8:
+        return f'{sign}{v / 1e8:,.0f}억'
+    if v >= 1e4:
+        return f'{sign}{v / 1e4:,.0f}만'
+    return f'{sign}{v:,.0f}원'
+
+
+def _pct_str(value):
+    """퍼센트 값 포맷. null-safe."""
+    if value is None:
+        return None
+    try:
+        return f'{float(value):.1f}%'
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _tag_cluster(items: list, color: str = '#90cdf4') -> str:
+    """키워드 태그 클러스터 HTML. 빈 항목 자동 필터."""
+    items = [str(i) for i in (items or []) if i]
+    if not items:
+        return ''
+    return (
+        '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">'
+        + ''.join(
+            f'<span style="background:{color}1a;color:{color};font-size:11px;'
+            f'padding:3px 9px;border-radius:3px;border:1px solid {color}33">{t}</span>'
+            for t in items
+        )
+        + '</div>'
+    )
+
+
+def _note_item(text: str, accent: bool = False) -> str:
+    """노트 아이템 한 줄. accent=True면 강조 왼쪽 바."""
+    if not text:
+        return ''
+    border = '#90cdf4' if accent else '#4a5568'
+    return (
+        f'<div style="background:#0d1117;border-radius:5px;padding:9px 13px;'
+        f'margin-bottom:6px;font-size:13px;color:#cbd5e0;line-height:1.6;'
+        f'border-left:3px solid {border}">{text}</div>'
+    )
+
+
+def _kv_card(label: str, value, unit: str = '', hl: bool = False) -> str:
+    """강화 KV 카드. null/빈값 자동 skip. hl=True면 황금색 강조."""
+    if value is None or value == '' or value == []:
+        return ''
+    if isinstance(value, float) and value == int(value):
+        value = int(value)
+    disp = f'{value:,}' if isinstance(value, (int, float)) else str(value)
+    col = '#f6e05e' if hl else '#e2e8f0'
+    brd = ';border:1px solid #f6e05e33' if hl else ''
+    u = f' <span style="font-size:11px;color:#a0aec0">{unit}</span>' if unit else ''
+    return (
+        f'<div style="background:#0d1117;border-radius:6px;padding:12px 16px{brd}">'
+        f'<div style="font-size:11px;color:#718096;margin-bottom:4px">{label}</div>'
+        f'<div style="font-size:17px;font-weight:700;color:{col}">{disp}{u}</div>'
+        f'</div>'
+    )
+
+
+def _kv_grid(*blocks: str, cols: int = 3) -> str:
+    """KV 카드를 N-column grid로 묶음. 빈 블록 자동 제거, 컬럼 수 자동 조정."""
+    filled = [b for b in blocks if b]
+    if not filled:
+        return ''
+    actual_cols = min(len(filled), cols)
+    return (
+        f'<div style="display:grid;grid-template-columns:repeat({actual_cols},1fr);'
+        f'gap:10px;margin-bottom:14px">'
+        + ''.join(filled)
+        + '</div>'
+    )
+
+
+def _sec_open(title: str, icon: str = '', badge: str = '') -> str:
+    """섹션 열기 (기존 sec + sec-title CSS 재사용)."""
+    b = (
+        f'<span style="font-size:10px;background:#1a2e40;color:#90cdf4;'
+        f'padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:400">{badge}</span>'
+    ) if badge else ''
+    ic = f'<span style="opacity:0.7;margin-right:6px">{icon}</span>' if icon else ''
+    return f'<div class="sec" style="margin-bottom:16px"><div class="sec-title">{ic}{title}{b}</div>'
+
+
+def _sec_close() -> str:
+    return '</div>'
+
+
+def _missing(label: str) -> str:
+    """페이지 검출됐지만 추출 필드 비어있을 때 가시적 placeholder."""
+    return (
+        f'<div style="background:#0d1117;border-radius:5px;padding:11px 15px;'
+        f'border:1px dashed #2d3748;color:#4a5568;font-size:12px;margin-bottom:8px">'
+        f'⚠ {label} 페이지 검출됨 — 추출 필드 비어있음 (PDF 내 텍스트 인식 확인 필요)'
+        f'</div>'
+    )
+
+
+# ── 핵심 메시지 (BRANDING + CONCEPT 통합) ─────────────────────────────────────
+
+def _render_key_message(branding_list: list, concept_list: list) -> str:
+    """브랜드 아이덴티티 + 설계 컨셉을 하나의 섹션으로 통합."""
+    brand = branding_list[0] if branding_list and isinstance(branding_list[0], dict) else {}
+    concept = concept_list[0] if concept_list and isinstance(concept_list[0], dict) else {}
+    if not brand and not concept:
+        return ''
+
+    # ── 브랜드명 ──
+    name_ko = brand.get('brand_name_ko') or concept.get('concept_name_ko') or ''
+    name_en = brand.get('brand_name_en') or concept.get('concept_name_en') or ''
+    name_html = ''
+    if name_ko:
+        name_html = (
+            f'<div style="font-size:26px;font-weight:800;color:#f6e05e;'
+            f'letter-spacing:-0.01em;margin-bottom:2px">{name_ko}</div>'
+            + (f'<div style="font-size:13px;color:#718096;margin-bottom:8px">{name_en}</div>'
+               if name_en and name_en != name_ko else '')
+        )
+    elif name_en:
+        name_html = f'<div style="font-size:24px;font-weight:800;color:#f6e05e;margin-bottom:8px">{name_en}</div>'
+
+    # ── 슬로건 ──
+    slogan = brand.get('main_slogan', '')
+    slogan_html = (
+        f'<div style="font-size:14px;color:#e2e8f0;font-style:italic;padding:8px 12px;'
+        f'border-left:3px solid #f6e05e;margin-bottom:12px;background:#1a1f2e;'
+        f'border-radius:0 4px 4px 0">{slogan}</div>'
+    ) if slogan else ''
+
+    # ── 컨셉 배지 ──
+    massing = concept.get('massing_type', '')
+    metaphor = concept.get('metaphor_reference', '')
+    badges = (
+        (f'<span style="background:#1e2d40;color:#90cdf4;font-size:11px;'
+         f'padding:3px 9px;border-radius:3px;margin-right:6px">매스: {massing}</span>'
+         if massing else '')
+        + (f'<span style="background:#2d2050;color:#b794f4;font-size:11px;'
+           f'padding:3px 9px;border-radius:3px">참조: {metaphor}</span>'
+           if metaphor else '')
+    )
+    badges_html = f'<div style="margin-bottom:10px">{badges}</div>' if badges else ''
+
+    # ── 전략 ──
+    main_strat = concept.get('main_strategy', '')
+    sub_strats = _to_list(concept.get('sub_strategies'))
+    strat_html = (
+        (_note_item(main_strat, accent=True) if main_strat else '')
+        + ''.join(_note_item(s) for s in sub_strats[:4] if isinstance(s, str) and s)
+    )
+
+    # ── 서브 슬로건 ──
+    sub_slogans = _to_list(brand.get('sub_slogans'))
+    sub_slogan_html = ''.join(_note_item(s) for s in sub_slogans[:3] if isinstance(s, str) and s)
+
+    # ── 키워드 + 타깃 태그 ──
+    kws = list(dict.fromkeys(
+        k for k in (
+            _to_list(concept.get('keywords')) + _to_list(brand.get('premium_keywords'))
+        ) if isinstance(k, str) and k
+    ))
+    targets = list(dict.fromkeys(
+        t for t in (
+            _to_list(concept.get('target_user'))
+            + ([brand.get('target_lifestyle')] if brand.get('target_lifestyle') else [])
+        ) if isinstance(t, str) and t
+    ))
+
+    body = (
+        '<div style="background:#0d1117;border-radius:8px;padding:18px 20px">'
+        + name_html + slogan_html + badges_html + strat_html + sub_slogan_html
+        + _tag_cluster(kws, '#90cdf4')
+        + (_tag_cluster(targets, '#f6ad55') if targets else '')
+        + '</div>'
+    )
+    return _sec_open('핵심 메시지', '✦', 'BRANDING · CONCEPT') + body + _sec_close()
+
+
+# ── 사업성 (BUSINESS_VIABILITY) ───────────────────────────────────────────────
+
+def _render_business_viability(bv_list: list) -> str:
+    """자산가치·분담금·용적률·사업비 핵심 지표. 복수 페이지 각각 sub-block으로."""
+    if not bv_list:
+        return ''
+    all_html = ''
+    for item in bv_list:
+        if not isinstance(item, dict):
+            continue
+        non_empty = {k: v for k, v in item.items()
+                     if k != '_page' and v not in (None, '', [], {})}
+        if not non_empty:
+            all_html += _missing('BUSINESS_VIABILITY')
+            continue
+
+        page = item.get('_page', '')
+        pg_html = (
+            f'<div style="font-size:10px;color:#4a5568;margin-bottom:8px">p{page}</div>'
+        ) if page else ''
+
+        # 자산가치
+        av_won = _won_str(item.get('asset_value_increase_won'))
+        av_multi = item.get('asset_value_multiplier')
+        av_disp = av_won or ''
+        if av_multi:
+            m = int(av_multi) if isinstance(av_multi, float) and av_multi == int(av_multi) else av_multi
+            av_disp = (av_disp + f' ({m}배)') if av_disp else f'{m}배'
+
+        # 분담금
+        contrib = _won_str(item.get('member_contribution_change_won'))
+        contrib_pct = _pct_str(item.get('member_contribution_change_pct'))
+        contrib_disp = (contrib + (f' ({contrib_pct})' if contrib_pct else '')) if contrib else (contrib_pct or '')
+
+        kv_top = _kv_grid(
+            _kv_card('조합원 자산가치 증가', av_disp, hl=True) if av_disp else '',
+            _kv_card('분담금 변화', contrib_disp, hl=bool(contrib)) if contrib_disp else '',
+            _kv_card('평당 분양가', _won_str(item.get('sale_price_per_pyeong_won')), '원/평')
+            if item.get('sale_price_per_pyeong_won') else '',
+            cols=3,
+        )
+
+        # 용적률 인센티브
+        fb, fi, ff = _pct_str(item.get('far_base_pct')), _pct_str(item.get('far_incentive_pct')), _pct_str(item.get('far_final_pct'))
+        far_html = ''
+        if any([fb, fi, ff]):
+            far_html = (
+                '<div style="background:#0d1117;border-radius:6px;padding:12px 16px;margin-bottom:10px">'
+                '<div style="font-size:11px;color:#718096;margin-bottom:8px">용적률 인센티브</div>'
+                '<div style="display:flex;align-items:center;gap:8px;font-size:13px">'
+                + (f'<span style="color:#a0aec0">기준 {fb}</span>' if fb else '')
+                + (f'<span style="color:#4a5568">→</span><span style="color:#90cdf4">+인센티브 {fi}</span>' if fi else '')
+                + (f'<span style="color:#4a5568">→</span>'
+                   f'<span style="font-weight:700;color:#f6e05e">최종 {ff}</span>' if ff else '')
+                + '</div></div>'
+            )
+
+        kv_mid = _kv_grid(
+            _kv_card('일반분양', item.get('general_sale_units'), '세대') if item.get('general_sale_units') else '',
+            _kv_card('조합원', item.get('member_units'), '세대') if item.get('member_units') else '',
+            _kv_card('공사비 절감', _won_str(item.get('construction_cost_savings_won'))) if item.get('construction_cost_savings_won') else '',
+            _kv_card('공기 단축', item.get('period_reduction_months'), '개월') if item.get('period_reduction_months') else '',
+            cols=4,
+        )
+
+        messages = _to_list(item.get('key_messages'))
+        msg_html = ''.join(
+            _note_item(m, accent=(i == 0))
+            for i, m in enumerate(messages)
+            if isinstance(m, str) and m
+        )
+
+        all_html += (
+            f'<div style="margin-bottom:12px">'
+            f'{pg_html}{kv_top}{far_html}{kv_mid}{msg_html}'
+            f'</div>'
+        )
+
+    return (_sec_open('사업성', '₩', 'BUSINESS_VIABILITY') + all_html + _sec_close()) if all_html else ''
+
+
+# ── 조합원 혜택: 실사용면적 증가 (AREA_INCREASE) ──────────────────────────────
+
+def _render_area_increase(ai_list: list) -> str:
+    """기존 vs 재건축 후 면적 비교 테이블 + 요약."""
+    if not ai_list:
+        return ''
+    all_html = ''
+    _th = 'background:#0d1117;padding:7px 12px;font-size:11px;color:#718096;border-bottom:1px solid #2d3748'
+    for item in ai_list:
+        if not isinstance(item, dict):
+            continue
+        non_empty = {k: v for k, v in item.items() if k != '_page' and v not in (None, '', [], {})}
+        if not non_empty:
+            all_html += _missing('AREA_INCREASE')
+            continue
+        page = item.get('_page', '')
+        pg_html = f'<div style="font-size:10px;color:#4a5568;margin-bottom:8px">p{page}</div>' if page else ''
+
+        # 면적 비교 테이블
+        pairs = [p for p in (item.get('unit_pairs') or []) if isinstance(p, dict)]
+        rows = ''
+        for p in pairs:
+            ex_t = p.get('existing_type', '') or ''
+            ex_s = p.get('existing_actual_sqm')
+            rv_t = p.get('redev_type', '') or ''
+            rv_s = p.get('redev_actual_sqm')
+            inc_p = p.get('increase_pyeong')
+            inc_pct = _pct_str(p.get('increase_pct'))
+            _td = 'padding:8px 12px;border-bottom:1px solid #1e2533'
+            rows += (
+                f'<tr>'
+                f'<td style="{_td};color:#a0aec0">{ex_t}</td>'
+                f'<td style="{_td};color:#a0aec0;text-align:right">{"" if ex_s is None else f"{ex_s:.1f}㎡"}</td>'
+                f'<td style="{_td};color:#e2e8f0;font-weight:600">{rv_t}</td>'
+                f'<td style="{_td};color:#e2e8f0;font-weight:600;text-align:right">{"" if rv_s is None else f"{rv_s:.1f}㎡"}</td>'
+                f'<td style="{_td};color:#68d391;font-weight:700;text-align:right">{"" if inc_p is None else f"+{inc_p:.0f}평"}</td>'
+                f'<td style="{_td};color:#68d391;text-align:right">{"" if inc_pct is None else f"↑{inc_pct}"}</td>'
+                f'</tr>'
+            )
+        table_html = ''
+        if rows:
+            table_html = (
+                '<div style="overflow-x:auto;margin-bottom:14px">'
+                '<table style="width:100%;border-collapse:collapse">'
+                '<thead><tr>'
+                f'<th style="{_th};text-align:left">기존 타입</th>'
+                f'<th style="{_th};text-align:right">기존 면적</th>'
+                f'<th style="{_th};text-align:left">재건축 후 타입</th>'
+                f'<th style="{_th};text-align:right">재건축 후 면적</th>'
+                f'<th style="{_th};text-align:right">면적 증가</th>'
+                f'<th style="{_th};text-align:right">증가율</th>'
+                f'</tr></thead><tbody>{rows}</tbody></table></div>'
+            )
+
+        max_multi = item.get('max_increase_multiplier')
+        avg_p = item.get('average_increase_pyeong')
+        kv_s = _kv_grid(
+            _kv_card('최대 면적 배수', f'{max_multi}배' if max_multi else None, hl=True),
+            _kv_card('평균 증가', avg_p, '평') if avg_p else '',
+            cols=2,
+        )
+        msg = item.get('key_message', '')
+        all_html += f'<div style="margin-bottom:12px">{pg_html}{table_html}{kv_s}{_note_item(msg, accent=True) if msg else ""}</div>'
+
+    return (_sec_open('실사용면적 증가', '↑', 'AREA_INCREASE') + all_html + _sec_close()) if all_html else ''
+
+
+# ── 조합원 혜택: 조망·남향 (VIEW_ANALYSIS) ────────────────────────────────────
+
+def _render_view_analysis(va_list: list) -> str:
+    """남향%·강뷰%·더블뷰%·조합원 조망 보장% 대형 KV + 전략 노트."""
+    if not va_list:
+        return ''
+    all_html = ''
+    for item in va_list:
+        if not isinstance(item, dict):
+            continue
+        non_empty = {k: v for k, v in item.items() if k != '_page' and v not in (None, '', [], {})}
+        if not non_empty:
+            all_html += _missing('VIEW_ANALYSIS')
+            continue
+        page = item.get('_page', '')
+        pg_html = f'<div style="font-size:10px;color:#4a5568;margin-bottom:8px">p{page}</div>' if page else ''
+
+        kv_top = _kv_grid(
+            _kv_card('남향 배치', _pct_str(item.get('south_facing_units_pct')), hl=True) if item.get('south_facing_units_pct') is not None else '',
+            _kv_card('강·수변 조망', _pct_str(item.get('river_view_units_pct'))) if item.get('river_view_units_pct') is not None else '',
+            _kv_card('더블 조망', _pct_str(item.get('double_view_units_pct'))) if item.get('double_view_units_pct') is not None else '',
+            _kv_card('조합원 조망 보장', _pct_str(item.get('member_units_view_guarantee_pct')), hl=True) if item.get('member_units_view_guarantee_pct') is not None else '',
+            cols=4,
+        )
+        targets = [str(t) for t in _to_list(item.get('view_targets')) if t]
+        strategy = item.get('site_layout_strategy', '')
+        msg = item.get('key_message', '')
+        all_html += (
+            f'<div style="margin-bottom:12px">{pg_html}{kv_top}'
+            + (_tag_cluster(targets, '#68d391') if targets else '')
+            + (_note_item(strategy, accent=True) if strategy else '')
+            + (_note_item(msg) if msg and msg != strategy else '')
+            + '</div>'
+        )
+    return (_sec_open('조망·남향 배치', '⊙', 'VIEW_ANALYSIS') + all_html + _sec_close()) if all_html else ''
+
+
+# ── 상품 경쟁력: 표준 단위세대 (UNIT_PLAN) ────────────────────────────────────
+
+def _render_unit_plan_std(up_list: list) -> str:
+    """평형별 카드 갤러리. 면적·LDK·특징 태그 포함."""
+    if not up_list:
+        return ''
+    cards = []
+    total_units = 0
+    for item in up_list:
+        if not isinstance(item, dict):
+            continue
+        u_type = item.get('unit_type', '')
+        actual_p = item.get('actual_area_pyeong')
+        actual_s = item.get('actual_area_sqm')
+        supply_s = item.get('supply_area_sqm')
+        service_s = item.get('service_area_sqm')
+        count = item.get('unit_count')
+        ldk = item.get('ldk_layout', '')
+        bath = item.get('bathroom_count')
+        core = item.get('core_type', '')
+        features = [str(f) for f in _to_list(item.get('key_features')) if f]
+
+        non_empty = {k: v for k, v in item.items() if k not in ('_page', 'error') and v not in (None, '', [], {})}
+        if not non_empty:
+            continue
+
+        if count:
+            try:
+                total_units += int(count)
+            except (TypeError, ValueError):
+                pass
+
+        area_parts = []
+        if supply_s:
+            area_parts.append(f'공급 {supply_s:.1f}㎡')
+        if actual_s:
+            area_parts.append(f'실사용 {actual_s:.1f}㎡')
+        if service_s:
+            area_parts.append(f'서비스 {service_s:.1f}㎡')
+
+        meta = ' · '.join(filter(None, [ldk, f'욕실 {bath}개' if bath else '', f'코어: {core}' if core else '']))
+
+        p_disp = int(actual_p) if isinstance(actual_p, float) and actual_p == int(actual_p) else actual_p
+
+        card = (
+            '<div style="background:#0d1117;border-radius:6px;padding:14px 16px;border-top:3px solid #2c5282">'
+            f'<div style="font-size:17px;font-weight:800;color:#90cdf4;margin-bottom:2px">{u_type}</div>'
+            + (f'<div style="font-size:24px;font-weight:700;color:#e2e8f0">{p_disp}<span style="font-size:12px;color:#718096;font-weight:400">평</span></div>' if actual_p else '')
+            + (f'<div style="font-size:11px;color:#4a5568">{count}세대</div>' if count else '')
+            + (f'<div style="font-size:11px;color:#718096;line-height:1.7;margin:4px 0">{"  /  ".join(area_parts)}</div>' if area_parts else '')
+            + (f'<div style="font-size:11px;color:#718096;margin-bottom:4px">{meta}</div>' if meta else '')
+            + (_tag_cluster(features, '#90cdf4') if features else '')
+            + '</div>'
+        )
+        cards.append(card)
+
+    if not cards:
+        return ''
+    summary = (f'<div style="font-size:12px;color:#718096;margin-bottom:10px">총 {total_units}세대</div>') if total_units else ''
+    n = min(len(cards), 4)
+    grid = f'<div style="display:grid;grid-template-columns:repeat({n},1fr);gap:10px">{"".join(cards)}</div>'
+    return _sec_open('단위세대', '□', 'UNIT_PLAN') + summary + grid + _sec_close()
+
+
+# ── 상품 경쟁력: 펜트하우스 (UNIT_PLAN_PENTHOUSE) ─────────────────────────────
+
+def _render_unit_plan_penthouse(upp_list: list) -> str:
+    """펜트하우스 전용 — 황금 테두리 프리미엄 카드."""
+    if not upp_list:
+        return ''
+    cards = []
+    for item in upp_list:
+        if not isinstance(item, dict):
+            continue
+        non_empty = {k: v for k, v in item.items() if k not in ('_page', 'error') and v not in (None, '', [], {})}
+        if not non_empty:
+            cards.append(_missing('UNIT_PLAN_PENTHOUSE'))
+            continue
+
+        u_type = item.get('unit_type', '')
+        actual_p = item.get('actual_area_pyeong')
+        actual_s = item.get('actual_area_sqm')
+        count = item.get('unit_count')
+        terrace_s = item.get('terrace_area_sqm')
+        ceiling_m = item.get('ceiling_height_m')
+        open_sides = item.get('open_sides')
+        sig = [str(f) for f in _to_list(item.get('signature_features')) if f]
+        lux = [str(k) for k in _to_list(item.get('luxury_keywords')) if k]
+
+        area_rows = ''.join(
+            f'<div style="display:flex;justify-content:space-between;padding:4px 0;'
+            f'border-bottom:1px solid #1e2533;font-size:12px">'
+            f'<span style="color:#718096">{lbl}</span>'
+            f'<span style="color:#e2e8f0">{v:.1f}㎡</span></div>'
+            for lbl, v in [
+                ('전용', item.get('exclusive_area_sqm')),
+                ('공급', item.get('supply_area_sqm')),
+                ('서비스', item.get('service_area_sqm')),
+                ('테라스', terrace_s),
+            ] if v
+        )
+        spec_tags = [s for s in [
+            f'천장고 {ceiling_m}m' if ceiling_m else '',
+            f'{open_sides}면 개방' if open_sides else '',
+            f'{count}세대' if count else '',
+        ] if s]
+        p_disp = int(actual_p) if isinstance(actual_p, float) and actual_p == int(actual_p) else actual_p
+
+        cards.append(
+            '<div style="background:#0d1117;border-radius:8px;padding:18px 20px;'
+            'border:2px solid #f6e05e33;border-top:4px solid #f6e05e">'
+            f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">'
+            f'<div style="font-size:20px;font-weight:800;color:#f6e05e">{u_type}</div>'
+            f'<span style="background:#b7791f;color:#fefcbf;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">펜트하우스</span>'
+            f'</div>'
+            + (f'<div style="font-size:32px;font-weight:800;color:#e2e8f0;margin-bottom:6px">'
+               f'{p_disp}<span style="font-size:14px;color:#718096;font-weight:400">평</span>'
+               + (f' <span style="font-size:13px;color:#a0aec0">({actual_s:.2f}㎡)</span>' if actual_s else '')
+               + '</div>' if actual_p else '')
+            + (f'<div style="margin:10px 0">{area_rows}</div>' if area_rows else '')
+            + (_tag_cluster(spec_tags, '#f6e05e') if spec_tags else '')
+            + (_tag_cluster(sig, '#f6ad55') if sig else '')
+            + (_tag_cluster(lux, '#b794f4') if lux else '')
+            + '</div>'
+        )
+
+    if not cards:
+        return ''
+    n = min(len(cards), 3)
+    grid = f'<div style="display:grid;grid-template-columns:repeat({n},1fr);gap:12px">{"".join(cards)}</div>'
+    return _sec_open('펜트하우스', '★', 'UNIT_PLAN_PENTHOUSE') + grid + _sec_close()
+
+
+# ── 섹션 내 소제목 헬퍼 ──────────────────────────────────────────────────────
+
+def _sub_header(title: str) -> str:
+    """섹션 내 소제목 구분선 (섹션 아이콘 없이 컴팩트하게)."""
+    return (
+        f'<div style="font-size:12px;font-weight:700;color:#a0aec0;'
+        f'letter-spacing:0.05em;margin:14px 0 8px;padding-bottom:4px;'
+        f'border-bottom:1px solid #1e2533">{title}</div>'
+    )
+
+
+# ── 단지 계획 (SITE_PLAN + SITE_CONTEXT + LANDSCAPE 통합) ─────────────────────
+
+def _render_site_planning(sp_list: list, sc_list: list, lc_list: list) -> str:
+    """배치 전략 + 대지 분석 + 조경 계획을 단지계획 섹션 하나로."""
+    if not any([sp_list, sc_list, lc_list]):
+        return ''
+    body = ''
+
+    # ── 배치 전략 (SITE_PLAN) ──
+    sp_html = ''
+    for item in sp_list:
+        if not isinstance(item, dict):
+            continue
+        note_pairs = [
+            ('주 출입 방향', item.get('main_entrance_direction')),
+            ('차량 진입',    item.get('vehicle_access_direction')),
+            ('오픈스페이스', item.get('open_space_strategy')),
+        ]
+        sp_html += ''.join(
+            _note_item(f'<strong style="color:#718096">{lbl}: </strong>{val}', accent=(i == 0))
+            for i, (lbl, val) in enumerate(note_pairs)
+            if val and val not in ('', [])
+        )
+    if sp_html:
+        body += _sub_header('배치 전략') + sp_html
+
+    # ── 대지 분석 (SITE_CONTEXT) ──
+    sc_html = ''
+    for item in sc_list:
+        if not isinstance(item, dict):
+            continue
+        strategy  = item.get('urban_strategy', '')
+        hist      = item.get('historical_context', '')
+        green_net = item.get('green_network', '')
+        issues     = [str(v) for v in _to_list(item.get('site_issues'))                if v]
+        facilities = [str(v) for v in _to_list(item.get('surrounding_facilities'))     if v]
+        transport  = [str(v) for v in _to_list(item.get('transportation_connections')) if v]
+
+        if strategy:   sc_html += _note_item(strategy, accent=True)
+        if hist:       sc_html += _note_item(hist)
+        if green_net:  sc_html += _note_item(green_net)
+        if facilities:
+            sc_html += ('<div style="margin-top:6px"><span style="font-size:11px;color:#718096">주변 시설: </span>'
+                        + _tag_cluster(facilities, '#68d391') + '</div>')
+        if transport:
+            sc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#718096">교통: </span>'
+                        + _tag_cluster(transport, '#90cdf4') + '</div>')
+        if issues:
+            sc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#718096">사이트 이슈: </span>'
+                        + _tag_cluster(issues, '#fc8181') + '</div>')
+    if sc_html:
+        body += _sub_header('대지 분석') + sc_html
+
+    # ── 조경 계획 (LANDSCAPE) ──
+    lc_html = ''
+    for item in lc_list:
+        if not isinstance(item, dict):
+            continue
+        green_pct = _pct_str(item.get('green_area_ratio_pct'))
+        concept   = item.get('key_landscape_concept', '')
+        connect   = item.get('connection_to_surroundings', '')
+        water     = item.get('water_feature', False)
+        trees     = [str(v) for v in _to_list(item.get('tree_types'))       if v]
+        programs  = [str(v) for v in _to_list(item.get('outdoor_programs')) if v]
+        pavement  = [str(v) for v in _to_list(item.get('pavement_types'))   if v]
+
+        lc_html += _kv_grid(
+            _kv_card('녹지율', green_pct) if green_pct else '',
+            _kv_card('수경 시설', '✓ 있음', hl=True) if water else '',
+            cols=2,
+        )
+        if concept:  lc_html += _note_item(concept, accent=True)
+        if connect:  lc_html += _note_item(connect)
+        if trees:
+            lc_html += ('<div style="margin-top:6px"><span style="font-size:11px;color:#718096">수종: </span>'
+                        + _tag_cluster(trees, '#68d391') + '</div>')
+        if programs:
+            lc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#718096">야외 프로그램: </span>'
+                        + _tag_cluster(programs, '#90cdf4') + '</div>')
+        if pavement:
+            lc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#718096">포장재: </span>'
+                        + _tag_cluster(pavement, '#a0aec0') + '</div>')
+    if lc_html:
+        body += _sub_header('조경 계획') + lc_html
+
+    return (_sec_open('단지 계획', '⊞', 'SITE_PLAN · CONTEXT · LANDSCAPE') + body + _sec_close()) if body else ''
+
+
+# ── 커뮤니티 (COMMUNITY_PROGRAM + SPECIAL_SPACE 통합) ─────────────────────────
+
+def _render_community(cp_list: list, ss_list: list) -> str:
+    """커뮤니티 프로그램 + 특별 공간을 커뮤니티 섹션 하나로."""
+    if not any([cp_list, ss_list]):
+        return ''
+    body = ''
+
+    # ── 커뮤니티 프로그램 (COMMUNITY_PROGRAM) ──
+    cp_html = ''
+    for item in cp_list:
+        if not isinstance(item, dict):
+            continue
+        non_empty = {k: v for k, v in item.items()
+                     if k != '_page' and v not in (None, '', [], {}, False)}
+        if not non_empty:
+            cp_html += _missing('COMMUNITY_PROGRAM')
+            continue
+
+        count   = item.get('total_program_count')
+        area_ph = item.get('area_per_household_pyeong')
+        sky     = item.get('sky_community_present', False)
+        sig     = [str(v) for v in _to_list(item.get('signature_facilities')) if v]
+        hotel   = [str(v) for v in _to_list(item.get('hotel_style_features')) if v]
+        premium = [str(v) for v in _to_list(item.get('premium_keywords'))     if v]
+        msg     = item.get('key_message', '')
+
+        cp_html += _kv_grid(
+            _kv_card('프로그램 수',  count,   '개',      hl=True) if count   else '',
+            _kv_card('세대당 면적', area_ph, '평/세대', hl=bool(area_ph)) if area_ph else '',
+            _kv_card('스카이 커뮤니티', '✓ 있음', hl=True) if sky else '',
+            cols=3,
+        )
+        if sig:
+            cp_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#718096">시그니처 시설: </span>'
+                        + _tag_cluster(sig, '#f6ad55') + '</div>')
+        if hotel:
+            cp_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#718096">호텔식 서비스: </span>'
+                        + _tag_cluster(hotel, '#90cdf4') + '</div>')
+        if premium:
+            cp_html += _tag_cluster(premium, '#b794f4')
+        if msg:
+            cp_html += _note_item(msg, accent=True)
+
+    if cp_html:
+        body += _sub_header('커뮤니티 프로그램') + cp_html
+
+    # ── 특별 공간 (SPECIAL_SPACE) — 페이지별 카드 ──
+    ss_cards = []
+    for item in ss_list:
+        if not isinstance(item, dict):
+            continue
+        name     = item.get('space_name', '') or ''
+        s_type   = item.get('space_type', '')  or ''
+        features = [str(v) for v in _to_list(item.get('key_features'))   if v]
+        users    = [str(v) for v in _to_list(item.get('target_users'))    if v]
+        strategy = item.get('spatial_strategy', '')
+
+        if not any([name, features, strategy]):
+            continue
+
+        type_color = {
+            'community': '#68d391', 'culture': '#90cdf4', 'lobby': '#f6ad55',
+            'rooftop':   '#f6e05e', 'children': '#fc8181', 'council': '#b794f4',
+        }.get(s_type, '#a0aec0')
+
+        ss_cards.append(
+            f'<div style="background:#0d1117;border-radius:6px;padding:14px 16px;'
+            f'border-top:3px solid {type_color}">'
+            + (f'<div style="font-size:14px;font-weight:700;color:#e2e8f0;margin-bottom:4px">{name}</div>' if name else '')
+            + (f'<span style="background:{type_color}1a;color:{type_color};font-size:10px;'
+               f'padding:2px 7px;border-radius:3px;margin-bottom:8px;display:inline-block">{s_type}</span>' if s_type else '')
+            + (_tag_cluster(features, '#90cdf4') if features else '')
+            + (_tag_cluster(users, '#f6ad55')    if users    else '')
+            + (_note_item(strategy)              if strategy else '')
+            + '</div>'
+        )
+
+    if ss_cards:
+        n = min(len(ss_cards), 3)
+        body += (
+            _sub_header(f'특별 공간 ({len(ss_cards)}개)')
+            + f'<div style="display:grid;grid-template-columns:repeat({n},1fr);gap:10px">{"".join(ss_cards)}</div>'
+        )
+
+    return (_sec_open('커뮤니티', '◎', 'COMMUNITY_PROGRAM · SPECIAL_SPACE') + body + _sec_close()) if body else ''
+
+
+# ── 디자인·외관 (CONCEPT 상세 + ELEVATION 통합) ────────────────────────────────
+
+def _render_design(concept_list: list, elevation_list: list) -> str:
+    """설계 전략 상세(sub_strategies·metaphor) + 방위별 입면 파사드.
+    concept의 name·main_strategy·keywords는 key_message에서 다루므로 여기선 제외."""
+    if not any([concept_list, elevation_list]):
+        return ''
+    body = ''
+
+    # ── 설계 전략 상세 (CONCEPT sub_strategies / metaphor) ──
+    cv_html = ''
+    for item in concept_list:
+        if not isinstance(item, dict):
+            continue
+        sub_strats = [str(s) for s in _to_list(item.get('sub_strategies')) if s]
+        metaphor   = item.get('metaphor_reference', '')
+        cv_html += ''.join(_note_item(s) for s in sub_strats)
+        if metaphor:
+            cv_html += _note_item(f'레퍼런스: {metaphor}')
+    if cv_html:
+        body += _sub_header('설계 전략 상세') + cv_html
+
+    # ── 입면·파사드 (ELEVATION — 방위별 카드) ──
+    el_cards = []
+    for item in elevation_list:
+        if not isinstance(item, dict):
+            continue
+        direction = item.get('facade_direction', '') or ''
+        mat1    = item.get('primary_material', '')
+        mat2    = item.get('secondary_material', '')
+        system  = item.get('facade_system', '')
+        shading = item.get('shading_device', '')
+        green   = item.get('green_facade', False)
+        transp  = item.get('transparency_ratio', '')
+        rhythm  = item.get('facade_rhythm', '')
+
+        if not any([mat1, mat2, system, shading, transp]):
+            continue
+
+        dir_ko = {'north': '북', 'south': '남', 'east': '동', 'west': '서'}.get(direction, direction)
+        title  = f'{dir_ko}측 입면' if dir_ko else '입면'
+        _td = 'display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2533;font-size:12px'
+        rows = ''.join(
+            f'<div style="{_td}"><span style="color:#718096">{lbl}</span>'
+            f'<span style="color:#e2e8f0;font-weight:500">{val}</span></div>'
+            for lbl, val in [
+                ('주 마감재',    mat1),
+                ('보조 마감재',  mat2),
+                ('파사드 시스템', system),
+                ('차양 장치',    shading),
+                ('투명도',      transp),
+                ('파사드 리듬',  rhythm),
+            ] if val
+        )
+        green_row = (
+            f'<div style="{_td}"><span style="color:#718096">그린 파사드</span>'
+            f'<span style="color:#68d391;font-weight:500">✓</span></div>'
+        ) if green else ''
+
+        el_cards.append(
+            f'<div style="background:#0d1117;border-radius:6px;padding:14px 16px;border-top:3px solid #4a5568">'
+            f'<div style="font-size:14px;font-weight:700;color:#e2e8f0;margin-bottom:8px">{title}</div>'
+            f'{rows}{green_row}'
+            f'</div>'
+        )
+
+    if el_cards:
+        n = min(len(el_cards), 4)
+        body += (
+            _sub_header('입면·파사드')
+            + f'<div style="display:grid;grid-template-columns:repeat({n},1fr);gap:10px">{"".join(el_cards)}</div>'
+        )
+
+    return (_sec_open('디자인·외관', '◧', 'CONCEPT · ELEVATION') + body + _sec_close()) if body else ''
+
+
+# ── 시공성 (CONSTRUCTION_PLAN) ─────────────────────────────────────────────────
+
+def _render_construction_plan(cp_list: list) -> str:
+    """공기 단축·공사비·지하주차 효율 핵심 지표."""
+    if not cp_list:
+        return ''
+    all_html = ''
+    for item in cp_list:
+        if not isinstance(item, dict):
+            continue
+        non_empty = {k: v for k, v in item.items() if k != '_page' and v not in (None, '', [], {})}
+        if not non_empty:
+            all_html += _missing('CONSTRUCTION_PLAN')
+            continue
+
+        page = item.get('_page', '')
+        pg_html = f'<div style="font-size:10px;color:#4a5568;margin-bottom:8px">p{page}</div>' if page else ''
+
+        period   = item.get('period_reduction_months')
+        savings  = _won_str(item.get('cost_savings_won'))
+        ug_lev   = item.get('underground_parking_levels')
+        ug_dep   = item.get('underground_excavation_depth_m')
+        park_ph  = item.get('parking_per_household')
+        deck_h   = item.get('deck_floor_height_m')
+        smart    = [str(v) for v in _to_list(item.get('smart_parking_features'))  if v]
+        strats   = [str(v) for v in _to_list(item.get('construction_strategies')) if v]
+
+        kv_top = _kv_grid(
+            _kv_card('공기 단축', period,  '개월', hl=True) if period  else '',
+            _kv_card('공사비 절감', savings, hl=True)       if savings else '',
+            cols=2,
+        )
+        kv_mid = _kv_grid(
+            _kv_card('지하 주차장',  ug_lev,  '층') if ug_lev  else '',
+            _kv_card('굴착 깊이',    ug_dep,  'm')  if ug_dep  else '',
+            _kv_card('세대당 주차',  park_ph, '대') if park_ph else '',
+            _kv_card('데크층 높이',  deck_h,  'm')  if deck_h  else '',
+            cols=4,
+        )
+        tag_html = ''
+        if smart:
+            tag_html += ('<div style="margin-top:6px"><span style="font-size:11px;color:#718096">스마트 주차: </span>'
+                         + _tag_cluster(smart, '#90cdf4') + '</div>')
+        if strats:
+            tag_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#718096">시공 전략: </span>'
+                         + _tag_cluster(strats, '#f6ad55') + '</div>')
+
+        all_html += f'<div style="margin-bottom:12px">{pg_html}{kv_top}{kv_mid}{tag_html}</div>'
+
+    return (_sec_open('시공성', '⚙', 'CONSTRUCTION_PLAN') + all_html + _sec_close()) if all_html else ''
+
+
+# ── 회사 역량 (COMPANY_PORTFOLIO) ─────────────────────────────────────────────
+
+def _render_company_portfolio(port_list: list) -> str:
+    """회사 통계·신용·어워드·유사 프로젝트·임원진."""
+    if not port_list:
+        return ''
+    all_html = ''
+    for item in port_list:
+        if not isinstance(item, dict):
+            continue
+        non_empty = {k: v for k, v in item.items() if k != '_page' and v not in (None, '', [], {})}
+        if not non_empty:
+            all_html += _missing('COMPANY_PORTFOLIO')
+            continue
+
+        page = item.get('_page', '')
+        pg_html = f'<div style="font-size:10px;color:#4a5568;margin-bottom:8px">p{page}</div>' if page else ''
+
+        firm     = item.get('firm_name', '')
+        emps     = item.get('total_employees')
+        licensed = item.get('licensed_architects')
+        revenue  = _won_str(item.get('financial_revenue_won'))
+        credit   = item.get('credit_rating', '')
+        awards   = [str(v) for v in _to_list(item.get('design_awards')) if v]
+        projects = [p for p in _to_list(item.get('similar_projects'))   if isinstance(p, dict)]
+        execs    = [e for e in _to_list(item.get('key_executives'))      if isinstance(e, dict)]
+
+        firm_html = (
+            f'<div style="font-size:18px;font-weight:700;color:#e2e8f0;margin-bottom:10px">{firm}</div>'
+        ) if firm else ''
+
+        kv_stats = _kv_grid(
+            _kv_card('직원 수',     emps,     '명', hl=False) if emps     else '',
+            _kv_card('등록 건축사', licensed, '명')           if licensed else '',
+            _kv_card('매출액',      revenue)                   if revenue  else '',
+            _kv_card('신용 등급',   credit,         hl=True)  if credit   else '',
+            cols=4,
+        )
+
+        award_html = (
+            '<div style="margin-top:6px"><span style="font-size:11px;color:#718096">디자인 어워드: </span>'
+            + _tag_cluster(awards, '#f6e05e') + '</div>'
+        ) if awards else ''
+
+        # 유사 프로젝트 미니카드
+        proj_html = ''
+        if projects:
+            proj_cards = ''.join(
+                f'<div style="background:#0d1117;border-radius:5px;padding:10px 12px">'
+                f'<div style="font-size:12px;font-weight:600;color:#90cdf4">{p.get("name","")}</div>'
+                + (f'<div style="font-size:10px;color:#4a5568">{p.get("year","")}</div>' if p.get("year") else '')
+                + (f'<div style="font-size:11px;color:#718096;margin-top:3px;line-height:1.5">{p.get("highlight","")}</div>' if p.get("highlight") else '')
+                + '</div>'
+                for p in projects[:6]
+            )
+            n = min(len(projects[:6]), 3)
+            proj_html = (
+                '<div style="font-size:11px;color:#718096;margin:10px 0 6px">유사 프로젝트</div>'
+                f'<div style="display:grid;grid-template-columns:repeat({n},1fr);gap:8px">{proj_cards}</div>'
+            )
+
+        # 임원진 태그
+        exec_tags = [
+            f'{e.get("name","")}{"(" + e.get("role","") + ")" if e.get("role") else ""}'
+            for e in execs if e.get('name')
+        ]
+        exec_html = (
+            '<div style="margin-top:8px"><span style="font-size:11px;color:#718096">임원진: </span>'
+            + _tag_cluster(exec_tags, '#a0aec0') + '</div>'
+        ) if exec_tags else ''
+
+        all_html += f'<div style="margin-bottom:12px">{pg_html}{firm_html}{kv_stats}{award_html}{proj_html}{exec_html}</div>'
+
+    return (_sec_open('회사 역량', '⊕', 'COMPANY_PORTFOLIO') + all_html + _sec_close()) if all_html else ''
 
 
 # ── 메인 함수 ──────────────────────────────────────────────────────────────────
@@ -523,7 +1444,7 @@ def generate_submission_report(sub_doc: dict) -> str:
 
     quant = ed.get("_quantitative") or {}
     # site_plan 첫 번째 항목에 면적 데이터가 있을 수 있으므로 병합
-    for sp in _safe_list(ed.get("site_plan")):
+    for sp in _to_list(ed.get("site_plan")):
         if isinstance(sp, dict):
             for k in ("site_area_sqm", "building_area_sqm", "total_floor_area_sqm",
                       "building_coverage_ratio_pct", "floor_area_ratio_pct",
@@ -532,16 +1453,51 @@ def generate_submission_report(sub_doc: dict) -> str:
                     quant[k] = sp[k]
 
     sections = "".join([
-        _render_cover(cover),
-        _render_concept(_safe_list(ed.get("concept"))),
+        # 1. 핵심 메시지 (BRANDING + CONCEPT 통합)
+        _render_key_message(
+            _to_list(ed.get("branding")),
+            _to_list(ed.get("concept")),
+        ),
+        # 2. 사업성
+        _render_business_viability(_to_list(ed.get("business_viability"))),
+        # 3. 실사용면적 증가
+        _render_area_increase(_to_list(ed.get("area_increase"))),
+        # 4. 조망·남향 배치
+        _render_view_analysis(_to_list(ed.get("view_analysis"))),
+        # 5. 표준 단위세대
+        _render_unit_plan_std(_to_list(ed.get("unit_plan"))),
+        # 6. 펜트하우스
+        _render_unit_plan_penthouse(_to_list(ed.get("unit_plan_penthouse"))),
+        # 7. 단지 계획 (배치·대지분석·조경 통합)
+        _render_site_planning(
+            _to_list(ed.get("site_plan")),
+            _to_list(ed.get("site_context")),
+            _to_list(ed.get("landscape")),
+        ),
+        # 8. 커뮤니티 (프로그램 + 특별공간 통합)
+        _render_community(
+            _to_list(ed.get("community_program")),
+            _to_list(ed.get("special_space")),
+        ),
+        # 9. 디자인·외관 (컨셉 상세 + 입면 통합)
+        _render_design(
+            _to_list(ed.get("concept")),
+            _to_list(ed.get("elevation")),
+        ),
+        # 10. 시공성
+        _render_construction_plan(_to_list(ed.get("construction_plan"))),
+        # 11. 회사 역량
+        _render_company_portfolio(_to_list(ed.get("company_portfolio"))),
+        # 12. 페이지 구성 (항상 표시 — 패턴 진단용)
+        _render_page_dist(page_dist, total_pages),
+        # ── 부록 (공공공모 섹션 — 재건축에선 후순위) ──────────────────
         _render_quantitative(quant),
         _render_floor_plan(_safe_list(ed.get("floor_plan"))),
-        _render_site_plan(_safe_list(ed.get("site_plan"))),
         _render_section(_safe_list(ed.get("section"))),
-        _render_elevation(_safe_list(ed.get("elevation"))),
         _render_sustainability(_safe_list(ed.get("sustainability"))),
         _render_technical(_safe_list(ed.get("technical"))),
-        _render_page_dist(page_dist, total_pages),
+        # 표지 정보 (참조용)
+        _render_cover(cover),
     ])
 
     return f"""<!DOCTYPE html>

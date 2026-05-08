@@ -24,6 +24,7 @@ from services.db_manager import (
     save_submission, save_comparison, load_brief, load_project_meta,
     list_projects, list_submissions, load_submission, save_report, get_report_path, load_pattern,
     save_submission_report, get_submission_report_path,
+    save_cross_compare_report, get_cross_compare_report_path, list_cross_compare_reports, _slugify,
 )
 from services.page_classifier import classify_all_pages
 from services.data_extractor import extract_pdf, merge_extracted_data
@@ -90,6 +91,19 @@ def get_submission_report(facility_type: str, competition_id: str, company: str)
         path, media_type="text/html",
         filename=f"{company}_report.html",
     )
+
+
+@router.get("/cross-compare/reports")
+def list_cross_reports():
+    return list_cross_compare_reports()
+
+
+@router.get("/cross-compare/reports/{filename}")
+def get_cross_compare_report(filename: str):
+    path = get_cross_compare_report_path(filename)
+    if path is None or not path.exists():
+        raise HTTPException(404, "Cross-compare report not found")
+    return FileResponse(path, media_type="text/html", filename=filename)
 
 
 # ── 제안서 단건 추가 ──────────────────────────────────────────────────────────
@@ -548,6 +562,7 @@ async def cross_compare(
 
             submissions = []
             brief_data = {}
+            file_parts = []  # 파일명 구성용: [(proj_label, company), ...]
             for item in items:
                 ft = item["facility_type"]
                 cid = item["competition_id"]
@@ -555,8 +570,23 @@ async def cross_compare(
                 if not brief_data:
                     brief_data = load_brief(ft, cid) or {}
                 sub = load_submission(ft, cid, company)
-                if sub:
-                    submissions.append(sub)
+                if not sub:
+                    continue
+
+                meta = load_project_meta(ft, cid) or {}
+                proj_label = meta.get("competition_name") or cid
+
+                # 같은 회사명이 다른 프로젝트에서 중복으로 들어오면 프로젝트명을
+                # 붙여서 유니크 라벨 생성 (comparator가 company 키로 dedup하는 문제 회피)
+                duplicate = any(
+                    it["company"] == company and it["competition_id"] != cid
+                    for it in items
+                )
+                if duplicate:
+                    sub = {**sub, "company": f"{company} ({proj_label})"}
+
+                submissions.append(sub)
+                file_parts.append((proj_label, company))
 
             if len(submissions) < 2:
                 yield sse({"type": "error",
@@ -567,7 +597,31 @@ async def cross_compare(
                        "msg": f"{len(submissions)}개 제안서 비교분석 중 (시간이 걸릴 수 있습니다)", "_timestamp": ts})
             comparison = await compare_submissions(brief_data, submissions)
 
-            yield sse({"type": "complete", "comparison": comparison, "_timestamp": ts})
+            # ── 리포트 생성 + 저장 ─────────────────────────────────────
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            label_segments = [_slugify(f"{p}_{c}") for p, c in file_parts]
+            joined = "_vs_".join(label_segments) or "cross_compare"
+            # Windows 파일명 길이 제한 회피 (전체 260자)
+            if len(joined) > 180:
+                joined = joined[:180]
+            filename = f"{stamp}_{joined}.html"
+
+            synthetic_meta = {
+                "competition_name": f"교차비교 — {' vs '.join(c for _, c in file_parts)}",
+                "facility_type": submissions[0].get("facility_type", ""),
+                "year": "",
+                "client": "",
+                "location": "",
+            }
+            html = generate_comparison_report(synthetic_meta, submissions, comparison)
+            save_cross_compare_report(filename, html)
+
+            yield sse({
+                "type": "complete",
+                "comparison": comparison,
+                "report_filename": filename,
+                "_timestamp": ts,
+            })
 
         except Exception as e:
             yield sse({"type": "error", "message": str(e),

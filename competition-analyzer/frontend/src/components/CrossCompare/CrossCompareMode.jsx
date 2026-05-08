@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, crossCompare } from '../../api/client'
+import { getProjects, crossCompare, getCrossCompareReportUrl, listCrossCompareReports } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 
@@ -8,6 +8,7 @@ const FACILITY_KR = {
   culture: '문화시설', education: '교육시설', medical: '의료시설',
   sports: '체육시설', religious: '종교시설', commercial: '상업시설',
   industrial: '산업시설', mixed: '복합시설', other: '기타',
+  reconstruction: '재건축사업', alternative: '대안설계',
 }
 
 const RESULT_COLOR = {
@@ -170,9 +171,13 @@ export default function CrossCompareMode() {
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)
+  const [pastReports, setPastReports] = useState([])
+
+  const loadPastReports = () => listCrossCompareReports().then(setPastReports).catch(() => {})
 
   useEffect(() => {
     getProjects().then(p => { setProjects(p); setLoading(false) })
+    loadPastReports()
   }, [])
 
   const facilityTypes = [...new Set(projects.map(p => p.facility_type))]
@@ -196,7 +201,7 @@ export default function CrossCompareMode() {
     try {
       for await (const ev of crossCompare(selected.map(({ facility_type, competition_id, company }) => ({ facility_type, competition_id, company })))) {
         setEvents(prev => [...prev, ev])
-        if (ev.type === 'complete') setResult(ev)
+        if (ev.type === 'complete') { setResult(ev); loadPastReports() }
         if (ev.type === 'error') break
       }
     } catch (e) {
@@ -252,9 +257,70 @@ export default function CrossCompareMode() {
         </div>
       )}
 
+      {pastReports.length > 0 && (
+        <div style={s.panel}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#e2e8f0', flex: 1 }}>
+              저장된 교차비교 리포트 <span style={{ color: '#4a5568', fontWeight: 400, fontSize: 12 }}>({pastReports.length})</span>
+            </div>
+            <button
+              onClick={loadPastReports}
+              style={{
+                background: 'none', border: '1px solid #2d3748', borderRadius: 6,
+                color: '#a0aec0', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
+              }}
+            >새로고침</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {pastReports.map(rep => (
+              <a
+                key={rep.filename}
+                href={getCrossCompareReportUrl(rep.filename)}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px', background: '#0d1117',
+                  border: '1px solid #2d3748', borderRadius: 6,
+                  textDecoration: 'none', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#2c5282'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#2d3748'}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {rep.labels.join('  vs  ')}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#4a5568', marginTop: 3 }}>
+                    {rep.created_at}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: '#90cdf4' }}>열기 →</div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {result?.comparison && (
         <div style={s.panel}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: '#90cdf4', marginBottom: 16 }}>비교분석 결과</div>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#90cdf4', flex: 1 }}>비교분석 결과</div>
+            {result.report_filename && (
+              <a
+                href={getCrossCompareReportUrl(result.report_filename)}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  background: '#44337a', color: '#e9d8fd', borderRadius: 6,
+                  padding: '6px 14px', fontSize: 12, fontWeight: 600,
+                  textDecoration: 'none',
+                }}
+              >
+                HTML 리포트 열기
+              </a>
+            )}
+          </div>
           <ComparisonDashboard
             comparison={result.comparison}
             submissionMeta={selected.map(s => ({ company: s.company, result: s.result }))}

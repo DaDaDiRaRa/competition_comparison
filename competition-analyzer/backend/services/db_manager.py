@@ -232,6 +232,45 @@ def get_submission_report_path(facility_type: str, competition_id: str, company:
     return None
 
 
+def save_cross_compare_report(filename: str, html: str) -> Path:
+    cross_dir = settings.db_path / "_cross_reports"
+    cross_dir.mkdir(parents=True, exist_ok=True)
+    path = cross_dir / filename
+    path.write_text(html, encoding="utf-8")
+    return path
+
+
+def get_cross_compare_report_path(filename: str) -> Path | None:
+    path = settings.db_path / "_cross_reports" / filename
+    return path if path.exists() else None
+
+
+def list_cross_compare_reports() -> list[dict]:
+    """저장된 교차비교 리포트 목록 (최신순)."""
+    cross_dir = settings.db_path / "_cross_reports"
+    if not cross_dir.exists():
+        return []
+    items = []
+    for f in cross_dir.glob("*.html"):
+        stem = f.stem  # 20260508_190203_proj_a_vs_proj_b
+        # 파일명 = {YYYYMMDD}_{HHMMSS}_{label_segments}
+        parts = stem.split("_", 2)
+        if len(parts) >= 3 and len(parts[0]) == 8 and len(parts[1]) == 6:
+            date_str, time_str, labels_part = parts
+            ts = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]} {time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}"
+            labels = labels_part.split("_vs_")
+        else:
+            ts = ""
+            labels = [stem]
+        items.append({
+            "filename": f.name,
+            "created_at": ts,
+            "labels": labels,
+            "size": f.stat().st_size,
+        })
+    return sorted(items, key=lambda x: x["filename"], reverse=True)
+
+
 def save_pattern(facility_type: str, pattern: dict):
     path = settings.db_path / "_patterns" / f"{facility_type}.json"
     _atomic_write(path, pattern)

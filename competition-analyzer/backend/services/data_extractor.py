@@ -220,6 +220,82 @@ EXTRACTION_PROMPTS: dict[str, dict] = {
             '"sub_slogans":[],"target_lifestyle":"","premium_keywords":[]}'
         ),
     },
+    "BUSINESS_VIABILITY": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT business viability data from this Korean redevelopment proposal page. '
+            'Respond JSON ONLY.\n'
+            '{"asset_value_increase_won":null,"asset_value_multiplier":null,'
+            '"member_contribution_change_won":null,"member_contribution_change_pct":null,'
+            '"general_sale_units":null,"member_units":null,"sale_price_per_pyeong_won":null,'
+            '"far_base_pct":null,"far_incentive_pct":null,"far_final_pct":null,'
+            '"construction_cost_savings_won":null,"period_reduction_months":null,'
+            '"key_messages":[]}'
+        ),
+    },
+    "AREA_INCREASE": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT existing-vs-redeveloped area comparison from this page. '
+            'Respond JSON ONLY. Pair each existing unit type with its redeveloped counterpart.\n'
+            '{"comparison_basis":"existing_vs_redeveloped",'
+            '"unit_pairs":[{"existing_type":"","existing_actual_sqm":null,'
+            '"redev_type":"","redev_actual_sqm":null,'
+            '"increase_sqm":null,"increase_pyeong":null,"increase_pct":null}],'
+            '"max_increase_multiplier":null,"average_increase_pyeong":null,'
+            '"key_message":""}'
+        ),
+    },
+    "VIEW_ANALYSIS": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT view rights analysis from this site planning page. Respond JSON ONLY.\n'
+            '{"south_facing_units_pct":null,"river_view_units_pct":null,'
+            '"double_view_units_pct":null,"member_units_view_guarantee_pct":null,'
+            '"view_targets":[],"site_layout_strategy":"","key_message":""}'
+        ),
+    },
+    "COMMUNITY_PROGRAM": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT signature community facility data from this Korean redevelopment page. '
+            'Respond JSON ONLY.\n'
+            '{"total_program_count":null,"area_per_household_pyeong":null,'
+            '"signature_facilities":[],"sky_community_present":false,'
+            '"hotel_style_features":[],"premium_keywords":[],"key_message":""}'
+        ),
+    },
+    "COMPANY_PORTFOLIO": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT firm credentials data from this page. Respond JSON ONLY.\n'
+            '{"firm_name":"","total_employees":null,"licensed_architects":null,'
+            '"financial_revenue_won":null,"credit_rating":"","design_awards":[],'
+            '"similar_projects":[{"name":"","year":null,"highlight":""}],'
+            '"key_executives":[{"name":"","role":""}]}'
+        ),
+    },
+    "CONSTRUCTION_PLAN": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT construction strategy data from this page. Respond JSON ONLY.\n'
+            '{"period_reduction_months":null,"cost_savings_won":null,'
+            '"underground_parking_levels":null,"underground_excavation_depth_m":null,'
+            '"parking_per_household":null,"deck_floor_height_m":null,'
+            '"smart_parking_features":[],"construction_strategies":[]}'
+        ),
+    },
+    "UNIT_PLAN_PENTHOUSE": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT penthouse unit plan data from this page. Respond JSON ONLY.\n'
+            '{"unit_type":"","unit_count":null,'
+            '"exclusive_area_sqm":null,"supply_area_sqm":null,"service_area_sqm":null,'
+            '"actual_area_sqm":null,"actual_area_pyeong":null,'
+            '"terrace_area_sqm":null,"ceiling_height_m":null,"open_sides":null,'
+            '"signature_features":[],"luxury_keywords":[]}'
+        ),
+    },
 }
 
 FALLBACK_PROMPT = {
@@ -270,7 +346,10 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
 CONFIDENCE_DOWNGRADE_THRESHOLD = 0.7
 
 # 타일 분할 적용 대상: 정보 밀도가 높아 전체 페이지 전송 시 숫자 오독 위험
-TILE_PAGE_TYPES = {"AREA_TABLE", "TECHNICAL", "INCENTIVE_TABLE"}
+TILE_PAGE_TYPES = {
+    "AREA_TABLE", "TECHNICAL", "INCENTIVE_TABLE",
+    "BUSINESS_VIABILITY", "AREA_INCREASE",
+}
 
 # 추출 스킵 임계: priority가 이 값 이상이면 Claude 호출 생략 (토큰 절감)
 # priority=3 타입(COVER/RENDERING_EXT/RENDERING_INT)은 비교분석 입력에 거의 기여하지 않음
@@ -280,7 +359,10 @@ SKIP_PRIORITY_THRESHOLD = 3
 # OCR 우선 추출: PaddleOCR(무료·로컬)로 텍스트를 읽고 Haiku로 구조화.
 # Sonnet + 이미지 전송을 피해 페이지당 ~90% 비용 절감.
 # OCR 결과가 불충분(< OCR_MIN_CHARS)하면 자동으로 기존 vision 추출로 fallback.
-OCR_FIRST_TYPES = {"AREA_TABLE", "TECHNICAL", "SUSTAINABILITY"}
+OCR_FIRST_TYPES = {
+    "AREA_TABLE", "TECHNICAL", "SUSTAINABILITY",
+    "BUSINESS_VIABILITY", "AREA_INCREASE", "COMPANY_PORTFOLIO", "CONSTRUCTION_PLAN",
+}
 OCR_MIN_CHARS = 80  # 이 글자수 미만이면 OCR 불충분 → vision fallback
 
 # 스킵 대상: 비교분석에 사용되지 않는 시각 위주 페이지.

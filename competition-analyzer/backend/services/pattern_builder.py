@@ -76,22 +76,23 @@ def _build_mass_type_dist(submissions: list[dict]) -> dict:
     return {k: round(v / total, 2) for k, v in counter.items()}
 
 
+def build_pattern_from_submissions(facility_type: str, submissions: list[dict]) -> dict:
+    """제출물 리스트(승자/특정 선택 모두)로부터 패턴 통계 생성. 디스크 저장 안 함."""
+    if not submissions:
+        return {"facility_type": facility_type, "win_count": 0, "patterns": {}}
+    return {
+        "facility_type": facility_type,
+        "win_count": len(submissions),
+        "page_distribution": _build_page_distribution_stats(submissions),
+        "quantitative": _build_quant_stats(submissions),
+        "concept_keywords": _build_keyword_freq(submissions),
+        "mass_types": _build_mass_type_dist(submissions),
+    }
+
+
 def build_pattern(facility_type: str) -> dict:
     winners = get_winning_submissions(facility_type)
-    if not winners:
-        return {
-            "facility_type": facility_type,
-            "win_count": 0,
-            "patterns": {},
-        }
-
-    pattern = {
-        "facility_type": facility_type,
-        "win_count": len(winners),
-        "page_distribution": _build_page_distribution_stats(winners),
-        "quantitative": _build_quant_stats(winners),
-        "concept_keywords": _build_keyword_freq(winners),
-        "mass_types": _build_mass_type_dist(winners),
-    }
-    save_pattern(facility_type, pattern)
+    pattern = build_pattern_from_submissions(facility_type, winners)
+    if winners:
+        save_pattern(facility_type, pattern)
     return pattern

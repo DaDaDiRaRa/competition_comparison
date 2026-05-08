@@ -22,6 +22,7 @@ FACILITY_TYPES = {
     "medical": "의료시설",
     "mixed_use": "복합시설",
     "reconstruction": "재건축사업",
+    "alternative": "대안설계",
 }
 
 PAGE_TYPES = [
@@ -30,6 +31,9 @@ PAGE_TYPES = [
     "FLOOR_PLAN", "SECTION", "ELEVATION", "CIRCULATION",
     "HEALTH_CENTER", "TECHNICAL", "AREA_TABLE", "SUSTAINABILITY",
     "UNIT_PLAN", "INCENTIVE_TABLE", "BRANDING",
+    "BUSINESS_VIABILITY", "AREA_INCREASE", "VIEW_ANALYSIS",
+    "COMMUNITY_PROGRAM", "COMPANY_PORTFOLIO", "CONSTRUCTION_PLAN",
+    "UNIT_PLAN_PENTHOUSE",
 ]
 
 COMPARISON_AXES = [

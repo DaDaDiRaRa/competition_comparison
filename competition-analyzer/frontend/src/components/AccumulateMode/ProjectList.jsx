@@ -8,6 +8,7 @@ const FACILITY_KR = {
   culture: '문화시설', education: '교육시설', medical: '의료시설',
   sports: '체육시설', religious: '종교시설', commercial: '상업시설',
   industrial: '산업시설', mixed: '복합시설', other: '기타',
+  reconstruction: '재건축사업', alternative: '대안설계',
 }
 
 const RESULT_OPTIONS = [

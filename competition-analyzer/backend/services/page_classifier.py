@@ -8,6 +8,24 @@ from services.utils import parse_json_response, rasterize_pdf
 
 BATCH_SIZE = 5  # 한 번에 처리할 최대 페이지 수
 
+# 재건축 신규 타입: 신뢰도 < 0.65일 때 안전한 기존 타입으로 다운그레이드
+# false-positive 차단으로 분류 안정성 보장
+REDEV_TYPES_STRICT = {
+    "BUSINESS_VIABILITY", "AREA_INCREASE", "VIEW_ANALYSIS",
+    "COMMUNITY_PROGRAM", "COMPANY_PORTFOLIO", "CONSTRUCTION_PLAN",
+    "UNIT_PLAN_PENTHOUSE",
+}
+REDEV_FALLBACK = {
+    "BUSINESS_VIABILITY":   "AREA_TABLE",
+    "AREA_INCREASE":        "AREA_TABLE",
+    "VIEW_ANALYSIS":        "SITE_PLAN",
+    "COMMUNITY_PROGRAM":    "SPECIAL_SPACE",
+    "COMPANY_PORTFOLIO":    "BRANDING",
+    "CONSTRUCTION_PLAN":    "TECHNICAL",
+    "UNIT_PLAN_PENTHOUSE":  "UNIT_PLAN",
+}
+REDEV_CONFIDENCE_FLOOR = 0.65
+
 SYSTEM_PROMPT = (
     "You are an architectural document page classifier. "
     "You analyze pages from Korean architectural design competition reports "
@@ -32,7 +50,7 @@ PAGE_TYPES:
 - SPECIAL_SPACE: detailed program/space planning, user scenarios
 - RENDERING_EXT: exterior perspective rendering (full or half page)
 - RENDERING_INT: interior perspective rendering
-- SITE_PLAN: top-down site layout with buildings, roads, north arrow
+- SITE_PLAN: top-down site layout with buildings, roads, north arrow. NOT view %-focused (that's VIEW_ANALYSIS) — overall organization
 - LANDSCAPE: planting plan, green areas, outdoor design
 - FLOOR_PLAN: architectural floor plan with room labels, grid lines
 - SECTION: vertical section/cut drawing with floor levels
@@ -40,11 +58,18 @@ PAGE_TYPES:
 - CIRCULATION: movement/flow diagrams with arrows
 - HEALTH_CENTER: 보건소 related content (plans, concepts, sections)
 - TECHNICAL: structural/MEP/fire/environmental engineering
-- AREA_TABLE: area breakdown tables, cost estimates, data tables
+- AREA_TABLE: total area breakdown for the PROPOSED building (current-state only). 연면적·건축면적·건폐율·용적률·층수·주차. NOT before/after comparison — single-state breakdown
 - SUSTAINABILITY: green/ESG/energy/environmental strategies
-- UNIT_PLAN: single unit floor plan + area table by unit type (supply/service/actual area). NOT a whole-building plan — one household unit only
-- INCENTIVE_TABLE: incentive FAR comparison table showing base/applied/final % ratios. NOT area totals — ratio-focused
+- UNIT_PLAN: STANDARD (non-penthouse) single unit floor plan + area table. NOT penthouse — penthouse goes to UNIT_PLAN_PENTHOUSE
+- INCENTIVE_TABLE: FAR ratio-only comparison (base/applied/final %). pure FAR analysis. NOT redev member benefit framing
 - BRANDING: brand name, slogan, marketing keywords. Large typography, NO design diagrams
+- BUSINESS_VIABILITY: redevelopment business case page. asset value increase numbers, member contribution change, general sale unit count, FAR before/after, sale price per pyeong. financial proposition focus, NOT design
+- AREA_INCREASE: before-vs-after area COMPARISON table for redevelopment. paired columns 기존 vs 재건축 후 with increase ratio. NOT a single-state area table — must show before/after pairing
+- VIEW_ANALYSIS: view rights page with percentages. south-facing %, river/water view %, double view %, member-unit view guarantee %. site diagram with view direction arrows. NOT a site plan — view % is dominant content
+- COMMUNITY_PROGRAM: signature community facility marketing page. program count, area-per-household (평/세대), sky lounge / infinity pool / hotel-style amenities. branded list of premium amenities, NOT a floor plan
+- COMPANY_PORTFOLIO: firm credentials page. employee count, financial rating, design awards, similar redevelopment projects with thumbnails, executive profiles. NOT design content
+- CONSTRUCTION_PLAN: construction strategy page. months reduced, cost savings amount, underground parking levels, deck height, smart parking. time/money savings claims focus
+- UNIT_PLAN_PENTHOUSE: penthouse unit plan with luxury features (terrace, infinity pool, 3-side opening, 천장 2.7m+). usually labeled "PA"/"PH"/"165PA". select OVER UNIT_PLAN when penthouse markers visible
 
 RESPOND JSON ONLY as an array, one object per image:
 [
@@ -68,6 +93,12 @@ def _normalise_result(raw: dict) -> dict:
     }
     if result["primary_type"] not in PAGE_TYPES:
         result["primary_type"] = "CONCEPT"
+
+    # 재건축 신규 타입은 신뢰도 낮으면 안전한 기존 타입으로 다운그레이드
+    pt = result["primary_type"]
+    if pt in REDEV_TYPES_STRICT and result["confidence"] < REDEV_CONFIDENCE_FLOOR:
+        result["primary_type"] = REDEV_FALLBACK[pt]
+
     return result
 
 
