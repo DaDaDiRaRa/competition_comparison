@@ -91,6 +91,18 @@ export function rerunCompare(facilityType, competitionId) {
   return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/rerun-compare`)
 }
 
+export async function rerenderReport(facilityType, competitionId) {
+  const r = await fetch(
+    `${BASE}/accumulate/projects/${facilityType}/${competitionId}/rerender-report`,
+    { method: 'POST' },
+  )
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `리포트 재생성 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
 export function addSubmission(facilityType, competitionId, formData) {
   return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/add-submission`, formData)
 }

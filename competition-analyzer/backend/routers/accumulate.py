@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from config import settings, FACILITY_TYPES
 from services.db_manager import (
     make_competition_id, save_project_meta, save_brief,
-    save_submission, save_comparison, load_brief, load_project_meta,
+    save_submission, save_comparison, load_comparison, load_brief, load_project_meta,
     list_projects, list_submissions, load_submission, save_report, get_report_path, load_pattern,
     save_submission_report, get_submission_report_path,
     save_cross_compare_report, get_cross_compare_report_path, list_cross_compare_reports, _slugify,
@@ -251,6 +251,47 @@ async def rerun_compare(facility_type: str, competition_id: str):
                        "detail": traceback.format_exc(), "_timestamp": ts})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ── 리포트만 재렌더링 (LLM 호출 X, 토큰 0) ─────────────────────────────────────
+
+@router.post("/projects/{facility_type}/{competition_id}/rerender-report")
+async def rerender_report(facility_type: str, competition_id: str):
+    """기존 _comparison.json + submissions/*.json 으로 HTML 리포트만 재생성.
+    LLM 호출 없음 — 토큰 비용 0. 디자인 변경/템플릿 업데이트 후 일괄 재반영용.
+    """
+    meta = load_project_meta(facility_type, competition_id)
+    if not meta:
+        raise HTTPException(404, "Project not found")
+    comparison = load_comparison(facility_type, competition_id)
+    if not comparison:
+        raise HTTPException(400, "비교 분석 데이터(_comparison.json) 없음. 먼저 비교분석을 실행하세요.")
+    submissions_data = list_submissions(facility_type, competition_id)
+    if not submissions_data:
+        raise HTTPException(400, "제안서 데이터 없음.")
+
+    report_subs = [
+        {"company": s["company"], "result": s["result"],
+         "total_pages": s["total_pages"],
+         "extracted_data": s.get("extracted_data", {})}
+        for s in submissions_data
+    ]
+    html = generate_comparison_report(meta, report_subs, comparison)
+    save_report(facility_type, competition_id, html)
+
+    sub_count = 0
+    for s in submissions_data:
+        sub_html = generate_submission_report(s)
+        if save_submission_report(facility_type, competition_id, s["company"], sub_html):
+            sub_count += 1
+
+    return {
+        "ok": True,
+        "facility_type": facility_type,
+        "competition_id": competition_id,
+        "report_regenerated": True,
+        "submission_reports_regenerated": sub_count,
+    }
 
 
 # ── 전체 파이프라인 ────────────────────────────────────────────────────────────

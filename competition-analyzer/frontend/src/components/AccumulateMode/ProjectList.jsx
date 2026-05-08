@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, rerunCompare, getReportUrl, getSubmissionReportUrl, addSubmission } from '../../api/client'
+import { getProjects, rerunCompare, rerenderReport, getReportUrl, getSubmissionReportUrl, addSubmission } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import DropZone from '../common/DropZone'
 
@@ -50,6 +50,11 @@ const s = {
     background: '#44337a', color: '#e9d8fd', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
+  },
+  rerenderBtn: {
+    background: 'transparent', color: '#a0aec0',
+    border: '1px solid #4a5568', borderRadius: 6,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
   subReportBtn: {
     background: '#1a2e40', color: '#90cdf4', border: '1px solid #2c5282', borderRadius: 6,
@@ -172,6 +177,8 @@ function AddSubmissionForm({ project, onDone, onCancel }) {
 
 function ProjectCard({ project, onRerunDone }) {
   const [running, setRunning] = useState(false)
+  const [rerendering, setRerendering] = useState(false)
+  const [rerenderMsg, setRerenderMsg] = useState('')
   const [events, setEvents] = useState([])
   const [done, setDone] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
@@ -193,6 +200,20 @@ function ProjectCard({ project, onRerunDone }) {
       setEvents(prev => [...prev, { type: 'error', message: e.message, _timestamp: startTime }])
     }
     setRunning(false)
+  }
+
+  const handleRerender = async () => {
+    setRerendering(true)
+    setRerenderMsg('')
+    try {
+      const r = await rerenderReport(project.facility_type, project.competition_id)
+      setRerenderMsg(`✓ 리포트 재생성 완료 (개별 ${r.submission_reports_regenerated}개)`)
+      onRerunDone?.()
+    } catch (e) {
+      setRerenderMsg(`✗ ${e.message}`)
+    }
+    setRerendering(false)
+    setTimeout(() => setRerenderMsg(''), 4000)
   }
 
   const subs = project.submissions || []
@@ -249,16 +270,32 @@ function ProjectCard({ project, onRerunDone }) {
           {showAdd ? '추가 닫기' : '+ 제안서 추가'}
         </button>
         {(hasReport || done) && (
-          <a
-            href={getReportUrl(project.facility_type, project.competition_id)}
-            target="_blank"
-            rel="noreferrer"
-            style={s.reportBtn}
-          >
-            비교 리포트 열기
-          </a>
+          <>
+            <a
+              href={getReportUrl(project.facility_type, project.competition_id)}
+              target="_blank"
+              rel="noreferrer"
+              style={s.reportBtn}
+            >
+              비교 리포트 열기
+            </a>
+            <button
+              style={{ ...s.rerenderBtn, ...(rerendering || running ? s.disabledBtn : {}) }}
+              onClick={(rerendering || running) ? undefined : handleRerender}
+              disabled={rerendering || running}
+              title="LLM 재호출 없이 HTML만 재생성 (토큰 0)"
+            >
+              {rerendering ? '재생성 중...' : '리포트만 재생성'}
+            </button>
+          </>
         )}
       </div>
+      {rerenderMsg && (
+        <div style={{ marginTop: 8, fontSize: 12,
+                      color: rerenderMsg.startsWith('✓') ? '#68d391' : '#fc8181' }}>
+          {rerenderMsg}
+        </div>
+      )}
 
       {showAdd && (
         <AddSubmissionForm

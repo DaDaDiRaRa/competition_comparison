@@ -129,6 +129,13 @@ def save_comparison(facility_type: str, competition_id: str, comparison: dict):
     _atomic_write(comp_dir / "_comparison.json", comparison)
 
 
+def load_comparison(facility_type: str, competition_id: str) -> dict:
+    comp_path = get_competition_dir(facility_type, competition_id) / "_comparison.json"
+    if comp_path.exists():
+        return _read_json(comp_path)
+    return {}
+
+
 def list_projects(facility_type: str | None = None) -> list[dict]:
     db = settings.db_path
     projects = []
