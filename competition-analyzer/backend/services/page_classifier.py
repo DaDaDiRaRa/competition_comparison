@@ -42,6 +42,9 @@ PAGE_TYPES:
 - TECHNICAL: structural/MEP/fire/environmental engineering
 - AREA_TABLE: area breakdown tables, cost estimates, data tables
 - SUSTAINABILITY: green/ESG/energy/environmental strategies
+- UNIT_PLAN: single unit floor plan + area table by unit type (supply/service/actual area). NOT a whole-building plan — one household unit only
+- INCENTIVE_TABLE: incentive FAR comparison table showing base/applied/final % ratios. NOT area totals — ratio-focused
+- BRANDING: brand name, slogan, marketing keywords. Large typography, NO design diagrams
 
 RESPOND JSON ONLY as an array, one object per image:
 [

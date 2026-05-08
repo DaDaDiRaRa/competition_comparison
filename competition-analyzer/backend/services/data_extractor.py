@@ -16,7 +16,7 @@ from pathlib import Path
 
 from config import settings
 from services.llm_client import call_messages
-from services.utils import parse_json_response, rasterize_pdf, rasterize_page_tiled
+from services.utils import parse_json_response, rasterize_pdf, rasterize_page_tiled, safe_encode_image
 
 # ── 시스템 프롬프트 ────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
@@ -193,6 +193,33 @@ EXTRACTION_PROMPTS: dict[str, dict] = {
             '"smart_building":[],"key_sustainability_concept":""}'
         ),
     },
+    "UNIT_PLAN": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT from this unit type plan page. Respond JSON ONLY.\n'
+            '{"unit_type":"","supply_area_sqm":null,"service_area_sqm":null,'
+            '"actual_area_sqm":null,"actual_area_pyeong":null,"unit_count":null,'
+            '"core_type":"","ldk_layout":"","bathroom_count":null,"key_features":[]}'
+        ),
+    },
+    "INCENTIVE_TABLE": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT from this incentive ratio comparison table. '
+            'Respond JSON ONLY. Use exact percentages if visible.\n'
+            '{"base_far_pct":null,"applied_far_pct":null,"final_far_pct":null,'
+            '"incentive_items":[{"name":"","ratio_pct":null}],'
+            '"comparison_basis":[]}'
+        ),
+    },
+    "BRANDING": {
+        "priority": 3,
+        "instruction": (
+            'EXTRACT from this branding page. Respond JSON ONLY.\n'
+            '{"brand_name_en":"","brand_name_ko":"","main_slogan":"",'
+            '"sub_slogans":[],"target_lifestyle":"","premium_keywords":[]}'
+        ),
+    },
 }
 
 FALLBACK_PROMPT = {
@@ -243,7 +270,7 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
 CONFIDENCE_DOWNGRADE_THRESHOLD = 0.7
 
 # 타일 분할 적용 대상: 정보 밀도가 높아 전체 페이지 전송 시 숫자 오독 위험
-TILE_PAGE_TYPES = {"AREA_TABLE", "TECHNICAL"}
+TILE_PAGE_TYPES = {"AREA_TABLE", "TECHNICAL", "INCENTIVE_TABLE"}
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 def _b64(img_bytes: bytes) -> str:
@@ -251,13 +278,13 @@ def _b64(img_bytes: bytes) -> str:
 
 
 def _image_block(img_bytes: bytes) -> dict:
-    """PNG 이미지 블록 생성. media_type을 image/png로 고정."""
+    safe_bytes, fmt = safe_encode_image(img_bytes, fmt="png")
     return {
         "type": "image",
         "source": {
             "type": "base64",
-            "media_type": "image/png",   # ← JPEG에서 PNG로 변경
-            "data": _b64(img_bytes),
+            "media_type": f"image/{fmt}",
+            "data": _b64(safe_bytes),
         },
     }
 

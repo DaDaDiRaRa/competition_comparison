@@ -216,3 +216,5 @@ Test with curl or Postman by uploading files to:
 - **PDF Rasterizer:** Primary rasterizer is `services/utils.py::rasterize_pdf` using PyMuPDF. `services/pdf_rasterizer.py` (pdftoppm/pdf2image) is legacy and not called by the current pipeline.
 - **ProjectList Filtering:** 저장된 프로젝트는 `facility_type` 탭으로 필터링. 데이터가 존재하는 시설 유형만 탭으로 노출되며, 첫 번째 유형이 자동 선택됨. 각 탭에 해당 유형의 프로젝트 개수가 함께 표시됨.
 - **New Machine Setup:** `git clone` 후 `pip install -r requirements.txt` + `npm install` 실행. `app_settings.json`의 `db_path`를 해당 컴퓨터 경로로 수정하고 `anthropic_api_key`를 입력 (또는 `ANTHROPIC_API_KEY` env var 설정).
+- **Page Taxonomy 갱신 방법:** `db_manager.py::init_db()`는 `_config/page_taxonomy.json`이 없을 때만 생성함. PAGE_TYPES를 추가한 후 기존 DB에 반영하려면 `{db_path}/_config/page_taxonomy.json` 파일을 삭제 후 백엔드를 1회 재시작하면 최신 버전(v1.1)으로 재생성됨.
+- **재건축사업 타입:** `facility_type="reconstruction"` 추가. 전용 PAGE_TYPES 3개: `UNIT_PLAN`(단위세대 평면+면적표), `INCENTIVE_TABLE`(인센티브 용적률 비교표, 타일 분할 적용), `BRANDING`(브랜드·슬로건). COMPARISON_AXES는 기존 7개 그대로 사용.

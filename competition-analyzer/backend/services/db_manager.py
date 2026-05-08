@@ -41,12 +41,13 @@ def init_db():
     taxonomy_path = config_dir / "page_taxonomy.json"
     if not taxonomy_path.exists():
         _atomic_write(taxonomy_path, {
-            "version": "1.0",
+            "version": "1.1",
             "page_types": [
                 "COVER", "TOC_HERO", "SITE_CONTEXT", "CONCEPT", "SPECIAL_SPACE",
                 "RENDERING_EXT", "RENDERING_INT", "SITE_PLAN", "LANDSCAPE",
                 "FLOOR_PLAN", "SECTION", "ELEVATION", "CIRCULATION",
                 "HEALTH_CENTER", "TECHNICAL", "AREA_TABLE", "SUSTAINABILITY",
+                "UNIT_PLAN", "INCENTIVE_TABLE", "BRANDING",
             ]
         })
 

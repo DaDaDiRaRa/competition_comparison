@@ -20,6 +20,7 @@ FACILITY_TYPES = {
     "industrial": "산업시설",
     "medical": "의료시설",
     "mixed_use": "복합시설",
+    "reconstruction": "재건축사업",
 }
 
 PAGE_TYPES = [
@@ -27,6 +28,7 @@ PAGE_TYPES = [
     "RENDERING_EXT", "RENDERING_INT", "SITE_PLAN", "LANDSCAPE",
     "FLOOR_PLAN", "SECTION", "ELEVATION", "CIRCULATION",
     "HEALTH_CENTER", "TECHNICAL", "AREA_TABLE", "SUSTAINABILITY",
+    "UNIT_PLAN", "INCENTIVE_TABLE", "BRANDING",
 ]
 
 COMPARISON_AXES = [

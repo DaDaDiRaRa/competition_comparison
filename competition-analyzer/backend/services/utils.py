@@ -1,3 +1,4 @@
+import io
 import json
 from pathlib import Path
 
@@ -146,6 +147,30 @@ def parse_json_response(text: str) -> dict:
             text = text.split(delim)[1].split("```")[0].strip()
             break
     return json.loads(text)
+
+
+# ── 이미지 크기 안전 인코딩 ───────────────────────────────────────────────────
+def safe_encode_image(img_bytes: bytes, fmt: str = "png", max_bytes: int = 4_500_000) -> tuple[bytes, str]:
+    """5MB 한도(여유 500KB)를 넘으면 자동으로 JPEG q=85 → q=70 → 다운스케일 폴백."""
+    if len(img_bytes) <= max_bytes:
+        return img_bytes, fmt
+
+    import fitz
+
+    pix = fitz.Pixmap(io.BytesIO(img_bytes))
+
+    jpeg_bytes = pix.tobytes("jpeg", jpg_quality=85)
+    if len(jpeg_bytes) <= max_bytes:
+        return jpeg_bytes, "jpeg"
+
+    jpeg_bytes = pix.tobytes("jpeg", jpg_quality=70)
+    if len(jpeg_bytes) <= max_bytes:
+        return jpeg_bytes, "jpeg"
+
+    # 3차 폴백: 50% 다운스케일 후 JPEG
+    scaled = fitz.Pixmap(pix)
+    scaled.shrink(2)
+    return scaled.tobytes("jpeg", jpg_quality=80), "jpeg"
 
 
 # ── SSE ───────────────────────────────────────────────────────────────────────
