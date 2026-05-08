@@ -5,7 +5,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 SETTINGS_FILE = BASE_DIR / "app_settings.json"
 
-DEFAULT_DB_PATH = str(Path.home() / "competition_db")
+# DB 경로는 코드 상수로 고정. 변경하려면 이 값을 수정 후 새 버전 릴리즈.
+HARDCODED_DB_PATH = r"M:\06_설계사업6본부\설계사업6본부 1소\01 개인폴더\16 김정현\KUNWON_COMPETITION_DB"
 
 FACILITY_TYPES = {
     "public": "공공시설",
@@ -41,17 +42,26 @@ MODEL_ID_CLASSIFY = "claude-haiku-4-5-20251001"  # 분류는 단순 작업 → H
 RASTER_DPI_CLASSIFY = 72
 RASTER_DPI_EXTRACT = 150
 
+
 class AppSettings:
+    """비민감 설정만 파일에 저장. API 키는 메모리에만 보관 (앱 종료 시 소멸)."""
+
     def __init__(self):
         self._data = self._load()
+        self._memory_api_key: str = ""  # 세션 전용 — 디스크에 저장 안 함
 
     def _load(self) -> dict:
         if SETTINGS_FILE.exists():
-            with open(SETTINGS_FILE, encoding="utf-8") as f:
-                return json.load(f)
+            try:
+                with open(SETTINGS_FILE, encoding="utf-8") as f:
+                    data = json.load(f)
+                # 과거 버전과의 호환: 파일에 키가 남아있어도 무시
+                data.pop("anthropic_api_key", None)
+                data.pop("db_path", None)
+                return data
+            except Exception:
+                pass
         return {
-            "db_path": DEFAULT_DB_PATH,
-            "anthropic_api_key": "",
             "raster_dpi_classify": RASTER_DPI_CLASSIFY,
             "raster_dpi_extract": RASTER_DPI_EXTRACT,
             "model_id": MODEL_ID,
@@ -59,16 +69,30 @@ class AppSettings:
         }
 
     def save(self):
+        # API 키와 DB 경로는 절대 저장하지 않음
+        safe = {k: v for k, v in self._data.items()
+                if k not in ("anthropic_api_key", "db_path")}
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, ensure_ascii=False, indent=2)
+            json.dump(safe, f, ensure_ascii=False, indent=2)
 
     @property
     def db_path(self) -> Path:
-        return Path(self._data["db_path"])
+        return Path(HARDCODED_DB_PATH)
 
     @property
     def api_key(self) -> str:
-        return self._data.get("anthropic_api_key") or os.environ.get("ANTHROPIC_API_KEY", "")
+        # 메모리 우선, 없으면 환경변수
+        return self._memory_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+
+    def set_api_key(self, key: str):
+        """세션 메모리에만 저장. 디스크에 쓰지 않음."""
+        self._memory_api_key = (key or "").strip()
+
+    def clear_api_key(self):
+        self._memory_api_key = ""
+
+    def has_api_key(self) -> bool:
+        return bool(self.api_key)
 
     @property
     def model_id(self) -> str:
@@ -92,10 +116,18 @@ class AppSettings:
         return int(self._data.get("extraction_priority_limit", 2))
 
     def to_dict(self) -> dict:
-        return {**self._data, "anthropic_api_key": "***" if self._data.get("anthropic_api_key") else ""}
+        # API 키 자체는 절대 노출하지 않고, 설정 여부만 표시
+        return {
+            **{k: v for k, v in self._data.items() if k != "anthropic_api_key"},
+            "db_path": str(self.db_path),
+            "has_api_key": self.has_api_key(),
+        }
 
     def update(self, data: dict):
-        self._data.update(data)
+        # db_path와 anthropic_api_key는 update로 변경 불가 (각각 하드코딩 / 전용 엔드포인트 사용)
+        clean = {k: v for k, v in data.items()
+                 if k not in ("db_path", "anthropic_api_key") and v is not None}
+        self._data.update(clean)
         self.save()
 
 

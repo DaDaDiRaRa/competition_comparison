@@ -123,6 +123,7 @@ def _trim_extracted(data: dict) -> dict:
         "concept", "toc_hero", "site_plan", "floor_plan", "section",
         "elevation", "area_table", "sustainability", "circulation",
         "special_space", "_quantitative",
+        "unit_plan", "incentive_table", "branding",
     }
     trimmed = {k: v for k, v in data.items() if k in keep_keys}
     # _by_type 등 내부 집계 키 제거

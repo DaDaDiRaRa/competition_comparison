@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, rerunCompare, getReportUrl, addSubmission } from '../../api/client'
+import { getProjects, rerunCompare, getReportUrl, getSubmissionReportUrl, addSubmission } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import DropZone from '../common/DropZone'
 
@@ -48,6 +48,11 @@ const s = {
   reportBtn: {
     background: '#44337a', color: '#e9d8fd', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+    textDecoration: 'none', display: 'inline-block',
+  },
+  subReportBtn: {
+    background: '#1a2e40', color: '#90cdf4', border: '1px solid #2c5282', borderRadius: 6,
+    padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
@@ -191,6 +196,8 @@ function ProjectCard({ project, onRerunDone }) {
 
   const subs = project.submissions || []
   const winCount = subs.filter(s => s.result === 'win' || s.result === 'contracted').length
+  const RESULT_KR = { win: '★ 당선', contracted: '◆ 수의계약', lose: '낙선' }
+  const RESULT_COLOR = { win: '#d4af37', contracted: '#68d391', lose: '#718096' }
 
   return (
     <div style={s.card}>
@@ -201,6 +208,30 @@ function ProjectCard({ project, onRerunDone }) {
       <div style={s.meta}>
         {project.year}년 · {project.client || '-'} · 제안서 {subs.length}개 (당선 {winCount}개)
       </div>
+
+      {subs.length > 0 && (
+        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {subs.map(sub => (
+            <div key={sub.company} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 12, color: RESULT_COLOR[sub.result] || '#a0aec0' }}>
+                {RESULT_KR[sub.result] || sub.result}
+              </span>
+              <span style={{ fontSize: 12, color: '#e2e8f0' }}>{sub.company}</span>
+              {sub.has_sub_report && (
+                <a
+                  href={getSubmissionReportUrl(project.facility_type, project.competition_id, sub.company)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={s.subReportBtn}
+                >
+                  리포트
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={s.actions}>
         <button
           style={{ ...s.rerunBtn, ...(running ? s.disabledBtn : {}) }}
@@ -223,7 +254,7 @@ function ProjectCard({ project, onRerunDone }) {
             rel="noreferrer"
             style={s.reportBtn}
           >
-            HTML 리포트 열기
+            비교 리포트 열기
           </a>
         )}
       </div>

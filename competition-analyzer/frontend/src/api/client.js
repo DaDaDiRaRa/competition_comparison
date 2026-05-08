@@ -14,6 +14,29 @@ export async function updateSettings(data) {
   return r.json()
 }
 
+export async function getApiKeyStatus() {
+  const r = await fetch(`${BASE}/settings/api-key-status`)
+  return r.json()
+}
+
+export async function setApiKey(apiKey) {
+  const r = await fetch(`${BASE}/settings/api-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_key: apiKey }),
+  })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || 'API 키 설정 실패')
+  }
+  return r.json()
+}
+
+export async function clearApiKey() {
+  const r = await fetch(`${BASE}/settings/api-key`, { method: 'DELETE' })
+  return r.json()
+}
+
 export async function getFacilityTypes() {
   const r = await fetch(`${BASE}/settings/facility-types`)
   return r.json()
@@ -49,6 +72,10 @@ export async function rebuildPattern(facilityType) {
 
 export function getReportUrl(facilityType, competitionId) {
   return `${BASE}/accumulate/projects/${facilityType}/${competitionId}/report`
+}
+
+export function getSubmissionReportUrl(facilityType, competitionId, company) {
+  return `${BASE}/accumulate/projects/${facilityType}/${competitionId}/submissions/${encodeURIComponent(company)}/report`
 }
 
 export function rerunCompare(facilityType, competitionId) {

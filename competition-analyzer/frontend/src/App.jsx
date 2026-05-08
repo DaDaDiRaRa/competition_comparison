@@ -3,6 +3,7 @@ import AccumulateMode from './components/AccumulateMode/AccumulateMode'
 import CrossCompareMode from './components/CrossCompare/CrossCompareMode'
 import DiagnoseMode from './components/DiagnoseMode/DiagnoseMode'
 import SettingsPanel from './components/Settings/SettingsPanel'
+import ApiKeyGate from './components/common/ApiKeyGate'
 
 const TABS = [
   { id: 'accumulate', label: '데이터 축적', icon: '🗄' },
@@ -38,6 +39,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('accumulate')
 
   return (
+    <ApiKeyGate>
     <div style={s.app}>
       <header style={s.header}>
         <div style={s.logo}>
@@ -63,5 +65,6 @@ export default function App() {
         {activeTab === 'settings' && <SettingsPanel />}
       </main>
     </div>
+    </ApiKeyGate>
   )
 }

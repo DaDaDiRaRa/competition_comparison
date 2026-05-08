@@ -1,7 +1,6 @@
 {
-  "db_path": "M:\\06_설계사업6본부\\설계사업6본부 1소\\01 개인폴더\\16 김정현\\KUNWON_COMPETITION_DB",
-  "anthropic_api_key": "put-your-anthropic_api_key",
   "raster_dpi_classify": 72,
   "raster_dpi_extract": 150,
-  "model_id": "claude-sonnet-4-6"
+  "model_id": "claude-sonnet-4-6",
+  "model_id_classify": "claude-haiku-4-5-20251001"
 }

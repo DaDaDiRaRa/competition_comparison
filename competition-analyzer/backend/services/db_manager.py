@@ -196,6 +196,42 @@ def get_report_path(facility_type: str, competition_id: str) -> Path:
     return get_competition_dir(facility_type, competition_id) / "_report.html"
 
 
+def save_submission_report(facility_type: str, competition_id: str, company: str, html: str) -> bool:
+    sub_dir = get_competition_dir(facility_type, competition_id) / "submissions"
+    if not sub_dir.exists():
+        return False
+    for f in sub_dir.glob("*.json"):
+        data = _read_json(f)
+        if data.get("company") == company:
+            report_path = f.with_name(f.stem + "_report.html")
+            report_path.write_text(html, encoding="utf-8")
+            _mark_sub_report(facility_type, competition_id, company)
+            return True
+    return False
+
+
+def _mark_sub_report(facility_type: str, competition_id: str, company: str):
+    comp_dir = get_competition_dir(facility_type, competition_id)
+    meta = _read_json(comp_dir / "_meta.json")
+    for entry in meta.get("submissions", []):
+        if entry.get("company") == company:
+            entry["has_sub_report"] = True
+            break
+    _atomic_write(comp_dir / "_meta.json", meta)
+
+
+def get_submission_report_path(facility_type: str, competition_id: str, company: str) -> Path | None:
+    sub_dir = get_competition_dir(facility_type, competition_id) / "submissions"
+    if not sub_dir.exists():
+        return None
+    for f in sub_dir.glob("*.json"):
+        data = _read_json(f)
+        if data.get("company") == company:
+            report_path = f.with_name(f.stem + "_report.html")
+            return report_path
+    return None
+
+
 def save_pattern(facility_type: str, pattern: dict):
     path = settings.db_path / "_patterns" / f"{facility_type}.json"
     _atomic_write(path, pattern)

@@ -23,12 +23,14 @@ from services.db_manager import (
     make_competition_id, save_project_meta, save_brief,
     save_submission, save_comparison, load_brief, load_project_meta,
     list_projects, list_submissions, load_submission, save_report, get_report_path, load_pattern,
+    save_submission_report, get_submission_report_path,
 )
 from services.page_classifier import classify_all_pages
 from services.data_extractor import extract_pdf, merge_extracted_data
 from services.comparator import compare_submissions, diagnose_submission
 from services.pattern_builder import build_pattern
 from services.report_generator import generate_comparison_report
+from services.submission_report_generator import generate_submission_report
 from services.utils import sse
 
 router = APIRouter()
@@ -76,6 +78,17 @@ def get_report(facility_type: str, competition_id: str):
     return FileResponse(
         path, media_type="text/html",
         filename=f"{competition_id}_report.html",
+    )
+
+
+@router.get("/projects/{facility_type}/{competition_id}/submissions/{company}/report")
+def get_submission_report(facility_type: str, competition_id: str, company: str):
+    path = get_submission_report_path(facility_type, competition_id, company)
+    if path is None or not path.exists():
+        raise HTTPException(404, "Submission report not found")
+    return FileResponse(
+        path, media_type="text/html",
+        filename=f"{company}_report.html",
     )
 
 
@@ -135,6 +148,10 @@ async def add_submission(
                 "extracted_data": extracted,
             }
             save_submission(facility_type, competition_id, company, result, sub_doc)
+
+            sub_report_html = generate_submission_report(sub_doc)
+            save_submission_report(facility_type, competition_id, company, sub_report_html)
+
             yield sse({"type": "done", "step": "submission",
                        "company": company, "_timestamp": ts})
 
@@ -186,7 +203,7 @@ async def rerun_compare(facility_type: str, competition_id: str):
             build_pattern(facility_type)
 
             yield sse({"type": "stage", "stage": "report",
-                       "msg": "HTML 비교 리포트 생성 중", "_timestamp": ts})
+                       "msg": "HTML 리포트 생성 중", "_timestamp": ts})
             report_subs = [
                 {"company": s["company"], "result": s["result"],
                  "total_pages": s["total_pages"]}
@@ -194,6 +211,11 @@ async def rerun_compare(facility_type: str, competition_id: str):
             ]
             html = generate_comparison_report(meta, report_subs, comparison)
             save_report(facility_type, competition_id, html)
+
+            for s in submissions_data:
+                sub_report_html = generate_submission_report(s)
+                save_submission_report(facility_type, competition_id, s["company"], sub_report_html)
+
             yield sse({"type": "done", "step": "report", "_timestamp": ts})
 
             yield sse({
@@ -344,6 +366,8 @@ async def run_pipeline(
                     "extracted_data": merge_extracted_data(sub_classifications, sub_extractions),
                 }
                 save_submission(facility_type, cid, company, result, sub_doc)
+                sub_report_html = generate_submission_report(sub_doc)
+                save_submission_report(facility_type, cid, company, sub_report_html)
                 processed_submissions.append(sub_doc)
                 yield sse({"type": "done", "step": "submission",
                            "company": company, "_timestamp": ts})
@@ -461,6 +485,8 @@ async def run_single_pipeline(
                 "extracted_data": extracted,
             }
             save_submission(facility_type, cid, company, result, sub_doc)
+            sub_report_html = generate_submission_report(sub_doc)
+            save_submission_report(facility_type, cid, company, sub_report_html)
             yield sse({"type": "done", "step": "submission",
                        "company": company, "_timestamp": ts})
 

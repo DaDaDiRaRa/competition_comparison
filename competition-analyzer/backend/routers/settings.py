@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
@@ -9,11 +9,14 @@ router = APIRouter()
 
 
 class SettingsUpdateRequest(BaseModel):
-    db_path: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
     raster_dpi_classify: Optional[int] = None
     raster_dpi_extract: Optional[int] = None
     model_id: Optional[str] = None
+    model_id_classify: Optional[int] = None
+
+
+class ApiKeyRequest(BaseModel):
+    api_key: str
 
 
 @router.get("")
@@ -25,9 +28,29 @@ def get_settings():
 def update_settings(req: SettingsUpdateRequest):
     update = {k: v for k, v in req.model_dump().items() if v is not None}
     settings.update(update)
-    if "db_path" in update:
-        init_db()
     return {"ok": True, "settings": settings.to_dict()}
+
+
+@router.get("/api-key-status")
+def api_key_status():
+    """API 키 설정 여부만 반환 (키 자체는 절대 노출하지 않음)."""
+    return {"has_key": settings.has_api_key()}
+
+
+@router.post("/api-key")
+def set_api_key(req: ApiKeyRequest):
+    """API 키를 세션 메모리에 저장. 디스크에 쓰지 않음 (앱 종료 시 소멸)."""
+    key = (req.api_key or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="API 키가 비어 있습니다.")
+    settings.set_api_key(key)
+    return {"ok": True, "has_key": True}
+
+
+@router.delete("/api-key")
+def clear_api_key():
+    settings.clear_api_key()
+    return {"ok": True, "has_key": False}
 
 
 @router.get("/facility-types")
