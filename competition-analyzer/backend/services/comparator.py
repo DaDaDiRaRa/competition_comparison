@@ -7,7 +7,7 @@ from services.utils import parse_json_response
 
 COMPARE_PROMPT_TEMPLATE = """\
 TASK: multi_document_comparison
-COMPARISON_AXES: concept|mass|landscape|program|facade|technical|quantitative
+COMPARISON_AXES: business_viability|member_benefit|product_competitiveness|site_planning|community|design_brand|constructability|firm_capability
 OUTPUT_FORMAT: json_only
 TEMPERATURE: 0
 
@@ -27,7 +27,17 @@ Ranking and scores are your analytical assessment and may differ from actual res
 COMPARE_EACH_SUBMISSION_AGAINST_BRIEF_AND_EACH_OTHER:
 For each axis evaluate all submissions. Cite actual data from the extracted content.
 
-axis_keys: concept|mass|landscape|program|facade|technical|quantitative
+AXIS_DEFINITIONS:
+- business_viability: 조합원 자산가치 증가·분담금·일반분양 세대수·평당분양가·용적률 인센티브
+- member_benefit: 남향배치율·조망권 확보율·실사용면적 증가율·조합원동 위치
+- product_competitiveness: 평형 다양성·단위세대 차별화(3면개방·5BAY)·펜트하우스 특화·천장고
+- site_planning: 배치 전략·보행차량분리·동간거리·데크 활용·랜드마크성
+- community: 세대당 면적·프로그램 수·스카이 커뮤니티·차별화 시설
+- design_brand: 브랜드 아이덴티티·매스 독창성·외관 마감재·랜드마크 디자인
+- constructability: 공기 단축·공사비 절감·지하주차 효율·공법 리스크
+- firm_capability: 정비사업 실적·유사 프로젝트·재무안정성·디자인 어워드
+
+axis_keys: business_viability|member_benefit|product_competitiveness|site_planning|community|design_brand|constructability|firm_capability
 
 SCORING: 0.0-10.0 per axis per submission (use decimals, e.g. 7.3)
 STRENGTHS: {max_strengths} items, each a specific Korean phrase (~{strength_chars} chars), cite actual data
@@ -42,13 +52,14 @@ OUTPUT_ONLY_JSON:
 {
   "submissions": {
     "<company_name>": {
-      "concept": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
-      "mass": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
-      "landscape": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
-      "program": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
-      "facade": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
-      "technical": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
-      "quantitative": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""}
+      "business_viability": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
+      "member_benefit": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
+      "product_competitiveness": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
+      "site_planning": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
+      "community": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
+      "design_brand": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
+      "constructability": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""},
+      "firm_capability": {"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""}
     }
   },
   "ranking": ["<company1>","<company2>"],
@@ -84,13 +95,14 @@ DIAGNOSE_MY_SUBMISSION:
 OUTPUT_ONLY_JSON:
 {
   "brief_compliance": {
-    "concept":"yes|partial|no|unclear",
-    "mass":"yes|partial|no|unclear",
-    "landscape":"yes|partial|no|unclear",
-    "program":"yes|partial|no|unclear",
-    "facade":"yes|partial|no|unclear",
-    "technical":"yes|partial|no|unclear",
-    "quantitative":"yes|partial|no|unclear"
+    "business_viability":"yes|partial|no|unclear",
+    "member_benefit":"yes|partial|no|unclear",
+    "product_competitiveness":"yes|partial|no|unclear",
+    "site_planning":"yes|partial|no|unclear",
+    "community":"yes|partial|no|unclear",
+    "design_brand":"yes|partial|no|unclear",
+    "constructability":"yes|partial|no|unclear",
+    "firm_capability":"yes|partial|no|unclear"
   },
   "pattern_deviation": {
     "page_distribution_gaps": [],
@@ -98,13 +110,14 @@ OUTPUT_ONLY_JSON:
     "quantitative_gaps": {}
   },
   "axes": {
-    "concept":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
-    "mass":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
-    "landscape":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
-    "program":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
-    "facade":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
-    "technical":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
-    "quantitative":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]}
+    "business_viability":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
+    "member_benefit":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
+    "product_competitiveness":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
+    "site_planning":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
+    "community":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
+    "design_brand":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
+    "constructability":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]},
+    "firm_capability":{"score":null,"strengths":[],"weaknesses":[],"recommendations":[]}
   },
   "overall_score": null,
   "strengths": [],
@@ -124,6 +137,10 @@ def _trim_extracted(data: dict) -> dict:
         "elevation", "area_table", "sustainability", "circulation",
         "special_space", "_quantitative",
         "unit_plan", "incentive_table", "branding",
+        # 재건축 전용 타입 (Patch #1·#2에서 추가)
+        "business_viability", "area_increase", "view_analysis",
+        "community_program", "company_portfolio", "construction_plan",
+        "unit_plan_penthouse", "site_context", "landscape",
     }
     trimmed = {k: v for k, v in data.items() if k in keep_keys}
     # _by_type 등 내부 집계 키 제거

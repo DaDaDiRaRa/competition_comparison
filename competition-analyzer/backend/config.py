@@ -37,7 +37,8 @@ PAGE_TYPES = [
 ]
 
 COMPARISON_AXES = [
-    "concept", "mass", "landscape", "program", "facade", "technical", "quantitative"
+    "business_viability", "member_benefit", "product_competitiveness",
+    "site_planning", "community", "design_brand", "constructability", "firm_capability",
 ]
 
 MODEL_ID = "claude-sonnet-4-6"

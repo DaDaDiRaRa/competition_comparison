@@ -2,16 +2,21 @@ import json
 from config import FACILITY_TYPES
 
 AXIS_LABELS_KO = {
-    "concept": "개념",
-    "mass": "배치·매스",
-    "landscape": "조경",
-    "program": "프로그램",
-    "facade": "파사드",
-    "technical": "기술",
-    "quantitative": "정량",
+    "business_viability":      "사업성",
+    "member_benefit":          "조합원 혜택",
+    "product_competitiveness": "상품 경쟁력",
+    "site_planning":           "단지 계획",
+    "community":               "커뮤니티",
+    "design_brand":            "디자인·브랜드",
+    "constructability":        "시공성",
+    "firm_capability":         "회사 역량",
 }
 
-AXES = ["concept", "mass", "landscape", "program", "facade", "technical", "quantitative"]
+AXES = [
+    "business_viability", "member_benefit", "product_competitiveness",
+    "site_planning", "community", "design_brand",
+    "constructability", "firm_capability",
+]
 
 PALETTE = [
     '#E63946', '#457B9D', '#2A9D8F', '#E9C46A', '#264653',
@@ -19,13 +24,14 @@ PALETTE = [
 ]
 
 AXIS_LABEL_DASH = {
-    'concept':      ('설계 컨셉',      '◈'),
-    'mass':         ('매스 전략',      '◼'),
-    'landscape':    ('공이·조경 연계', '◉'),
-    'program':      ('프로그램 구성',  '▲'),
-    'facade':       ('파사드·외관',    '◧'),
-    'technical':    ('구조·기술',      '⚙'),
-    'quantitative': ('정량 데이터',    '≡'),
+    'business_viability':      ('사업성',          '₩'),
+    'member_benefit':          ('조합원 혜택',     '⊙'),
+    'product_competitiveness': ('상품 경쟁력',     '□'),
+    'site_planning':           ('단지 계획',       '⊞'),
+    'community':               ('커뮤니티',        '◎'),
+    'design_brand':            ('디자인·브랜드',   '◧'),
+    'constructability':        ('시공성',          '⚙'),
+    'firm_capability':         ('회사 역량',       '⊕'),
 }
 
 COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미충족', 'unclear': '불명'}
@@ -240,7 +246,7 @@ def _generate_dashboard_section(
     axis_rows = ''
     for axis in axes:
         label, icon = AXIS_LABEL_DASH.get(axis, (axis, '•'))
-        is_exp = (axis == 'concept')
+        is_exp = (axis == 'business_viability')
         content_style = '' if is_exp else 'display:none'
         chevron_style = 'transform:rotate(180deg)' if is_exp else ''
         border_col = 'rgba(255,255,255,0.2)' if is_exp else 'rgba(255,255,255,0.08)'
@@ -329,7 +335,7 @@ def _dashboard_js(axes: list) -> str:
 (function() {{
   var allAxes = {axes_json};
   var selectedCompanies = [];
-  var expandedAxes = ['concept'];
+  var expandedAxes = ['business_viability'];
 
   function hexToRgba(hex, a) {{
     var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
