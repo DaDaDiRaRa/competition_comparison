@@ -462,15 +462,21 @@ def merge_extracted_data(
         "floors_above", "floors_below", "parking_count",
     )
     quant: dict = {}
+    at_list = result.get("area_table", [])
+    if isinstance(at_list, dict):
+        at_list = [at_list]
+    sp_list = result.get("site_plan", [])
+    if isinstance(sp_list, dict):
+        sp_list = [sp_list]
 
-    # 낮은 우선순위 소스부터 채우고 높은 우선순위가 덮어씀
-    for src_key in ("site_plan", "area_table"):   # area_table이 나중 → 우선
-        src = result.get(src_key, {})
-        if isinstance(src, list):
-            src = src[0] if src else {}
+    # area_table 전체 → site_plan 전체 순서로 순회, first-write wins (area_table 우선)
+    for entry in at_list + sp_list:
+        if not isinstance(entry, dict):
+            continue
         for field in quant_fields:
-            if src.get(field) is not None:
-                quant[field] = src[field]
+            v = entry.get(field)
+            if v is not None and field not in quant:
+                quant[field] = v
 
     result["_quantitative"] = quant
     return result

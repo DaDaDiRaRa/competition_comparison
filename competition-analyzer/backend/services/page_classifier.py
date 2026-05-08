@@ -6,7 +6,7 @@ from config import settings, PAGE_TYPES
 from services.llm_client import call_messages
 from services.utils import parse_json_response, rasterize_pdf
 
-BATCH_SIZE = 10  # 한 번에 처리할 최대 페이지 수
+BATCH_SIZE = 5  # 한 번에 처리할 최대 페이지 수
 
 SYSTEM_PROMPT = (
     "You are an architectural document page classifier. "
@@ -68,6 +68,57 @@ def _normalise_result(raw: dict) -> dict:
     return result
 
 
+def _call_classify(batch: list) -> list[dict]:
+    content = []
+    for img_bytes, _ in batch:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
+            },
+        })
+    content.append({"type": "text", "text": CLASSIFY_PROMPT})
+
+    raw_text = call_messages(
+        model=settings.model_id_classify,
+        max_tokens=3000,
+        temperature=0,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": content}],
+    )
+    try:
+        results = parse_json_response(raw_text)
+        if not isinstance(results, list):
+            results = [results]
+        return results
+    except Exception:
+        return []
+
+
+def _classify_batch_with_validation(batch: list, max_retries: int = 2) -> list[dict]:
+    for _ in range(max_retries + 1):
+        results = _call_classify(batch)
+        if isinstance(results, list) and len(results) == len(batch):
+            return results
+    # 재시도해도 길이 불일치면 1페이지씩 개별 분류로 폴백
+    fallback = []
+    for single in batch:
+        res = _call_classify([single])
+        fallback.append(res[0] if res else {})
+    return fallback
+
+
+def _fallback_entry(page: int) -> dict:
+    return {**_normalise_result({}), "page": page}
+
+
+def _enforce_page_uniqueness(all_results: list[dict], expected_total: int) -> list[dict]:
+    by_page = {r["page"]: r for r in all_results}  # 중복 시 마지막 값 유지
+    return [by_page.get(p, _fallback_entry(p)) for p in range(1, expected_total + 1)]
+
+
 def _classify_pdf_sync(pdf_path: Path) -> list[dict]:
     """PDF를 분류용 저해상도 이미지로 변환 후 배치 단위로 분류.
     - DPI: settings.dpi_classify (기본 72) — 페이지 타입 구분에 충분
@@ -77,39 +128,13 @@ def _classify_pdf_sync(pdf_path: Path) -> list[dict]:
     all_results = []
     for batch_start in range(0, len(pages), BATCH_SIZE):
         batch = pages[batch_start:batch_start + BATCH_SIZE]
+        raw_results = _classify_batch_with_validation(batch)
 
-        content = []
-        for img_bytes, _ in batch:
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
-                },
-            })
-        content.append({"type": "text", "text": CLASSIFY_PROMPT})
-
-        raw_text = call_messages(
-            model=settings.model_id_classify,
-            max_tokens=3000,
-            temperature=0,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": content}],
-        )
-
-        try:
-            results = parse_json_response(raw_text)
-            if not isinstance(results, list):
-                results = [results]
-        except Exception:
-            results = [{}] * len(batch)
-
-        for i, r in enumerate(results):
+        for i, r in enumerate(raw_results):
             actual_page = batch[i][1] if i < len(batch) else batch_start + i + 1
             all_results.append({**_normalise_result(r), "page": actual_page})
 
-    return all_results
+    return _enforce_page_uniqueness(all_results, len(pages))
 
 
 async def classify_all_pages(pdf_path: Path) -> list[dict]:
