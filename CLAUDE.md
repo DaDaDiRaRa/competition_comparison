@@ -61,7 +61,7 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
 - `services/llm_client.py` - Claude API 호출 래퍼 (`call_messages()`). `system` 인자는 `str | list` 모두 지원 (캐시 블록 전달용). 응답 `usage`의 `cache_creation_input_tokens` / `cache_read_input_tokens`를 로그 출력
 - `services/comparator.py` - Compares proposals via **2-pass blind-reveal**:
   - **Pass 1 (블라인드 채점):** `_anonymize_submissions()`이 회사명을 `A안/B안/C안...`으로 치환하고 `result` 라벨 제거 → `_make_blind_static()` 프롬프트로 LLM이 결과를 모른 채 점수·강약점·`blind_ranking` 생성. `max_tokens=32000`
-  - **Pass 2 (리빌·사후 분석):** 실제 회사명·결과를 노출하고 `blind_result`까지 함께 전달 → `_make_reveal_static()` 프롬프트로 `key_differentiators`, `winner_strengths`, `loser_weaknesses`, `gap_notes` 생성. `max_tokens=4096` (짧은 분석만)
+  - **Pass 2 (리빌·사후 분석 — 슬림):** `ACTUAL_RESULTS`(회사명→win/lose 매핑) + `BLIND_SCORES`(Pass 1 결과 전체)만 전달. 원본 `extracted_data`·`brief_data`는 재전송 안 함 → Pass 2 입력 토큰 80%+ 절감. LLM은 Pass 1 결과 내부의 strengths/weaknesses/notes만 evidence로 사용. 산출: `key_differentiators`, `winner_strengths`, `loser_weaknesses`, `gap_notes`. `max_tokens=4096`
   - `_deanonymize_blind_result()` Pass 1 결과 라벨 복구 → 회사명 키로 정규화
   - `_compute_gap_analysis(blind_ranking, results_map, gap_notes)` → `{blind_top1, actual_winners, top1_matches_winner, alignment: "high"|"partial"|"low"|"unknown", notes}` 산출. AI 1위와 실제 당선 일치율로 alignment 결정
   - 최종 반환 dict: `submissions, ranking(=blind_ranking), blind_ranking, key_differentiators, winner_strengths, loser_weaknesses, gap_analysis`

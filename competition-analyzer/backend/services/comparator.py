@@ -77,8 +77,8 @@ def _make_blind_static(facility_type: str) -> str:
 
 def _make_reveal_static(facility_type: str) -> str:
     """Pass 2 (결과 공개 후 사유 분석) 정적 prefix.
-    Pass 1의 블라인드 점수 + 실제 당선/낙선을 받아 사후 해석만 수행.
-    회사명·결과를 알지만 점수는 다시 매기지 않음."""
+    Pass 1의 블라인드 점수 + 실제 당선/낙선만 받아 사후 해석 수행.
+    원본 extracted_data를 재전송하지 않으므로 Pass 1 결과 내부의 strengths/weaknesses/notes를 인용 근거로 사용."""
     return (
         "TASK: post_hoc_outcome_analysis\n"
         "OUTPUT_FORMAT: json_only\n"
@@ -86,13 +86,16 @@ def _make_reveal_static(facility_type: str) -> str:
         "\n"
         "INSTRUCTIONS (data follows after this section):\n"
         "You will be given:\n"
-        "- BLIND_SCORES: per-axis scores produced WITHOUT knowing the actual results\n"
+        "- BLIND_SCORES: per-axis scores + strengths/weaknesses/notes produced WITHOUT knowing actual results\n"
         "- ACTUAL_RESULTS: real competition outcome (win/lose) for each submission\n"
         "\n"
+        "IMPORTANT: Raw submission data is NOT provided. Use only the strengths/weaknesses/notes already\n"
+        "captured in BLIND_SCORES.submissions[company] as your evidence. Do NOT invent new facts.\n"
+        "\n"
         "Your task:\n"
-        "1. winner_strengths: cite specific data on why the actual winner(s) won\n"
-        "2. loser_weaknesses: common failure patterns of actual losers\n"
-        "3. key_differentiators: what separated winners from losers based on the data\n"
+        "1. winner_strengths: aggregate the strongest recurring strengths of actual winner(s) from BLIND_SCORES\n"
+        "2. loser_weaknesses: aggregate common weaknesses of actual losers from BLIND_SCORES\n"
+        "3. key_differentiators: what separated winners from losers (cite axes with biggest win-vs-lose score gap)\n"
         "4. gap_notes: brief reflection on whether the blind ranking matched the actual outcome\n"
         "   - If aligned (blind top == actual winner): note that design quality likely drove the decision\n"
         "   - If diverged: hypothesize undocumented external factors (정무적·발주처 선호·시공사 관계 등)\n"
@@ -241,22 +244,19 @@ def _build_blind_prompt_parts(
 
 
 def _build_reveal_prompt_parts(
-    brief_data: dict,
     submissions: list[dict],
     blind_result: dict,
     facility_type: str,
 ) -> tuple[str, str]:
-    """Pass 2: 실제 회사명·결과 + Pass 1의 블라인드 점수."""
-    sub_map = {s["company"]: _trim_extracted(s.get("extracted_data", {})) for s in submissions}
+    """Pass 2: 결과 매핑 + Pass 1 결과만 전달.
+    원본 extracted_data·brief는 재전송하지 않음 — Pass 1 결과 내부 strengths/weaknesses가 근거."""
     results_map = {s["company"]: s.get("result", "unknown") for s in submissions}
     static = (_make_reveal_static(facility_type)
               .replace("{max_global}", "3")
               .replace("{global_chars}", "35"))
     dynamic = (
-        "BRIEF_DATA:\n" + _compact(_trim_brief(brief_data)) + "\n\n"
         "ACTUAL_RESULTS:\n" + _compact(results_map) + "\n\n"
-        "BLIND_SCORES (from Pass 1, identities now revealed):\n" + _compact(blind_result) + "\n\n"
-        "SUBMISSIONS:\n" + _compact(sub_map)
+        "BLIND_SCORES (from Pass 1, identities now revealed):\n" + _compact(blind_result)
     )
     return static, dynamic
 
@@ -333,7 +333,7 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
 
     # ── Pass 2: 결과 공개 후 사후 분석 ────────────────────────────────────────
     reveal_static, reveal_dynamic = _build_reveal_prompt_parts(
-        brief_data, submissions, blind_result, ft
+        submissions, blind_result, ft
     )
     reveal_raw = call_messages(
         model=settings.model_id,
