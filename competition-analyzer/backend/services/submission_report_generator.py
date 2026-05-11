@@ -1,7 +1,7 @@
 """Individual submission report generator — no LLM calls, pure HTML rendering."""
 from __future__ import annotations
 
-from config import FACILITY_TYPES
+from config import facility_label as _facility_label
 
 _RESULT_BADGE = {
     "win":        ('<span style="background:#b7791f;color:#fefcbf;font-size:12px;padding:3px 10px;'
@@ -1423,7 +1423,7 @@ def generate_submission_report(sub_doc: dict) -> str:
     if not isinstance(cover, dict):
         cover = {}
     comp_name = cover.get("competition_name") or competition_id
-    facility_label = FACILITY_TYPES.get(facility_type, facility_type)
+    facility_label = _facility_label(facility_type)
 
     result_badge = _RESULT_BADGE.get(result, "")
 

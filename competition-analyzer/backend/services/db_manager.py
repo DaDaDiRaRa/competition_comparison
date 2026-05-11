@@ -125,6 +125,89 @@ def save_submission(
     return filename
 
 
+def update_submission(
+    facility_type: str,
+    competition_id: str,
+    company: str,
+    new_result: str,
+    new_extracted_data: dict,
+    meta_overrides: dict | None = None,
+) -> dict:
+    """
+    편집된 submission을 저장한다.
+    - result 변경 시 파일명 변경 (old 삭제 + new 생성)
+    - _meta.json submissions[].result 동기화
+    - meta_overrides(client, location)는 project meta에 반영
+    반환: {"old_file": str, "new_file": str, "result_changed": bool}
+    """
+    slug = _slugify(company)
+    comp_dir = get_competition_dir(facility_type, competition_id)
+    sub_dir = comp_dir / "submissions"
+
+    # 현재 파일 탐색
+    old_file: Path | None = None
+    old_result: str = new_result
+    for f in sub_dir.glob("*.json"):
+        data = _read_json(f)
+        if data.get("company") == company:
+            old_file = f
+            old_result = data.get("result", new_result)
+            break
+
+    new_filename = f"{slug}_{new_result}.json"
+    new_path = sub_dir / new_filename
+
+    # 기존 데이터에 수정 내용을 덮어쓴 완성본 생성
+    base = _read_json(old_file) if old_file else {}
+    base["extracted_data"] = new_extracted_data
+    base["result"] = new_result
+    base["company"] = company
+    base["_edited_at"] = datetime.now().isoformat()
+
+    if meta_overrides:
+        base["client"] = meta_overrides.get("client", base.get("client", ""))
+        base["location"] = meta_overrides.get("location", base.get("location", ""))
+
+    # 새 파일 저장
+    _atomic_write(new_path, base)
+
+    result_changed = old_result != new_result
+    if old_file and old_file != new_path:
+        old_file.unlink(missing_ok=True)
+        # 연결된 리포트 HTML도 이름 변경
+        old_report = old_file.with_name(old_file.stem + "_report.html")
+        new_report = new_path.with_name(new_path.stem + "_report.html")
+        if old_report.exists():
+            old_report.rename(new_report)
+
+    # _meta.json 동기화
+    meta = load_project_meta(facility_type, competition_id)
+    for entry in meta.get("submissions", []):
+        if entry.get("company") == company:
+            entry["result"] = new_result
+            entry["file"] = new_filename
+            break
+
+    if meta_overrides:
+        if "client" in meta_overrides:
+            meta["client"] = meta_overrides["client"]
+        if "location" in meta_overrides:
+            meta["location"] = meta_overrides["location"]
+
+    _atomic_write(comp_dir / "_meta.json", meta)
+
+    return {
+        "old_file": old_file.name if old_file else None,
+        "new_file": new_filename,
+        "result_changed": result_changed,
+        "submission": base,
+    }
+
+
+def has_comparison(facility_type: str, competition_id: str) -> bool:
+    return (get_competition_dir(facility_type, competition_id) / "_comparison.json").exists()
+
+
 def save_comparison(facility_type: str, competition_id: str, comparison: dict):
     comp_dir = get_competition_dir(facility_type, competition_id)
     _atomic_write(comp_dir / "_comparison.json", comparison)
@@ -192,6 +275,25 @@ def get_winning_submissions(facility_type: str) -> list[dict]:
                 if data:
                     winners.append(data)
     return winners
+
+
+def get_losing_submissions(facility_type: str) -> list[dict]:
+    db = settings.db_path
+    ft_dir = db / facility_type
+    losers = []
+    if not ft_dir.exists():
+        return losers
+    for comp_dir in ft_dir.iterdir():
+        if not comp_dir.is_dir():
+            continue
+        sub_dir = comp_dir / "submissions"
+        if not sub_dir.exists():
+            continue
+        for f in sub_dir.glob("*_lose.json"):
+            data = _read_json(f)
+            if data:
+                losers.append(data)
+    return losers
 
 
 def save_report(facility_type: str, competition_id: str, html: str):
@@ -274,6 +376,43 @@ def list_cross_compare_reports() -> list[dict]:
             "filename": f.name,
             "created_at": ts,
             "labels": labels,
+            "size": f.stat().st_size,
+        })
+    return sorted(items, key=lambda x: x["filename"], reverse=True)
+
+
+def save_diagnosis_report(filename: str, html: str) -> Path:
+    diag_dir = settings.db_path / "_diagnosis_reports"
+    diag_dir.mkdir(parents=True, exist_ok=True)
+    path = diag_dir / filename
+    path.write_text(html, encoding="utf-8")
+    return path
+
+
+def get_diagnosis_report_path(filename: str) -> Path | None:
+    path = settings.db_path / "_diagnosis_reports" / filename
+    return path if path.exists() else None
+
+
+def list_diagnosis_reports() -> list[dict]:
+    diag_dir = settings.db_path / "_diagnosis_reports"
+    if not diag_dir.exists():
+        return []
+    items = []
+    for f in diag_dir.glob("*.html"):
+        stem = f.stem  # 20260511_103045_public_영등포구청사
+        parts = stem.split("_", 3)
+        if len(parts) >= 3 and len(parts[0]) == 8 and len(parts[1]) == 6:
+            date_str, time_str = parts[0], parts[1]
+            label = "_".join(parts[2:]) if len(parts) > 2 else stem
+            ts = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]} {time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}"
+        else:
+            ts = ""
+            label = stem
+        items.append({
+            "filename": f.name,
+            "created_at": ts,
+            "label": label,
             "size": f.stat().st_size,
         })
     return sorted(items, key=lambda x: x["filename"], reverse=True)

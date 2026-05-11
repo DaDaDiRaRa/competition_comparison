@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
-from config import settings, FACILITY_TYPES
+from config import settings, FACILITY_TYPES, PAGE_TYPES_META, COMPARISON_AXES_BY_GROUP
 from services.db_manager import init_db
 
 router = APIRouter()
@@ -55,7 +55,25 @@ def clear_api_key():
 
 @router.get("/facility-types")
 def get_facility_types():
-    return FACILITY_TYPES
+    return {k: v["label_ko"] for k, v in FACILITY_TYPES.items()}
+
+
+@router.get("/meta")
+def get_meta():
+    return {
+        "facility_types": [
+            {"key": k, "label_ko": v["label_ko"], "group": v["group"]}
+            for k, v in FACILITY_TYPES.items()
+        ],
+        "page_types": PAGE_TYPES_META,
+        "axes_by_group": {
+            group: {
+                k: {"label_ko": v["label_ko"], "icon": v.get("icon", "•")}
+                for k, v in axes.items()
+            }
+            for group, axes in COMPARISON_AXES_BY_GROUP.items()
+        },
+    }
 
 
 @router.post("/init-db")

@@ -9,10 +9,28 @@ accumulate.py — 데이터 축적 파이프라인 라우터
 """
 
 import json
+import logging
 import shutil
 import tempfile
 import time
 import traceback
+
+logger = logging.getLogger(__name__)
+
+
+def _user_error_msg(e: Exception) -> str:
+    msg = str(e)
+    if "502" in msg or "Bad Gateway" in msg:
+        return "AI 서버 일시 오류입니다. 잠시 후 다시 시도해주세요."
+    if "API" in msg or "api_key" in msg or "authentication" in msg.lower():
+        return "API 키 오류입니다. 설정 탭에서 API 키를 확인해주세요."
+    if "PDF" in msg or "fitz" in msg or "rasterize" in msg.lower():
+        return "PDF 처리 중 오류가 발생했습니다. 파일이 손상되지 않았는지 확인해주세요."
+    if "timeout" in msg.lower():
+        return "처리 시간이 초과됐습니다. PDF 페이지 수를 줄이거나 다시 시도해주세요."
+    if "memory" in msg.lower() or "MemoryError" in msg:
+        return "메모리 부족 오류입니다. PDF 파일 크기를 줄여서 다시 시도해주세요."
+    return f"처리 중 오류가 발생했습니다. 문제가 반복되면 관리자에게 문의해주세요. (상세: {msg[:120]})"
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException
@@ -25,9 +43,10 @@ from services.db_manager import (
     list_projects, list_submissions, load_submission, save_report, get_report_path, load_pattern,
     save_submission_report, get_submission_report_path,
     save_cross_compare_report, get_cross_compare_report_path, list_cross_compare_reports, _slugify,
+    update_submission, has_comparison,
 )
 from services.page_classifier import classify_all_pages
-from services.data_extractor import extract_pdf, merge_extracted_data
+from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
 from services.comparator import compare_submissions, diagnose_submission
 from services.pattern_builder import build_pattern
 from services.report_generator import generate_comparison_report
@@ -91,6 +110,91 @@ def get_submission_report(facility_type: str, competition_id: str, company: str)
         path, media_type="text/html",
         filename=f"{company}_report.html",
     )
+
+
+@router.get("/projects/{facility_type}/{competition_id}/submissions/{company}")
+def get_submission(facility_type: str, competition_id: str, company: str):
+    """단일 submission 전체 데이터 조회 — 편집 모달용."""
+    sub = load_submission(facility_type, competition_id, company)
+    if not sub:
+        raise HTTPException(404, "Submission not found")
+    return sub
+
+
+@router.put("/projects/{facility_type}/{competition_id}/submissions/{company}")
+async def edit_submission(
+    facility_type: str,
+    competition_id: str,
+    company: str,
+    body: dict,
+):
+    """
+    편집된 submission 저장.
+    body: { extracted_data, result, meta_overrides? }
+    result 변경 시 파일명 변경 + 패턴 재구축.
+    """
+    if facility_type not in FACILITY_TYPES:
+        raise HTTPException(400, f"Unknown facility_type: {facility_type}")
+
+    new_extracted = body.get("extracted_data")
+    new_result = body.get("result", "lose")
+    meta_overrides = body.get("meta_overrides")
+
+    if new_extracted is None:
+        raise HTTPException(400, "extracted_data 필드가 없습니다.")
+    if not isinstance(new_extracted, dict):
+        raise HTTPException(400, "extracted_data는 객체여야 합니다.")
+    if new_result not in ("win", "lose", "contracted"):
+        raise HTTPException(400, "result는 win / lose / contracted 중 하나여야 합니다.")
+
+    # 사전 검증: 편집 대상 submission이 존재해야 함 (신규 생성은 다른 엔드포인트)
+    existing = load_submission(facility_type, competition_id, company)
+    if not existing:
+        raise HTTPException(404, "편집할 제안서를 찾을 수 없습니다.")
+
+    try:
+        update_info = update_submission(
+            facility_type, competition_id, company,
+            new_result, new_extracted, meta_overrides,
+        )
+    except Exception as e:
+        logger.error("edit_submission error: %s", traceback.format_exc())
+        raise HTTPException(500, _user_error_msg(e))
+
+    updated_sub = update_info["submission"]
+
+    # 개별 리포트 재생성
+    report_regenerated = False
+    try:
+        from services.submission_report_generator import generate_submission_report
+        html = generate_submission_report(updated_sub)
+        save_submission_report(facility_type, competition_id, company, html)
+        report_regenerated = True
+    except Exception as e:
+        logger.error("Submission report regen failed: %s", e)
+
+    # 패턴 재구축 조건:
+    #  - 새 result가 win/contracted (당선 데이터 갱신)
+    #  - result가 변경됨 (예: win → lose 시 기존 당선 데이터를 패턴에서 제거)
+    pattern_rebuilt = False
+    if new_result in ("win", "contracted") or update_info["result_changed"]:
+        try:
+            build_pattern(facility_type)
+            pattern_rebuilt = True
+        except Exception as e:
+            logger.error("Pattern rebuild failed: %s", e)
+
+    comparison_stale = has_comparison(facility_type, competition_id)
+
+    return {
+        "ok": True,
+        "submission_saved": True,
+        "report_regenerated": report_regenerated,
+        "pattern_rebuilt": pattern_rebuilt,
+        "comparison_stale": comparison_stale,
+        "result_changed": update_info["result_changed"],
+        "edited_at": updated_sub.get("_edited_at"),
+    }
 
 
 @router.get("/cross-compare/reports")
@@ -180,8 +284,8 @@ async def add_submission(
                 "_timestamp": ts,
             })
         except Exception as e:
-            yield sse({"type": "error", "message": str(e),
-                       "detail": traceback.format_exc(), "_timestamp": ts})
+            logger.error("Pipeline error: %s", traceback.format_exc())
+            yield sse({"type": "error", "message": _user_error_msg(e), "_timestamp": ts})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
 
@@ -208,7 +312,7 @@ async def rerun_compare(facility_type: str, competition_id: str):
         try:
             yield sse({"type": "stage", "stage": "compare",
                        "msg": "비교분석 중", "_timestamp": ts})
-            comparison = await compare_submissions(brief_data, submissions_data)
+            comparison = await compare_submissions(brief_data, submissions_data, facility_type)
             comparison["competition_id"] = competition_id
             save_comparison(facility_type, competition_id, comparison)
 
@@ -247,8 +351,8 @@ async def rerun_compare(facility_type: str, competition_id: str):
                 ],
             })
         except Exception as e:
-            yield sse({"type": "error", "message": str(e),
-                       "detail": traceback.format_exc(), "_timestamp": ts})
+            logger.error("Pipeline error: %s", traceback.format_exc())
+            yield sse({"type": "error", "message": _user_error_msg(e), "_timestamp": ts})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -365,6 +469,11 @@ async def run_pipeline(
                 brief_data = merge_extracted_data(brief_classifications, brief_extractions)
                 brief_data["page_map"] = brief_classifications
                 brief_data["total_pages"] = total_brief
+
+                yield sse({"type": "stage", "stage": "brief_reqs",
+                           "msg": "지침서 요구사항 분석 중", "_timestamp": ts})
+                brief_data["_requirements"] = await extract_brief_requirements(brief_data, facility_type)
+
                 save_brief(facility_type, cid, brief_data)
                 yield sse({"type": "done", "step": "brief",
                            "total_pages": total_brief, "_timestamp": ts})
@@ -442,8 +551,8 @@ async def run_pipeline(
             })
 
         except Exception as e:
-            yield sse({"type": "error", "message": str(e),
-                       "detail": traceback.format_exc(), "_timestamp": ts})
+            logger.error("Pipeline error: %s", traceback.format_exc())
+            yield sse({"type": "error", "message": _user_error_msg(e), "_timestamp": ts})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
 
@@ -499,6 +608,11 @@ async def run_single_pipeline(
                 brief_data = merge_extracted_data(brief_classifications, brief_extractions)
                 brief_data["page_map"] = brief_classifications
                 brief_data["total_pages"] = total_brief
+
+                yield sse({"type": "stage", "stage": "brief_reqs",
+                           "msg": "지침서 요구사항 분석 중", "_timestamp": ts})
+                brief_data["_requirements"] = await extract_brief_requirements(brief_data, facility_type)
+
                 save_brief(facility_type, cid, brief_data)
                 yield sse({"type": "done", "step": "brief",
                            "total_pages": total_brief, "_timestamp": ts})
@@ -579,8 +693,8 @@ async def run_single_pipeline(
             })
 
         except Exception as e:
-            yield sse({"type": "error", "message": str(e),
-                       "detail": traceback.format_exc(), "_timestamp": ts})
+            logger.error("Pipeline error: %s", traceback.format_exc())
+            yield sse({"type": "error", "message": _user_error_msg(e), "_timestamp": ts})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
 
@@ -665,7 +779,7 @@ async def cross_compare(
             })
 
         except Exception as e:
-            yield sse({"type": "error", "message": str(e),
-                       "detail": traceback.format_exc(), "_timestamp": ts})
+            logger.error("Pipeline error: %s", traceback.format_exc())
+            yield sse({"type": "error", "message": _user_error_msg(e), "_timestamp": ts})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

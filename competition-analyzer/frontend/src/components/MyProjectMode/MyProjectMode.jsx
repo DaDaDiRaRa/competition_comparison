@@ -221,8 +221,12 @@ export default function MyProjectMode() {
       <div style={s.panel}>
         <div style={s.title}>내 프로젝트 등록</div>
         <div style={s.desc}>
-          경쟁 제안서 없이 우리 회사 단독으로 등록합니다.<br />
-          당선 / 수의계약은 패턴 DB에 자동 반영되고, 낙선은 기존 패턴 대비 원인 분석을 제공합니다.
+          <strong style={{ color: '#e2e8f0' }}>우리 회사가 과거에 제출한 제안서</strong>를 하나씩 등록하는 탭입니다.<br />
+          당선·수의계약은 <span style={{ color: '#68d391' }}>패턴 DB에 자동 반영</span>되어 이후 진단의 기준이 됩니다.<br />
+          낙선은 <span style={{ color: '#fc8181' }}>기존 당선 패턴 대비 원인 분석</span>을 바로 제공합니다.<br />
+          <span style={{ color: '#4a5568', fontSize: 12 }}>
+            * 경쟁사 제안서 없이 우리 것만 올리면 됩니다. 지침서(RFP)가 있으면 함께 올리면 더 정확합니다.
+          </span>
         </div>
 
         <div style={s.grid2}>

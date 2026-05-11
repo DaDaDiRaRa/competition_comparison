@@ -42,6 +42,11 @@ export async function getFacilityTypes() {
   return r.json()
 }
 
+export async function getMeta() {
+  const r = await fetch(`${BASE}/settings/meta`)
+  return r.json()
+}
+
 export async function getProjects(facilityType) {
   const url = facilityType
     ? `${BASE}/accumulate/projects?facility_type=${facilityType}`
@@ -131,6 +136,15 @@ export function runDiagnoseVsProjects(formData) {
   return streamSSE(`${BASE}/diagnose/run-vs-projects`, formData)
 }
 
+export function getDiagnosisReportUrl(filename) {
+  return `${BASE}/diagnose/reports/${encodeURIComponent(filename)}`
+}
+
+export async function listDiagnosisReports() {
+  const r = await fetch(`${BASE}/diagnose/reports`)
+  return r.json()
+}
+
 /**
  * Run single-submission pipeline (내 프로젝트 등록).
  * formData: competition_name, facility_type, year, client, location,
@@ -144,6 +158,30 @@ export function runMyProjectPipeline(formData) {
  * Cross-compare selected submissions across projects.
  * items: [{facility_type, competition_id, company}]
  */
+export async function getSubmission(facilityType, competitionId, company) {
+  const r = await fetch(
+    `${BASE}/accumulate/projects/${facilityType}/${competitionId}/submissions/${encodeURIComponent(company)}`
+  )
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
+
+export async function updateSubmission(facilityType, competitionId, company, body) {
+  const r = await fetch(
+    `${BASE}/accumulate/projects/${facilityType}/${competitionId}/submissions/${encodeURIComponent(company)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  )
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `저장 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
 export function crossCompare(items) {
   const fd = new FormData()
   fd.append('items_json', JSON.stringify(items))

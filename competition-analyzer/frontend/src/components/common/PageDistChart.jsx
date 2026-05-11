@@ -1,4 +1,4 @@
-import { PAGE_TYPE_KR } from '../../constants'
+import { useMeta } from '../../hooks/useMeta'
 
 const COLORS = [
   '#63b3ed','#68d391','#f6ad55','#fc8181','#b794f4',
@@ -8,6 +8,7 @@ const COLORS = [
 ]
 
 export default function PageDistChart({ distribution, total, title }) {
+  const { pageTypeLabel } = useMeta()
   if (!distribution || !total) return null
   const entries = Object.entries(distribution).sort((a, b) => b[1] - a[1])
 
@@ -19,7 +20,7 @@ export default function PageDistChart({ distribution, total, title }) {
         return (
           <div key={type} style={{ display: 'flex', alignItems: 'center', marginBottom: 5, gap: 8 }}>
             <div style={{ width: 90, fontSize: 12, color: '#cbd5e0', textAlign: 'right', flexShrink: 0 }}>
-              {PAGE_TYPE_KR[type] || type}
+              {pageTypeLabel(type)}
             </div>
             <div style={{ flex: 1, background: '#2d3748', borderRadius: 4, height: 16, overflow: 'hidden' }}>
               <div style={{

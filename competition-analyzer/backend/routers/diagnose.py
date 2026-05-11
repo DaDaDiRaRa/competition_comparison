@@ -1,17 +1,41 @@
 import json
+import logging
 import shutil
 import tempfile
 import traceback
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
+
+def _user_error_msg(e: Exception) -> str:
+    msg = str(e)
+    if "502" in msg or "Bad Gateway" in msg:
+        return "AI 서버 일시 오류입니다. 잠시 후 다시 시도해주세요."
+    if "API" in msg or "api_key" in msg or "authentication" in msg.lower():
+        return "API 키 오류입니다. 설정 탭에서 API 키를 확인해주세요."
+    if "PDF" in msg or "fitz" in msg or "rasterize" in msg.lower():
+        return "PDF 처리 중 오류가 발생했습니다. 파일이 손상되지 않았는지 확인해주세요."
+    if "timeout" in msg.lower():
+        return "처리 시간이 초과됐습니다. PDF 페이지 수를 줄이거나 다시 시도해주세요."
+    if "memory" in msg.lower() or "MemoryError" in msg:
+        return "메모리 부족 오류입니다. PDF 파일 크기를 줄여서 다시 시도해주세요."
+    return f"처리 중 오류가 발생했습니다. 문제가 반복되면 관리자에게 문의해주세요. (상세: {msg[:120]})"
+
+from datetime import datetime
+
 from fastapi import APIRouter, File, Form, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from config import settings, FACILITY_TYPES
-from services.db_manager import load_pattern, load_submission
+from services.db_manager import (
+    load_pattern, load_submission,
+    save_diagnosis_report, get_diagnosis_report_path, list_diagnosis_reports,
+)
 from services.page_classifier import classify_all_pages
-from services.data_extractor import extract_pdf, merge_extracted_data
+from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
 from services.comparator import diagnose_submission
+from services.diagnosis_report_generator import generate_diagnosis_report
 from services.pattern_builder import build_pattern_from_submissions
 from services.utils import sse
 
@@ -62,6 +86,10 @@ async def run_diagnosis(
                 brief_data = merge_extracted_data(brief_cls, brief_exts)
                 brief_data["page_map"] = brief_cls
                 brief_data["total_pages"] = total_brief
+
+                yield sse({"type": "stage", "stage": "brief_reqs", "msg": "지침서 요구사항 분석 중"})
+                brief_data["_requirements"] = await extract_brief_requirements(brief_data, facility_type)
+
                 yield sse({"type": "done", "step": "brief", "total_pages": total_brief})
             else:
                 yield sse({"type": "info", "msg": "지침서 미제출 — 패턴 기반 진단만 수행"})
@@ -110,11 +138,24 @@ async def run_diagnosis(
                 "page_distribution": page_dist,
                 "brief_total_pages": total_brief,
                 "page_map": sub_cls,
+                "submission_quantitative": sub_data.get("_quantitative", {}),
             })
-            yield sse({"type": "complete", "result": diagnosis})
+
+            yield sse({"type": "stage", "stage": "report", "msg": "진단 리포트 생성 중"})
+            try:
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                slug = (competition_name or facility_type).replace(" ", "_")[:40]
+                report_filename = f"{ts}_{facility_type}_{slug}.html"
+                html = generate_diagnosis_report(diagnosis)
+                save_diagnosis_report(report_filename, html)
+            except Exception:
+                report_filename = None
+
+            yield sse({"type": "complete", "result": diagnosis, "report_filename": report_filename})
 
         except Exception as e:
-            yield sse({"type": "error", "message": str(e), "detail": traceback.format_exc()})
+            logger.error("Diagnose error: %s", traceback.format_exc())
+            yield sse({"type": "error", "message": _user_error_msg(e)})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
 
@@ -185,6 +226,10 @@ async def run_diagnosis_vs_projects(
                 brief_data = merge_extracted_data(brief_cls, brief_exts)
                 brief_data["page_map"] = brief_cls
                 brief_data["total_pages"] = total_brief
+
+                yield sse({"type": "stage", "stage": "brief_reqs", "msg": "지침서 요구사항 분석 중"})
+                brief_data["_requirements"] = await extract_brief_requirements(brief_data, facility_type)
+
                 yield sse({"type": "done", "step": "brief", "total_pages": total_brief})
 
             # --- SUBMISSION ---
@@ -231,17 +276,43 @@ async def run_diagnosis_vs_projects(
                 "page_distribution": page_dist,
                 "brief_total_pages": total_brief,
                 "page_map": sub_cls,
+                "submission_quantitative": sub_data.get("_quantitative", {}),
                 "reference_count": len(ref_subs),
                 "reference_items": [
                     {"competition_id": it["competition_id"], "company": it["company"]}
                     for it in ref_items
                 ],
             })
-            yield sse({"type": "complete", "result": diagnosis})
+
+            yield sse({"type": "stage", "stage": "report", "msg": "진단 리포트 생성 중"})
+            try:
+                ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+                slug = (competition_name or facility_type).replace(" ", "_")[:40]
+                report_filename = f"{ts}_{facility_type}_{slug}.html"
+                html = generate_diagnosis_report(diagnosis)
+                save_diagnosis_report(report_filename, html)
+            except Exception:
+                report_filename = None
+
+            yield sse({"type": "complete", "result": diagnosis, "report_filename": report_filename})
 
         except Exception as e:
-            yield sse({"type": "error", "message": str(e), "detail": traceback.format_exc()})
+            logger.error("Diagnose error: %s", traceback.format_exc())
+            yield sse({"type": "error", "message": _user_error_msg(e)})
         finally:
             shutil.rmtree(tmp_root, ignore_errors=True)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.get("/reports")
+def list_reports():
+    return list_diagnosis_reports()
+
+
+@router.get("/reports/{filename}")
+def get_report(filename: str):
+    path = get_diagnosis_report_path(filename)
+    if not path:
+        raise HTTPException(404, "리포트를 찾을 수 없습니다.")
+    return FileResponse(path, media_type="text/html")

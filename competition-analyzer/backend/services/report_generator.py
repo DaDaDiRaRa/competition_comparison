@@ -1,23 +1,6 @@
 import json
 import re
-from config import FACILITY_TYPES
-
-AXIS_LABELS_KO = {
-    "business_viability":      "사업성",
-    "member_benefit":          "조합원 혜택",
-    "product_competitiveness": "상품 경쟁력",
-    "site_planning":           "단지 계획",
-    "community":               "커뮤니티",
-    "design_brand":            "디자인·브랜드",
-    "constructability":        "시공성",
-    "firm_capability":         "회사 역량",
-}
-
-AXES = [
-    "business_viability", "member_benefit", "product_competitiveness",
-    "site_planning", "community", "design_brand",
-    "constructability", "firm_capability",
-]
+from config import facility_label, axes_for
 
 PALETTE = [
     '#7CB7E0',  # soft blue
@@ -29,17 +12,6 @@ PALETTE = [
     '#D4A574',  # soft caramel
     '#A8B5D0',  # soft slate-blue
 ]
-
-AXIS_LABEL_DASH = {
-    'business_viability':      ('사업성',          '₩'),
-    'member_benefit':          ('조합원 혜택',     '⊙'),
-    'product_competitiveness': ('상품 경쟁력',     '□'),
-    'site_planning':           ('단지 계획',       '⊞'),
-    'community':               ('커뮤니티',        '◎'),
-    'design_brand':            ('디자인·브랜드',   '◧'),
-    'constructability':        ('시공성',          '⚙'),
-    'firm_capability':         ('회사 역량',       '⊕'),
-}
 
 COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미충족', 'unclear': '불명'}
 
@@ -869,7 +841,10 @@ def _generate_dashboard_section(
     submissions: list,
     axes: list,
     section_num: int = 1,
+    axis_label_dash: dict | None = None,
 ) -> str:
+    if axis_label_dash is None:
+        axis_label_dash = {}
     companies = list(comp_subs.keys())
     n = len(companies)
     colors = {c: PALETTE[i % len(PALETTE)] for i, c in enumerate(companies)}
@@ -918,7 +893,7 @@ def _generate_dashboard_section(
     # Axis accordion rows
     axis_rows = ''
     for axis in axes:
-        label, icon = AXIS_LABEL_DASH.get(axis, (axis, '•'))
+        label, icon = axis_label_dash.get(axis, (axis, '•'))
         is_exp = (axis == 'business_viability')
         content_style = '' if is_exp else 'display:none'
         chevron_style = 'transform:rotate(180deg)' if is_exp else ''
@@ -1094,7 +1069,7 @@ def generate_comparison_report(
     year           = meta.get("year", "")  # legacy fallback for older projects
     client         = meta.get("client", "")
     location       = meta.get("location", "")
-    facility_label = FACILITY_TYPES.get(facility_type, facility_type)
+    facility_label_ = facility_label(facility_type)
     project_label  = project_number or (f"{year}년" if year else "")
 
     comp_subs        = comparison.get("submissions", {})
@@ -1102,10 +1077,16 @@ def generate_comparison_report(
     key_diff         = comparison.get("key_differentiators", [])
     winner_strengths = comparison.get("winner_strengths", [])
     loser_weaknesses = comparison.get("loser_weaknesses", [])
+    gap_analysis     = comparison.get("gap_analysis", {}) or {}
     winners          = [s["company"] for s in submissions if s.get("result") in ("win", "contracted")]
 
+    _axes_meta      = axes_for(facility_type)
+    _axis_list      = list(_axes_meta.keys())
+    _axis_labels_ko = {k: v["label_ko"] for k, v in _axes_meta.items()}
+    _axis_label_dash = {k: (v["label_ko"], v.get("icon", "•")) for k, v in _axes_meta.items()}
+
     company_list   = list(comp_subs.keys())
-    axes_with_data = [ax for ax in AXES if any(ax in comp_subs.get(c, {}) for c in company_list)]
+    axes_with_data = [ax for ax in _axis_list if any(ax in comp_subs.get(c, {}) for c in company_list)]
 
     # Section counter — used to number each main section
     sec_counter = [0]
@@ -1118,7 +1099,7 @@ def generate_comparison_report(
     <div class="hdr">
       <div class="hdr-badges">
         <span class="hdr-badge hdr-badge-primary">당선작 분석 리포트</span>
-        <span class="hdr-badge hdr-badge-facility">{facility_label}</span>
+        <span class="hdr-badge hdr-badge-facility">{facility_label_}</span>
       </div>
       <div class="hdr-title">{comp_name}</div>
       <div class="hdr-meta">
@@ -1138,6 +1119,7 @@ def generate_comparison_report(
         submissions=submissions,
         axes=axes_with_data,
         section_num=_next_n(),
+        axis_label_dash=_axis_label_dash,
     )
 
     # ── 참여 제안서 카드 ──────────────────────────────────
@@ -1176,8 +1158,8 @@ def generate_comparison_report(
     )
 
     rows = ""
-    for axis in AXES:
-        label = AXIS_LABELS_KO.get(axis, axis)
+    for axis in _axis_list:
+        label = _axis_labels_ko.get(axis, axis)
         cells = ""
         for company in company_list:
             ax         = comp_subs.get(company, {}).get(axis, {})
@@ -1237,6 +1219,38 @@ def generate_comparison_report(
         if ranking else ""
     )
 
+    # ── 블라인드 vs 실제 결과 정렬 분석 ──────────────────
+    gap_section = ""
+    if gap_analysis:
+        alignment    = gap_analysis.get("alignment", "unknown")
+        blind_top1   = gap_analysis.get("blind_top1") or "—"
+        actual_wins  = gap_analysis.get("actual_winners") or []
+        top1_match   = gap_analysis.get("top1_matches_winner", False)
+        gap_notes    = gap_analysis.get("notes", "")
+        align_color  = {"high": "#68d391", "partial": "#f6ad55", "low": "#fc8181"}.get(alignment, "#718096")
+        align_kr     = {"high": "일치도 높음", "partial": "부분 일치", "low": "낮은 일치", "unknown": "—"}.get(alignment, "—")
+        match_badge  = (
+            f'<span style="background:#1c4a2e;color:#68d391;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">✓ AI 1위 = 실제 당선</span>'
+            if top1_match
+            else f'<span style="background:#2d1515;color:#fc8181;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">⚠ AI 1위 ≠ 실제 당선</span>'
+        )
+        actual_str = " · ".join(actual_wins) if actual_wins else "—"
+        gap_section = f'''<div class="sec">{_sec_title(_next_n(), "블라인드 분석 vs 실제 결과")}
+<div style="background:#0d1117;border-left:4px solid {align_color};border-radius:8px;padding:14px 18px;margin-bottom:12px">
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <span style="font-size:13px;font-weight:700;color:{align_color}">정렬 상태: {align_kr}</span>
+    {match_badge}
+  </div>
+  <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px;font-size:13px">
+    <div><span style="color:#718096">AI 블라인드 1위:</span> <strong style="color:#e2e8f0">{blind_top1}</strong></div>
+    <div><span style="color:#718096">실제 당선:</span> <strong style="color:#e2e8f0">{actual_str}</strong></div>
+  </div>
+  {f'<div style="font-size:13px;color:#cbd5e0;line-height:1.6;margin-top:6px;padding-top:8px;border-top:1px solid #1a2535">{gap_notes}</div>' if gap_notes else ""}
+  <div style="font-size:11px;color:#4a5568;margin-top:8px;font-style:italic">
+    * 블라인드 분석: 결과 정보 없이 익명 채점 → 분석 결과를 사후 결과와 비교
+  </div>
+</div></div>'''
+
     # ── 주요 차별화 요소 ──────────────────────────────────
     diff_items  = "".join(f'<div class="diff-item">{d}</div>' for d in key_diff)
     diff_section = (
@@ -1261,14 +1275,14 @@ def generate_comparison_report(
     for winner in winners:
         wd         = comp_subs.get(winner, {})
         axis_items = ""
-        for axis in AXES:
+        for axis in _axis_list:
             ax        = wd.get(axis, {})
             strengths = ax.get("strengths", [])
             notes     = ax.get("notes", "")
             score     = ax.get("score")
             if not strengths and not notes:
                 continue
-            label     = AXIS_LABELS_KO.get(axis, axis)
+            label     = _axis_labels_ko.get(axis, axis)
             score_txt = f" ({float(score):.1f})" if score is not None else ""
             tags      = "".join(f'<span class="tag tag-strength">{t}</span>' for t in strengths)
             axis_items += (
@@ -1307,6 +1321,7 @@ def generate_comparison_report(
 {floor_matrix_section}
 {quant_table_section}
 {ranking_section}
+{gap_section}
 {diff_section}
 {ws_section}
 {lw_section}

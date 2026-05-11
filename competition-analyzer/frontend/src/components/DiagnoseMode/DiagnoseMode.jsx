@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   getFacilityTypes, runDiagnosePipeline, runDiagnoseVsProjects,
-  getPattern, getProjects,
+  getPattern, getProjects, getDiagnosisReportUrl,
 } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
@@ -49,6 +49,7 @@ export default function DiagnoseMode() {
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)
+  const [reportFilename, setReportFilename] = useState(null)
   // 진단 모드: 'pattern' (기본 — DB 패턴) | 'projects' (특정 공모 선택)
   const [refMode, setRefMode] = useState('pattern')
   const [allProjects, setAllProjects] = useState([])
@@ -85,6 +86,7 @@ export default function DiagnoseMode() {
     setRunning(true)
     setEvents([])
     setResult(null)
+    setReportFilename(null)
 
     const fd = new FormData()
     fd.append('facility_type', facilityType)
@@ -105,7 +107,10 @@ export default function DiagnoseMode() {
     try {
       for await (const ev of stream) {
         setEvents(prev => [...prev, ev])
-        if (ev.type === 'complete') setResult(ev.result)
+        if (ev.type === 'complete') {
+          setResult(ev.result)
+          if (ev.report_filename) setReportFilename(ev.report_filename)
+        }
         if (ev.type === 'error') break
       }
     } catch (e) {
@@ -265,7 +270,24 @@ export default function DiagnoseMode() {
         </div>
       )}
 
-      {result && <DiagnosisResult data={result} />}
+      {reportFilename && (
+        <div style={{ marginTop: 16, display: 'flex', gap: 10 }}>
+          <a
+            href={getDiagnosisReportUrl(reportFilename)}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-block', background: '#553c9a', color: '#fff',
+              borderRadius: 6, padding: '8px 20px', fontSize: 14, fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            진단 리포트 열기
+          </a>
+        </div>
+      )}
+
+      {result && <DiagnosisResult data={result} pattern={pattern} />}
     </div>
   )
 }

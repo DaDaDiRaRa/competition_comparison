@@ -12,11 +12,36 @@ data_extractor.py — PDF 페이지별 설계 데이터 추출
 
 import asyncio
 import base64
+import json
 from pathlib import Path
 
-from config import settings
+from config import settings, axes_keys_for
 from services.llm_client import call_messages
 from services.utils import ocr_page, parse_json_response, rasterize_pdf, rasterize_page_tiled, safe_encode_image
+
+_BRIEF_REQ_SYSTEM = (
+    "You are an architectural competition brief analyst. "
+    "Extract structured requirements from already-parsed competition brief data. "
+    "Respond ONLY in JSON. Use Korean for all descriptions."
+)
+
+_BRIEF_REQ_PROMPT_TEMPLATE = """\
+TASK: extract_brief_requirements
+AXES: {axes_str}
+
+BRIEF_DATA (already extracted from PDF):
+{brief_json}
+
+Map the brief's requirements/constraints to the competition axes.
+Extract evaluation criteria (배점표) if present.
+List any special design or technical requirements.
+
+OUTPUT_ONLY_JSON:
+{
+  "requirements": [{"axis": "<axis_key>", "description": "<Korean 30chars>", "weight_pct": null}],
+  "evaluation_criteria": [{"item": "<Korean>", "points": null}],
+  "special_requirements": ["<Korean 30chars>"]
+}"""
 
 # ── 시스템 프롬프트 ────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
@@ -597,6 +622,45 @@ async def extract_pdf(
 
 
 # ── 유틸리티 ──────────────────────────────────────────────────────────────────
+def _extract_brief_reqs_sync(brief_trimmed: dict, axes_str: str) -> dict:
+    prompt = (_BRIEF_REQ_PROMPT_TEMPLATE
+              .replace("{axes_str}", axes_str)
+              .replace("{brief_json}",
+                       json.dumps(brief_trimmed, ensure_ascii=False, separators=(",", ":"))))
+    try:
+        raw = call_messages(
+            model=settings.model_id_classify,
+            max_tokens=2000,
+            temperature=0,
+            system=_BRIEF_REQ_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return parse_json_response(raw)
+    except Exception:
+        return {"requirements": [], "evaluation_criteria": [], "special_requirements": []}
+
+
+async def extract_brief_requirements(brief_data: dict, facility_type: str = "") -> dict:
+    """지침서 추출 데이터에서 평가 요구사항을 구조화.
+
+    Returns:
+        {
+            "requirements": [{"axis": str, "description": str, "weight_pct": float|null}],
+            "evaluation_criteria": [{"item": str, "points": int|null}],
+            "special_requirements": [str]
+        }
+    """
+    relevant_keys = {
+        "area_table", "special_space", "technical", "_quantitative",
+        "circulation", "sustainability", "site_plan",
+    }
+    trimmed = {k: v for k, v in brief_data.items() if k in relevant_keys}
+    if not trimmed:
+        return {"requirements": [], "evaluation_criteria": [], "special_requirements": []}
+    axes_str = "|".join(axes_keys_for(facility_type))
+    return await asyncio.to_thread(_extract_brief_reqs_sync, trimmed, axes_str)
+
+
 def should_extract(page_type: str, priority_limit: int = 2) -> bool:
     cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
     return cfg["priority"] <= priority_limit

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { PAGE_TYPE_KR } from '../../constants'
+import { useMeta } from '../../hooks/useMeta'
 
 const STAGE_KR = {
   brief: '지침서 처리', brief_extract: '지침서 추출', submission: '제안서 처리',
@@ -7,25 +7,26 @@ const STAGE_KR = {
   load_patterns: '패턴 로드', diagnose: 'AI 진단', report: '리포트 생성',
 }
 
-function eventToText(ev) {
-  if (ev.type === 'stage') return `▶ ${ev.msg || STAGE_KR[ev.stage] || ev.stage}`
-  if (ev.type === 'progress') {
-    const typeLabel = ev.page_type ? ` [${PAGE_TYPE_KR[ev.page_type] || ev.page_type}]` : ''
-    const co = ev.company ? ` (${ev.company})` : ''
-    return `  ${ev.step}${co} ${ev.page}/${ev.total}${typeLabel}`
-  }
-  if (ev.type === 'done') return `✓ ${ev.step} 완료 (${ev.total_pages || ''} pages)`
-  if (ev.type === 'info') return `  패턴: ${ev.win_count}개 당선작 로드됨`
-  if (ev.type === 'complete') return '✅ 분석 완료'
-  if (ev.type === 'error') return `❌ 오류: ${ev.message}${ev.detail ? '\n' + ev.detail : ''}`
-  return JSON.stringify(ev)
-}
-
 export default function ProgressLog({ events }) {
+  const { pageTypeLabel } = useMeta()
   const ref = useRef()
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = ref.current.scrollHeight
   }, [events])
+
+  function eventToText(ev) {
+    if (ev.type === 'stage') return `▶ ${ev.msg || STAGE_KR[ev.stage] || ev.stage}`
+    if (ev.type === 'progress') {
+      const typeLabel = ev.page_type ? ` [${pageTypeLabel(ev.page_type)}]` : ''
+      const co = ev.company ? ` (${ev.company})` : ''
+      return `  ${ev.step}${co} ${ev.page}/${ev.total}${typeLabel}`
+    }
+    if (ev.type === 'done') return `✓ ${ev.step} 완료 (${ev.total_pages || ''} pages)`
+    if (ev.type === 'info') return `  패턴: ${ev.win_count}개 당선작 로드됨`
+    if (ev.type === 'complete') return '✅ 분석 완료'
+    if (ev.type === 'error') return `❌ 오류: ${ev.message}${ev.detail ? '\n' + ev.detail : ''}`
+    return JSON.stringify(ev)
+  }
 
   return (
     <div

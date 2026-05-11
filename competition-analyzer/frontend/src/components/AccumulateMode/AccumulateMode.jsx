@@ -148,7 +148,15 @@ export default function AccumulateMode() {
     <>
     <ProjectList />
     <div style={s.panel}>
-      <div style={s.title}>데이터 축적 모드</div>
+      <div style={s.title}>경쟁 공모 등록</div>
+      <div style={{ fontSize: 13, color: '#718096', lineHeight: 1.6, marginBottom: 20 }}>
+        <strong style={{ color: '#e2e8f0' }}>한 공모에 참여한 여러 회사의 제안서</strong>를 한꺼번에 등록합니다.<br />
+        PDF를 분석해 구조화된 데이터로 저장하며, <strong style={{ color: '#90cdf4' }}>비교분석·리포트</strong>는
+        저장 후 상단 목록의 "비교분석 실행" 버튼으로 별도 실행합니다.<br />
+        <span style={{ color: '#4a5568', fontSize: 12 }}>
+          * 우리 회사 단독 등록은 상단 "내 프로젝트 등록" 탭을 이용하세요.
+        </span>
+      </div>
 
       <div style={s.grid2}>
         <div style={s.group}>
@@ -220,7 +228,7 @@ export default function AccumulateMode() {
         onClick={canRun ? runPipeline : undefined}
         disabled={!canRun}
       >
-        {running ? '분석 중...' : '분석 시작'}
+        {running ? '추출 중...' : '데이터 추출 시작'}
       </button>
 
       {(events.length > 0) && (
@@ -232,11 +240,23 @@ export default function AccumulateMode() {
 
       {result && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-            <div style={s.sectionTitle}>추출 완료</div>
-            <span style={{ marginLeft: 12, fontSize: 12, color: '#68d391' }}>
-              저장된 프로젝트에서 비교분석을 실행하세요
-            </span>
+          <div style={{
+            background: '#0d1f17', border: '1px solid #276749', borderRadius: 10,
+            padding: '14px 18px', marginBottom: 20,
+            display: 'flex', alignItems: 'center', gap: 14,
+          }}>
+            <span style={{ fontSize: 22, color: '#68d391' }}>✓</span>
+            <div>
+              <div style={{ fontWeight: 700, color: '#68d391', fontSize: 14, marginBottom: 3 }}>
+                추출 완료 — 상단 목록에서 "비교분석 실행"을 눌러주세요
+              </div>
+              <div style={{ fontSize: 12, color: '#a0aec0' }}>
+                프로젝트가 상단 저장 목록에 추가됐습니다. 비교분석·리포트는 목록 카드의 버튼으로 별도 실행합니다.
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={s.sectionTitle}>추출 결과</div>
           </div>
           {result.submissions?.map(sub => (
             <div key={sub.company} style={s.subCard}>

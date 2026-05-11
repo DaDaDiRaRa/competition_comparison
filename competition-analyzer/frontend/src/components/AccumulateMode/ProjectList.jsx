@@ -2,14 +2,8 @@ import { useState, useEffect } from 'react'
 import { getProjects, rerunCompare, rerenderReport, getReportUrl, getSubmissionReportUrl, addSubmission } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import DropZone from '../common/DropZone'
-
-const FACILITY_KR = {
-  public: '공공청사', residential: '공동주택', office: '업무시설',
-  culture: '문화시설', education: '교육시설', medical: '의료시설',
-  sports: '체육시설', religious: '종교시설', commercial: '상업시설',
-  industrial: '산업시설', mixed: '복합시설', other: '기타',
-  reconstruction: '재건축사업', alternative: '대안설계',
-}
+import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
+import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_OPTIONS = [
   { value: 'win', label: '당선', color: '#d4af37', bg: '#2d2410' },
@@ -60,6 +54,16 @@ const s = {
     background: '#1a2e40', color: '#90cdf4', border: '1px solid #2c5282', borderRadius: 6,
     padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
+  },
+  editBtn: {
+    background: '#2d3748', color: '#a0aec0', border: '1px solid #4a5568', borderRadius: 6,
+    padding: '3px 9px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+    textDecoration: 'none', display: 'inline-block',
+  },
+  staleBanner: {
+    background: '#2d2410', border: '1px solid #744210', borderRadius: 6,
+    padding: '7px 12px', fontSize: 12, color: '#f6ad55', marginTop: 8,
+    display: 'flex', alignItems: 'center', gap: 8,
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
   logWrap: { marginTop: 10 },
@@ -176,12 +180,15 @@ function AddSubmissionForm({ project, onDone, onCancel }) {
 }
 
 function ProjectCard({ project, onRerunDone }) {
+  const { facilityLabel } = useMeta()
   const [running, setRunning] = useState(false)
   const [rerendering, setRerendering] = useState(false)
   const [rerenderMsg, setRerenderMsg] = useState('')
   const [events, setEvents] = useState([])
   const [done, setDone] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [editingCompany, setEditingCompany] = useState(null)
+  const [comparisonStale, setComparisonStale] = useState(false)
 
   const hasReport = project.report_available
 
@@ -193,7 +200,11 @@ function ProjectCard({ project, onRerunDone }) {
     try {
       for await (const ev of rerunCompare(project.facility_type, project.competition_id)) {
         setEvents(prev => [...prev, { ...ev, _timestamp: startTime }])
-        if (ev.type === 'complete') { setDone(true); onRerunDone?.() }
+        if (ev.type === 'complete') {
+          setDone(true)
+          setComparisonStale(false)  // 비교분석 재실행 완료 → stale 해제
+          onRerunDone?.()
+        }
         if (ev.type === 'error') break
       }
     } catch (e) {
@@ -224,7 +235,7 @@ function ProjectCard({ project, onRerunDone }) {
   return (
     <div style={s.card}>
       <div style={s.cardHeader}>
-        <span style={s.badge}>{FACILITY_KR[project.facility_type] || project.facility_type}</span>
+        <span style={s.badge}>{facilityLabel(project.facility_type)}</span>
         <span style={s.cardName}>{project.competition_name || project.competition_id}</span>
       </div>
       <div style={s.meta}>
@@ -252,8 +263,27 @@ function ProjectCard({ project, onRerunDone }) {
                   리포트
                 </a>
               )}
+              <button
+                style={s.editBtn}
+                onClick={() => setEditingCompany(sub.company)}
+                title="추출 결과 편집"
+              >
+                편집
+              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {comparisonStale && (
+        <div style={s.staleBanner}>
+          ⚠ 추출 데이터가 수정됐습니다. 비교 리포트 반영을 위해 "비교분석 실행"을 눌러주세요.
+          <button
+            style={{ ...s.rerunBtn, padding: '4px 10px', fontSize: 11, marginLeft: 'auto' }}
+            onClick={running ? undefined : handleRerun}
+          >
+            비교분석 실행
+          </button>
         </div>
       )}
 
@@ -313,11 +343,24 @@ function ProjectCard({ project, onRerunDone }) {
           <ProgressLog events={events} />
         </div>
       )}
+
+      {editingCompany && (
+        <SubmissionEditor
+          project={project}
+          company={editingCompany}
+          onClose={() => setEditingCompany(null)}
+          onSaved={({ comparison_stale }) => {
+            if (comparison_stale) setComparisonStale(true)
+            onRerunDone?.()
+          }}
+        />
+      )}
     </div>
   )
 }
 
 export default function ProjectList() {
+  const { facilityLabel } = useMeta()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedType, setSelectedType] = useState(null)
@@ -347,7 +390,42 @@ export default function ProjectList() {
       {loading
         ? <div style={s.empty}>로딩 중...</div>
         : projects.length === 0
-          ? <div style={s.empty}>저장된 프로젝트가 없습니다.</div>
+          ? (
+            <div style={{ padding: '24px 0' }}>
+              <div style={{ fontSize: 13, color: '#718096', textAlign: 'center', marginBottom: 20 }}>
+                아직 등록된 프로젝트가 없습니다.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { step: '1', icon: '📁', title: '내 프로젝트 등록 탭', desc: '우리 회사가 과거에 제출한 제안서를 하나씩 등록합니다. 당선/낙선 결과를 함께 입력하면 자동으로 패턴 DB에 반영됩니다.' },
+                  { step: '2', icon: '🗄', title: '경쟁 공모 등록 탭', desc: '한 공모에 참여한 여러 회사의 제안서를 한꺼번에 등록하고, 당선작과 낙선작을 나란히 비교 분석합니다.' },
+                  { step: '3', icon: '🔍', title: '제안서 진단 탭', desc: '새로 작성 중인 제안서를 올리면, 과거 당선 패턴과 비교해 잘된 점·부족한 점·개선 방향을 알려줍니다.' },
+                ].map(({ step, icon, title, desc }) => (
+                  <div key={step} style={{
+                    background: '#111827', border: '1px solid #2d3748',
+                    borderRadius: 8, padding: '14px 16px',
+                    display: 'flex', gap: 14, alignItems: 'flex-start',
+                  }}>
+                    <div style={{
+                      fontSize: 22, flexShrink: 0, width: 36, height: 36,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>{icon}</div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#90cdf4', marginBottom: 4 }}>
+                        <span style={{
+                          display: 'inline-block', width: 18, height: 18, borderRadius: '50%',
+                          background: '#2b6cb0', color: '#fff', fontSize: 10, fontWeight: 700,
+                          textAlign: 'center', lineHeight: '18px', marginRight: 6,
+                        }}>{step}</span>
+                        {title}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#718096', lineHeight: 1.6 }}>{desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
           : <>
               {/* 시설 유형 탭 */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -362,7 +440,7 @@ export default function ProjectList() {
                       color: ft === activeType ? '#0d1117' : '#a0aec0',
                     }}
                   >
-                    {FACILITY_KR[ft] || ft}
+                    {facilityLabel(ft)}
                     <span style={{ marginLeft: 5, opacity: 0.7 }}>
                       {projects.filter(p => p.facility_type === ft).length}
                     </span>

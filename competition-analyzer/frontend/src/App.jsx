@@ -2,13 +2,16 @@ import { useState } from 'react'
 import AccumulateMode from './components/AccumulateMode/AccumulateMode'
 import CrossCompareMode from './components/CrossCompare/CrossCompareMode'
 import DiagnoseMode from './components/DiagnoseMode/DiagnoseMode'
+import MyProjectMode from './components/MyProjectMode/MyProjectMode'
 import SettingsPanel from './components/Settings/SettingsPanel'
 import ApiKeyGate from './components/common/ApiKeyGate'
+import { MetaProvider } from './hooks/useMeta'
 
 const TABS = [
-  { id: 'accumulate', label: '데이터 축적', icon: '🗄' },
+  { id: 'myproject', label: '내 프로젝트 등록', icon: '📁' },
+  { id: 'accumulate', label: '경쟁 공모 등록', icon: '🗄' },
   { id: 'crosscompare', label: '교차 비교', icon: '⚖' },
-  { id: 'diagnose', label: '신규 진단', icon: '🔍' },
+  { id: 'diagnose', label: '제안서 진단', icon: '🔍' },
   { id: 'settings', label: '설정', icon: '⚙' },
 ]
 
@@ -36,9 +39,10 @@ const s = {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('accumulate')
+  const [activeTab, setActiveTab] = useState('myproject')
 
   return (
+    <MetaProvider>
     <ApiKeyGate>
     <div style={s.app}>
       <header style={s.header}>
@@ -59,6 +63,7 @@ export default function App() {
       </header>
 
       <main style={s.content}>
+        {activeTab === 'myproject' && <MyProjectMode />}
         {activeTab === 'accumulate' && <AccumulateMode />}
         {activeTab === 'crosscompare' && <CrossCompareMode />}
         {activeTab === 'diagnose' && <DiagnoseMode />}
@@ -66,5 +71,6 @@ export default function App() {
       </main>
     </div>
     </ApiKeyGate>
+    </MetaProvider>
   )
 }

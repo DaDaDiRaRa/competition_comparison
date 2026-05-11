@@ -1,7 +1,11 @@
+import json
 import statistics
 from collections import Counter
 
-from services.db_manager import get_winning_submissions, save_pattern
+from config import settings
+from services.db_manager import get_winning_submissions, get_losing_submissions, save_pattern, list_projects, load_comparison
+from services.llm_client import call_messages
+from services.utils import parse_json_response
 
 
 def _mean_std(values: list[float]) -> dict:
@@ -76,6 +80,74 @@ def _build_mass_type_dist(submissions: list[dict]) -> dict:
     return {k: round(v / total, 2) for k, v in counter.items()}
 
 
+_QUALITATIVE_SYSTEM = (
+    "You are an architectural competition analyst. "
+    "Summarize recurring patterns from multiple past competitions. "
+    "Respond ONLY in JSON. Use Korean for all text fields."
+)
+
+_QUALITATIVE_PROMPT_TEMPLATE = """\
+TASK: summarize_qualitative_patterns
+FACILITY_TYPE: {facility_type}
+N_COMPETITIONS: {n}
+
+RAW_INSIGHTS (from {n} past competitions):
+{insights_json}
+
+Identify the TOP-5 recurring patterns in each category.
+Be specific and actionable (~30 chars each in Korean).
+
+OUTPUT_ONLY_JSON:
+{
+  "winner_patterns": ["<top_5_recurring_winner_strengths>"],
+  "loser_patterns": ["<top_5_recurring_loser_weaknesses>"],
+  "key_differentiators": ["<top_5_factors_separating_winners>"]
+}"""
+
+
+def _collect_comparison_insights(facility_type: str) -> list[dict]:
+    """facility_type의 모든 _comparison.json에서 qualitative 인사이트를 수집."""
+    insights = []
+    for proj in list_projects(facility_type):
+        comp_id = proj.get("competition_id", "")
+        if not comp_id:
+            continue
+        comp = load_comparison(facility_type, comp_id)
+        if not comp:
+            continue
+        entry = {
+            "competition_name": proj.get("competition_name", comp_id),
+            "winner_strengths": comp.get("winner_strengths", []),
+            "loser_weaknesses": comp.get("loser_weaknesses", []),
+            "key_differentiators": comp.get("key_differentiators", []),
+        }
+        if entry["winner_strengths"] or entry["loser_weaknesses"]:
+            insights.append(entry)
+    return insights
+
+
+def _summarize_qualitative_insights(facility_type: str, raw_insights: list[dict]) -> dict:
+    """과거 비교분석 결과를 LLM으로 요약해 재사용 가능한 패턴으로 압축."""
+    if not raw_insights:
+        return {"winner_patterns": [], "loser_patterns": [], "key_differentiators": []}
+    prompt = (_QUALITATIVE_PROMPT_TEMPLATE
+              .replace("{facility_type}", facility_type)
+              .replace("{n}", str(len(raw_insights)))
+              .replace("{insights_json}",
+                       json.dumps(raw_insights, ensure_ascii=False, separators=(",", ":"))))
+    try:
+        raw = call_messages(
+            model=settings.model_id_classify,
+            max_tokens=2000,
+            temperature=0,
+            system=_QUALITATIVE_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return parse_json_response(raw)
+    except Exception:
+        return {"winner_patterns": [], "loser_patterns": [], "key_differentiators": []}
+
+
 def build_pattern_from_submissions(facility_type: str, submissions: list[dict]) -> dict:
     """제출물 리스트(승자/특정 선택 모두)로부터 패턴 통계 생성. 디스크 저장 안 함."""
     if not submissions:
@@ -94,5 +166,20 @@ def build_pattern(facility_type: str) -> dict:
     winners = get_winning_submissions(facility_type)
     pattern = build_pattern_from_submissions(facility_type, winners)
     if winners:
+        raw_insights = _collect_comparison_insights(facility_type)
+        if raw_insights:
+            pattern["qualitative_insights"] = _summarize_qualitative_insights(
+                facility_type, raw_insights
+            )
+
+        losers = get_losing_submissions(facility_type)
+        if losers:
+            pattern["loser_stats"] = {
+                "lose_count": len(losers),
+                "page_distribution": _build_page_distribution_stats(losers),
+                "quantitative": _build_quant_stats(losers),
+                "concept_keywords": _build_keyword_freq(losers),
+            }
+
         save_pattern(facility_type, pattern)
     return pattern

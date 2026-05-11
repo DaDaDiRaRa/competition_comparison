@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getSettings, updateSettings, setApiKey, clearApiKey } from '../../api/client'
+import PatternViewer from './PatternViewer'
 
 const s = {
   panel: { background: '#1a1f2e', borderRadius: 12, padding: 24 },
@@ -152,6 +153,8 @@ export default function SettingsPanel() {
 
       <button style={s.btnPrimary} onClick={saveModel}>모델 설정 저장</button>
       {saved && <div style={s.success}>✓ 저장 완료</div>}
+
+      <PatternViewer />
     </div>
   )
 }

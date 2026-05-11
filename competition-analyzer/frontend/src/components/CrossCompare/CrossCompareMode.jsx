@@ -2,14 +2,7 @@ import { useState, useEffect } from 'react'
 import { getProjects, crossCompare, getCrossCompareReportUrl, listCrossCompareReports } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
-
-const FACILITY_KR = {
-  public: '공공청사', residential: '공동주택', office: '업무시설',
-  culture: '문화시설', education: '교육시설', medical: '의료시설',
-  sports: '체육시설', religious: '종교시설', commercial: '상업시설',
-  industrial: '산업시설', mixed: '복합시설', other: '기타',
-  reconstruction: '재건축사업', alternative: '대안설계',
-}
+import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_COLOR = {
   win: { color: '#d4af37', bg: '#2d2410', label: '당선' },
@@ -121,13 +114,14 @@ function SelectionBar({ selected, onRemove, onClear, onRun, running }) {
 }
 
 function ProjectCard({ project, selected, onToggle }) {
+  const { facilityLabel } = useMeta()
   const [open, setOpen] = useState(false)
   const subs = project.submissions || []
 
   return (
     <div style={s.card}>
       <div style={s.cardHeader} onClick={() => setOpen(v => !v)}>
-        <span style={s.badge}>{FACILITY_KR[project.facility_type] || project.facility_type}</span>
+        <span style={s.badge}>{facilityLabel(project.facility_type)}</span>
         <span style={s.cardName}>{project.competition_name || project.competition_id}</span>
         <span style={s.projectMeta}>{project.year}년 · 제안서 {subs.length}개</span>
         <span style={s.chevron(open)}>▼</span>
@@ -164,6 +158,7 @@ function ProjectCard({ project, selected, onToggle }) {
 }
 
 export default function CrossCompareMode() {
+  const { facilityLabel } = useMeta()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeType, setActiveType] = useState(null)
@@ -236,7 +231,7 @@ export default function CrossCompareMode() {
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16, marginTop: 16 }}>
               {facilityTypes.map(ft => (
                 <button key={ft} style={s.typeTab(ft === currentType)} onClick={() => setActiveType(ft)}>
-                  {FACILITY_KR[ft] || ft}
+                  {facilityLabel(ft)}
                   <span style={{ marginLeft: 5, opacity: 0.7 }}>
                     {projects.filter(p => p.facility_type === ft).length}
                   </span>
