@@ -13,7 +13,6 @@ Competition Analyzer is a full-stack application for analyzing architectural com
 - AI: Anthropic Claude (claude-sonnet-4-6) via Anthropic API
 - PDF Processing: PyMuPDF (fitz) — primary rasterizer in `services/utils.py`
 - Database: Custom JSON-based storage
-- Desktop: pywebview (native window) + pystray (tray icon) via `launcher.py`
 
 ## Architecture
 
@@ -59,13 +58,6 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
 - `services/submission_report_generator.py` - **개별 제출물 HTML 리포트 생성** (LLM 호출 없음, 순수 Python 렌더링). `generate_submission_report(sub_doc: dict) -> str`. 재건축 우선 섹션(사업성·세대수 증가·조망·단위세대·펜트하우스·단지계획·커뮤니티·디자인·시공계획·회사역량) + 일반 섹션(표지·컨셉·정량·평면·배치·단면·입면·지속가능성·기술·페이지 차트).
 - `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser
 - `services/pdf_rasterizer.py` - Legacy fallback rasterizer using pdftoppm/pdf2image (not used by default)
-
-**Desktop App Files (PyInstaller 빌드용):**
-
-- `launcher.py` - pywebview 네이티브 윈도우 + pystray 트레이 아이콘으로 FastAPI 서버를 임베드해서 실행. 세션 종료 시 API 키 메모리에서 삭제.
-- `updater.py` - GitHub Releases에서 최신 버전 체크 및 자동 업데이트
-- `Competition-Analyzer.spec` - PyInstaller onefile 빌드 스펙
-- `build.ps1` (in `competition-analyzer/`) - 프론트엔드 빌드 → PyInstaller → GitHub Release 자동화
 
 **Configuration:**
 
@@ -118,8 +110,6 @@ Located in `competition-analyzer/frontend/`, the app has three main tabs:
 
 ### Running the Application
 
-**Dev mode (browser):**
-
 1. **Backend** (terminal 1)
 
    ```powershell
@@ -141,30 +131,13 @@ Located in `competition-analyzer/frontend/`, the app has three main tabs:
    - Dev server runs at `http://localhost:5173`
    - Proxies `/api/*` to backend at `http://localhost:8000`
 
-**Desktop app mode (pywebview):**
-
-```powershell
-cd competition-analyzer/backend
-..\venv\Scripts\python.exe launcher.py
-```
-
-### Building Desktop App (.exe)
-
-```powershell
-cd competition-analyzer
-.\build.ps1              # 빌드만
-.\build.ps1 -Release v1.0.0  # 빌드 + GitHub Release 게시
-```
-
-Output: `competition-analyzer/backend/dist/Competition-Analyzer.exe`
-
 ### Testing Backend Changes
 
 The backend uses form data multipart uploads for:
 
 - PDF files (brief_pdf — optional, submission_pdfs)
 - JSON strings (submissions_json)
-- Form fields: `facility_type`, `competition_name`, `year` (필수), `client`, `location` (선택, 빈 문자열 허용)
+- Form fields: `facility_type`, `competition_name`, `project_number` (필수), `client`, `location` (선택, 빈 문자열 허용)
 
 Test with curl or Postman by uploading files to:
 
@@ -215,7 +188,7 @@ Test with curl or Postman by uploading files to:
 }
 ```
 
-- `anthropic_api_key`는 데스크톱 앱에서는 세션 전용(메모리만, 재시작 시 초기화). dev 모드에서는 파일에 저장됨.
+- `anthropic_api_key`는 메모리에만 보관 — `app_settings.json`에 저장되지 않음(서버 재시작 시 초기화). `config.py::AppSettings.set_api_key()` 호출만 가능.
 - **Environment fallback:** `ANTHROPIC_API_KEY` env var
 
 ## Important Notes
@@ -233,12 +206,16 @@ Test with curl or Postman by uploading files to:
 - **Page Types:** 27 classification categories — 일반 20개(`COVER`, `TOC_HERO`, `CONCEPT`, `FLOOR_PLAN`, `SECTION`, `ELEVATION`, `SITE_PLAN`, `RENDERING_EXT`, `RENDERING_INT`, `SPECIAL_SPACE`, `SITE_CONTEXT`, `LANDSCAPE`, `CIRCULATION`, `HEALTH_CENTER`, `TECHNICAL`, `AREA_TABLE`, `SUSTAINABILITY`, `UNIT_PLAN`, `INCENTIVE_TABLE`, `BRANDING`) + 재건축 전용 7개(`BUSINESS_VIABILITY`, `AREA_INCREASE`, `VIEW_ANALYSIS`, `COMMUNITY_PROGRAM`, `COMPANY_PORTFOLIO`, `CONSTRUCTION_PLAN`, `UNIT_PLAN_PENTHOUSE`)
 - **Comparison Axes:** 8 dimensions (재건축 중심 재편) — `business_viability`(사업성), `member_benefit`(조합원 혜택), `product_competitiveness`(상품 경쟁력), `site_planning`(단지 계획), `community`(커뮤니티), `design_brand`(디자인·브랜드), `constructability`(시공성), `firm_capability`(회사 역량). `config.py::COMPARISON_AXES` + `comparator.py::COMPARE_PROMPT_TEMPLATE`/`DIAGNOSE_PROMPT_TEMPLATE` + `report_generator.py::AXES`/`AXIS_LABELS_KO`/`AXIS_LABEL_DASH` 4개 파일이 동기화되어야 함.
 - **Optional Form Fields:** `client`, `location`은 백엔드에서 `Form("")`로 선언되어 빈 문자열 허용. 프론트엔드 검증도 옵션 처리.
+- **Project Number & Folder Naming:** 폴더명 = `{project_number}_{slugified_competition_name}` — `make_competition_id(project_number, name)` 생성. 이전 `year` 필드는 제거되고 `project_number`(문자열, 예: "26-014")로 대체됨. `_meta.json`에 `project_number` 저장. 구 데이터(`year` 필드만 있는 폴더)는 그대로 읽히고 표시 시 폴백 처리 — ProjectList는 `project_number → year → 없음`, `report_generator.py`는 `project_label = project_number or f"{year}년"`. 신규 프로젝트는 무조건 `project_number` 필수. 프론트 입력: `AccumulateMode.jsx`·`MyProjectMode.jsx` 둘 다 "프로젝트번호" + "프로젝트명" 입력란 사용.
 - **HTML Comparison Report:** Generated at end of compare pipeline using existing comparison JSON — no extra Claude API calls. 발표/PPT 대용 비주얼: 다크 톤(#1a2138 베이스) + 골드 액센트(#d4af37) + 파스텔 카테고리 컬러. 자동 섹션 넘버링(01~10, 데이터 없는 섹션은 스킵·카운터 안 올라감): 01=비교 분석 대시보드(토글 아코디언, 기본 펼침 축 `business_viability`) → 02=참여 제안서 카드 → 03=8축 비교표 → 04=층별 프로그램 매트릭스 → 05=정량 데이터 비교표 → 06=종합 순위 → 07~10=차별화·당선·낙선·강점 분석. 모든 회사 카드는 `PALETTE`(8개 톤다운 색상) 기반 컬러닷 + `A안/B안/...` 라벨로 식별. 당선작은 골드 강조.
 - **Report Design Tokens:** `report_generator.py::_CSS`의 `:root` 블록에서 26개 CSS 변수로 통합 관리 — surfaces(`--bg-base/elevated/card/deep`), borders, text 4단계, accents(blue/gold/mint/coral), tag palette, matrix categories(7개 파스텔). 색상 변경은 `:root`만 수정하면 전 컴포넌트 일괄 반영.
 - **Floor Program Matrix:** `_render_floor_matrix(submissions, section_num)` — 추출 프롬프트 변경 없이 기존 `floor_plan[].floor_level` + `main_programs[]` 활용. `_normalize_floor()`로 자유텍스트 층 표기를 정규화(B5~ROOF, "지하 N층"·"NF"·"옥상"·"PH" 매핑). `_categorize_program()`이 키워드 우선순위 매칭으로 7개 카테고리(residence/public/culture/commerce/office/core/other) 자동 분류 → 셀 배경 파스텔. `_has_floor_plan_data()`가 False면 섹션 자체 미렌더링.
 - **Quantitative Comparison Table:** `_render_quant_table(submissions, section_num)` — `_QUANT_FIELDS` 8개(대지·건축·연면적·건폐율·용적률·층수·주차) 횡 비교. 단위 자동 표시(㎡/%/층/대), 모든 회사가 비어있는 행은 자동 생략. `_calc_recommended()`가 권장 범위를 **당선작 기준 min~max**로 계산(당선작 없으면 전체 출품작). 단일값이면 단일 표시. 권장 범위 컬럼은 골드 강조.
 - **Print/PPT Mode:** `@media print` + `@page A4 landscape` 적용. 인쇄 시 (1) 다크 톤·색상 보존(`print-color-adjust: exact`), (2) 모든 토글 아코디언 강제 펼침(`db-axis-content { display: block !important }`), (3) 필터 바·체브론 숨김, (4) 섹션·행 단위 `page-break-inside: avoid`, (5) 표 헤더 페이지 넘어가도 자동 반복(`display: table-header-group`). Ctrl+P → PDF 저장으로 발표 자료 추출 가능.
-- **Re-rendering Existing Reports:** 디스크에 저장된 기존 `_report.html`은 옛 디자인 그대로. 새 디자인으로 덮어쓰려면 ProjectList의 "비교분석 실행" 버튼(`/api/accumulate/projects/{ft}/{cid}/rerun-compare`) 호출 — 단 비교 분석 LLM이 다시 돌기 때문에 토큰 비용 발생. 비교 결과는 그대로 두고 HTML만 재렌더링하는 별도 엔드포인트는 현재 미구현.
+- **Re-rendering Existing Reports:** 두 가지 방법:
+  - **`POST /api/accumulate/projects/{ft}/{cid}/rerender-report`** — LLM 호출 없음·토큰 0. 기존 `_comparison.json` + `submissions/*.json` 그대로 사용해 HTML만 재생성(메인 리포트 + 모든 개별 제출물 리포트). 디자인/템플릿 변경 후 일괄 반영용. `db_manager.py::load_comparison()` + `accumulate.py::rerender_report()`. JSON 응답(SSE 아님). 프론트 ProjectList 카드의 "리포트만 재생성" 버튼이 이 엔드포인트 호출, `client.js::rerenderReport()`.
+  - **`POST /api/accumulate/projects/{ft}/{cid}/rerun-compare`** — 비교분석 LLM 다시 실행(토큰 비용 발생). 비교 결과 자체를 갱신하고 싶을 때만 사용. ProjectList의 "비교분석 실행" 버튼.
+  - 사전 조건: 두 엔드포인트 모두 기존 추출 데이터(`submissions/*.json`)가 있어야 동작. rerender는 추가로 `_comparison.json`이 있어야 함(없으면 400).
 - **Report Generation Rule:** `report_generator.py`와 `submission_report_generator.py` 모두 Claude API 호출 금지. 기존 데이터를 HTML로 렌더링만.
 - **Prompt Templating Rule:** `comparator.py` prompt templates use `.replace("{key}", value)` instead of `.format(key=value)` — the JSON schema examples in prompts contain literal braces that would cause `KeyError` with `.format()`.
 - **ProgressLog Events:** All SSE events passed to `ProgressLog` must include `_timestamp` (ms since epoch, set at pipeline start) for elapsed time display. The component uses `Date.now() - events[0]._timestamp` for the `+Ns` counter on the current item.

@@ -1090,10 +1090,12 @@ def generate_comparison_report(
 ) -> str:
     comp_name      = meta.get("competition_name", "")
     facility_type  = meta.get("facility_type", "")
-    year           = meta.get("year", "")
+    project_number = meta.get("project_number", "")
+    year           = meta.get("year", "")  # legacy fallback for older projects
     client         = meta.get("client", "")
     location       = meta.get("location", "")
     facility_label = FACILITY_TYPES.get(facility_type, facility_type)
+    project_label  = project_number or (f"{year}년" if year else "")
 
     comp_subs        = comparison.get("submissions", {})
     ranking          = comparison.get("ranking", [])
@@ -1120,7 +1122,7 @@ def generate_comparison_report(
       </div>
       <div class="hdr-title">{comp_name}</div>
       <div class="hdr-meta">
-        <span><strong>{year}년</strong></span>
+        {f'<span>프로젝트번호 <strong>{project_label}</strong></span>' if project_label else ''}
         <span>발주처 <strong>{client}</strong></span>
         <span>위치 <strong>{location}</strong></span>
         <span>참여 제안서 <strong>{len(submissions)}개</strong></span>

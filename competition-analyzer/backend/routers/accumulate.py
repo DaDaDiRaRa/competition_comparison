@@ -60,14 +60,14 @@ def get_project(facility_type: str, competition_id: str):
 async def create_project(
     competition_name: str = Form(...),
     facility_type: str = Form(...),
-    year: int = Form(...),
+    project_number: str = Form(...),
     client: str = Form(""),
     location: str = Form(""),
 ):
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
-    cid = make_competition_id(year, competition_name)
-    save_project_meta(cid, facility_type, competition_name, year, client, location)
+    cid = make_competition_id(project_number, competition_name)
+    save_project_meta(cid, facility_type, competition_name, project_number, client, location)
     return {"ok": True, "competition_id": cid}
 
 
@@ -300,7 +300,7 @@ async def rerender_report(facility_type: str, competition_id: str):
 async def run_pipeline(
     competition_name: str = Form(...),
     facility_type: str = Form(...),
-    year: int = Form(...),
+    project_number: str = Form(...),
     client: str = Form(""),
     location: str = Form(""),
     brief_pdf: bytes | None = File(None),
@@ -328,8 +328,8 @@ async def run_pipeline(
         # _timestamp: 파이프라인 시작 시각(ms). 이후 모든 SSE 이벤트에 포함.
         ts = int(time.time() * 1000)
 
-        cid = make_competition_id(year, competition_name)
-        save_project_meta(cid, facility_type, competition_name, year, client, location)
+        cid = make_competition_id(project_number, competition_name)
+        save_project_meta(cid, facility_type, competition_name, project_number, client, location)
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_run_"))
 
         try:
@@ -456,7 +456,7 @@ async def run_pipeline(
 async def run_single_pipeline(
     competition_name: str = Form(...),
     facility_type: str = Form(...),
-    year: int = Form(...),
+    project_number: str = Form(...),
     client: str = Form(""),
     location: str = Form(""),
     company: str = Form(...),
@@ -471,8 +471,8 @@ async def run_single_pipeline(
 
     async def event_stream():
         ts = int(time.time() * 1000)
-        cid = make_competition_id(year, competition_name)
-        save_project_meta(cid, facility_type, competition_name, year, client, location)
+        cid = make_competition_id(project_number, competition_name)
+        save_project_meta(cid, facility_type, competition_name, project_number, client, location)
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_single_"))
 
         try:

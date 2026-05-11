@@ -52,8 +52,9 @@ def init_db():
         })
 
 
-def make_competition_id(year: int, name: str) -> str:
-    return f"{year}_{_slugify(name)}"
+def make_competition_id(project_number: str, name: str) -> str:
+    pn = _slugify(str(project_number))
+    return f"{pn}_{_slugify(name)}"
 
 
 def get_competition_dir(facility_type: str, competition_id: str) -> Path:
@@ -64,7 +65,7 @@ def save_project_meta(
     competition_id: str,
     facility_type: str,
     competition_name: str,
-    year: int,
+    project_number: str,
     client: str,
     location: str,
 ) -> Path:
@@ -76,7 +77,7 @@ def save_project_meta(
         "competition_id": competition_id,
         "competition_name": competition_name,
         "facility_type": facility_type,
-        "year": year,
+        "project_number": project_number,
         "client": client,
         "location": location,
         "created_at": datetime.now().isoformat(),

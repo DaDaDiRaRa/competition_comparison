@@ -228,7 +228,10 @@ function ProjectCard({ project, onRerunDone }) {
         <span style={s.cardName}>{project.competition_name || project.competition_id}</span>
       </div>
       <div style={s.meta}>
-        {project.year}년 · {project.client || '-'} · 제안서 {subs.length}개 (당선 {winCount}개)
+        {project.project_number
+          ? `${project.project_number} · `
+          : (project.year ? `${project.year}년 · ` : '')}
+        {project.client || '-'} · 제안서 {subs.length}개 (당선 {winCount}개)
       </div>
 
       {subs.length > 0 && (

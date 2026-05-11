@@ -169,7 +169,7 @@ export default function MyProjectMode() {
   const [facilityTypes, setFacilityTypes] = useState({})
   const [form, setForm] = useState({
     competition_name: '', facility_type: 'public',
-    year: new Date().getFullYear(), client: '', location: '',
+    project_number: '', client: '', location: '',
     company: '',
   })
   const [resultType, setResultType] = useState('win')
@@ -183,7 +183,8 @@ export default function MyProjectMode() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const canRun = form.competition_name && form.company && submissionFile && !running
+  const canRun = form.competition_name && form.project_number
+    && form.company && submissionFile && !running
 
   const run = async () => {
     setRunning(true)
@@ -193,7 +194,7 @@ export default function MyProjectMode() {
     const fd = new FormData()
     fd.append('competition_name', form.competition_name)
     fd.append('facility_type', form.facility_type)
-    fd.append('year', form.year)
+    fd.append('project_number', form.project_number)
     fd.append('client', form.client)
     fd.append('location', form.location)
     fd.append('company', form.company)
@@ -226,7 +227,13 @@ export default function MyProjectMode() {
 
         <div style={s.grid2}>
           <div style={s.group}>
-            <label style={s.label}>공모명</label>
+            <label style={s.label}>프로젝트번호</label>
+            <input style={s.input} value={form.project_number}
+              onChange={e => set('project_number', e.target.value)}
+              placeholder="예: 26014C" />
+          </div>
+          <div style={s.group}>
+            <label style={s.label}>프로젝트명</label>
             <input style={s.input} value={form.competition_name}
               onChange={e => set('competition_name', e.target.value)}
               placeholder="예: 영등포구 신청사 설계공모" />
@@ -239,11 +246,6 @@ export default function MyProjectMode() {
                 <option key={k} value={k}>{v} ({k})</option>
               ))}
             </select>
-          </div>
-          <div style={s.group}>
-            <label style={s.label}>연도</label>
-            <input style={s.input} type="number" value={form.year}
-              onChange={e => set('year', Number(e.target.value))} />
           </div>
           <div style={s.group}>
             <label style={s.label}>
@@ -326,7 +328,7 @@ export default function MyProjectMode() {
           <div style={s.card}>
             <div style={{ display: 'flex', gap: 24, marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 11, color: '#718096' }}>공모명</div>
+                <div style={{ fontSize: 11, color: '#718096' }}>프로젝트명</div>
                 <div style={{ fontSize: 14, color: '#e2e8f0' }}>{form.competition_name}</div>
               </div>
               <div>

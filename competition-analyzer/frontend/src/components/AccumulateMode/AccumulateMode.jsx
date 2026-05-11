@@ -91,7 +91,7 @@ export default function AccumulateMode() {
   const [facilityTypes, setFacilityTypes] = useState({})
   const [form, setForm] = useState({
     competition_name: '', facility_type: 'public',
-    year: new Date().getFullYear(), client: '', location: '',
+    project_number: '', client: '', location: '',
   })
   const [briefFile, setBriefFile] = useState(null)
   const [submissions, setSubmissions] = useState([{ company: '', result: 'lose', file: null }])
@@ -111,7 +111,8 @@ export default function AccumulateMode() {
   const addSub = () => setSubmissions(prev => [...prev, { company: '', result: 'lose', file: null }])
   const removeSub = (idx) => setSubmissions(prev => prev.filter((_, i) => i !== idx))
 
-  const canRun = form.competition_name && submissions.every(s => s.company && s.file) && !running
+  const canRun = form.competition_name && form.project_number
+    && submissions.every(s => s.company && s.file) && !running
 
   const runPipeline = async () => {
     setRunning(true)
@@ -121,7 +122,7 @@ export default function AccumulateMode() {
     const fd = new FormData()
     fd.append('competition_name', form.competition_name)
     fd.append('facility_type', form.facility_type)
-    fd.append('year', form.year)
+    fd.append('project_number', form.project_number)
     fd.append('client', form.client)
     fd.append('location', form.location)
     if (briefFile) fd.append('brief_pdf', briefFile)
@@ -151,7 +152,13 @@ export default function AccumulateMode() {
 
       <div style={s.grid2}>
         <div style={s.group}>
-          <label style={s.label}>공모명</label>
+          <label style={s.label}>프로젝트번호</label>
+          <input style={s.input} value={form.project_number}
+            onChange={e => setFormField('project_number', e.target.value)}
+            placeholder="예: 26014C" />
+        </div>
+        <div style={s.group}>
+          <label style={s.label}>프로젝트명</label>
           <input style={s.input} value={form.competition_name}
             onChange={e => setFormField('competition_name', e.target.value)}
             placeholder="예: 영등포구 신청사 건립 설계공모" />
@@ -164,11 +171,6 @@ export default function AccumulateMode() {
               <option key={k} value={k}>{v} ({k})</option>
             ))}
           </select>
-        </div>
-        <div style={s.group}>
-          <label style={s.label}>연도</label>
-          <input style={s.input} type="number" value={form.year}
-            onChange={e => setFormField('year', Number(e.target.value))} />
         </div>
         <div style={s.group}>
           <label style={s.label}>

@@ -1,5 +1,3 @@
-import os
-import sys
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -44,13 +42,7 @@ def version():
 
 # ---------------- 정적 프론트엔드 서빙 ----------------
 def _resolve_frontend_dist() -> Path | None:
-    """PyInstaller 번들과 개발 환경 모두 지원."""
-    # PyInstaller가 _MEIPASS에 리소스 압축 해제
-    if hasattr(sys, "_MEIPASS"):
-        candidate = Path(sys._MEIPASS) / "frontend_dist"
-        if candidate.exists():
-            return candidate
-    # 개발: backend/../frontend/dist
+    """개발 모드에서 frontend/dist 위치 탐색."""
     dev = Path(__file__).parent.parent / "frontend" / "dist"
     if dev.exists():
         return dev
