@@ -68,13 +68,25 @@ def _wait_for_server(timeout_seconds: float = 60.0) -> bool:
     return False
 
 
+def _ensure_std_streams():
+    """windowed 빌드(console=False)는 sys.stdout/stderr가 None.
+    uvicorn 기본 ColourizedFormatter가 stdout.isatty()를 호출해 크래시 → devnull로 가드."""
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
+
 def _run_uvicorn(log):
     try:
         import uvicorn
         from main import app
 
+        # log_config=None — uvicorn 기본 로깅 비활성화. 위 _ensure_std_streams로
+        # 1차 가드, log_config=None으로 2차 가드. 우리 RotatingFileHandler가 모두 수신.
         config = uvicorn.Config(
-            app, host=HOST, port=PORT, log_level="info", access_log=False
+            app, host=HOST, port=PORT, log_level="info",
+            access_log=False, log_config=None,
         )
         server = uvicorn.Server(config)
         server.run()
@@ -94,6 +106,7 @@ def _show_error_dialog(message: str):
 
 
 def main():
+    _ensure_std_streams()
     log = _setup_logging()
     log.info("=" * 60)
     log.info("Competition Analyzer 시작")
