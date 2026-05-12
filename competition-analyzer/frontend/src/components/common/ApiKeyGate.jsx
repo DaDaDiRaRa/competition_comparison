@@ -8,38 +8,38 @@ const s = {
     zIndex: 9999,
   },
   modal: {
-    background: '#1a1f2e', border: '1px solid #2d3748', borderRadius: 12,
+    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 12,
     padding: 32, width: 460, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
   },
-  title: { fontSize: 18, fontWeight: 700, color: '#90cdf4', marginBottom: 8 },
-  desc: { fontSize: 13, color: '#a0aec0', marginBottom: 20, lineHeight: 1.6 },
-  label: { fontSize: 13, color: '#cbd5e0', marginBottom: 6, display: 'block' },
+  title: { fontSize: 18, fontWeight: 700, color: '#1e3a8a', marginBottom: 8 },
+  desc: { fontSize: 13, color: '#4b5563', marginBottom: 20, lineHeight: 1.6 },
+  label: { fontSize: 13, color: '#374151', marginBottom: 6, display: 'block' },
   inputWrap: { position: 'relative' },
   input: {
-    width: '100%', background: '#0d1117', border: '1px solid #2d3748',
-    borderRadius: 6, padding: '10px 44px 10px 12px', color: '#e2e8f0', fontSize: 14,
+    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
+    borderRadius: 6, padding: '10px 44px 10px 12px', color: '#1f2937', fontSize: 14,
     fontFamily: 'monospace', boxSizing: 'border-box',
   },
   toggle: {
     position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-    background: 'transparent', border: 'none', color: '#90cdf4', cursor: 'pointer',
+    background: 'transparent', border: 'none', color: '#1e3a8a', cursor: 'pointer',
     fontSize: 16, padding: 6, borderRadius: 4,
   },
   btn: {
-    width: '100%', background: '#3182ce', color: '#fff', border: 'none',
+    width: '100%', background: '#1e3a8a', color: '#fff', border: 'none',
     borderRadius: 6, padding: '12px', cursor: 'pointer', fontSize: 14,
     fontWeight: 600, marginTop: 16,
   },
   btnDisabled: {
-    background: '#2d3748', color: '#718096', cursor: 'not-allowed',
+    background: '#e5e7eb', color: '#6b7280', cursor: 'not-allowed',
   },
   error: {
-    color: '#fc8181', fontSize: 13, marginTop: 10, padding: 8,
+    color: '#dc2626', fontSize: 13, marginTop: 10, padding: 8,
     background: 'rgba(252,129,129,0.1)', borderRadius: 6,
   },
   notice: {
-    fontSize: 12, color: '#718096', marginTop: 12, padding: 10,
-    background: '#0d1117', borderRadius: 6, lineHeight: 1.5,
+    fontSize: 12, color: '#6b7280', marginTop: 12, padding: 10,
+    background: '#ffffff', borderRadius: 6, lineHeight: 1.5,
   },
 }
 
@@ -74,7 +74,7 @@ export default function ApiKeyGate({ children }) {
   if (hasKey === null) {
     return (
       <div style={s.overlay}>
-        <div style={{ color: '#a0aec0' }}>로딩 중...</div>
+        <div style={{ color: '#4b5563' }}>로딩 중...</div>
       </div>
     )
   }

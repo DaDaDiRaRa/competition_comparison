@@ -1,12 +1,22 @@
 import json
 import os
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
-SETTINGS_FILE = BASE_DIR / "app_settings.json"
 
-# DB 경로는 코드 상수로 고정. 변경하려면 이 값을 수정 후 새 버전 릴리즈.
-HARDCODED_DB_PATH = r"M:\06_설계사업6본부\설계사업6본부 1소\01 개인폴더\16 김정현\KUNWON_COMPETITION_DB"
+# PyInstaller로 패키징된 경우 번들 내부는 읽기 전용/임시 디렉터리이므로
+# 사용자 홈에 영구 저장 위치를 둠. 개발 모드에선 backend/app_settings.json 그대로.
+def _resolve_settings_file() -> Path:
+    if getattr(sys, "frozen", False):
+        user_dir = Path.home() / ".competition-analyzer"
+        user_dir.mkdir(parents=True, exist_ok=True)
+        return user_dir / "app_settings.json"
+    return BASE_DIR / "app_settings.json"
+
+SETTINGS_FILE = _resolve_settings_file()
+
+DEFAULT_DB_PATH = Path(r"M:\06_설계사업6본부\설계사업6본부 1소\01 개인폴더\16 김정현\KUNWON_COMPETITION_DB")
 
 FACILITY_TYPES = {
     "public":         {"label_ko": "공공시설",       "group": "general"},
@@ -204,9 +214,7 @@ class AppSettings:
             try:
                 with open(SETTINGS_FILE, encoding="utf-8") as f:
                     data = json.load(f)
-                # 과거 버전과의 호환: 파일에 키가 남아있어도 무시
-                data.pop("anthropic_api_key", None)
-                data.pop("db_path", None)
+                data.pop("anthropic_api_key", None)  # API 키는 절대 파일에서 읽지 않음
                 return data
             except Exception:
                 pass
@@ -218,15 +226,24 @@ class AppSettings:
         }
 
     def save(self):
-        # API 키와 DB 경로는 절대 저장하지 않음
-        safe = {k: v for k, v in self._data.items()
-                if k not in ("anthropic_api_key", "db_path")}
+        # API 키만 저장 제외 (보안). db_path는 저장함.
+        safe = {k: v for k, v in self._data.items() if k != "anthropic_api_key"}
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(safe, f, ensure_ascii=False, indent=2)
 
     @property
     def db_path(self) -> Path:
-        return Path(HARDCODED_DB_PATH)
+        p = self._data.get("db_path")
+        return Path(p) if p else DEFAULT_DB_PATH
+
+    @property
+    def has_db_path(self) -> bool:
+        """사용자가 명시적으로 DB 경로를 설정했는지 여부."""
+        return bool(self._data.get("db_path"))
+
+    def set_db_path(self, path: str):
+        self._data["db_path"] = str(path)
+        self.save()
 
     @property
     def api_key(self) -> str:
@@ -265,15 +282,15 @@ class AppSettings:
         return int(self._data.get("extraction_priority_limit", 2))
 
     def to_dict(self) -> dict:
-        # API 키 자체는 절대 노출하지 않고, 설정 여부만 표시
         return {
             **{k: v for k, v in self._data.items() if k != "anthropic_api_key"},
             "db_path": str(self.db_path),
+            "has_db_path": self.has_db_path,
             "has_api_key": self.has_api_key(),
         }
 
     def update(self, data: dict):
-        # db_path와 anthropic_api_key는 update로 변경 불가 (각각 하드코딩 / 전용 엔드포인트 사용)
+        # anthropic_api_key는 전용 엔드포인트로만 변경. db_path는 set_db_path() 사용.
         clean = {k: v for k, v in data.items()
                  if k not in ("db_path", "anthropic_api_key") and v is not None}
         self._data.update(clean)

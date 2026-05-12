@@ -6,94 +6,94 @@ import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_OPTIONS = [
-  { value: 'win', label: '당선', color: '#d4af37', bg: '#2d2410' },
-  { value: 'contracted', label: '수의계약', color: '#68d391', bg: '#1a2e1a' },
-  { value: 'lose', label: '낙선', color: '#718096', bg: '#1a1f2e' },
+  { value: 'win', label: '당선', color: '#b8860b', bg: '#fef3c7' },
+  { value: 'contracted', label: '수의계약', color: '#16a34a', bg: '#dcfce7' },
+  { value: 'lose', label: '낙선', color: '#6b7280', bg: '#ffffff' },
 ]
 
 const s = {
-  panel: { background: '#1a1f2e', borderRadius: 12, padding: 24, marginBottom: 16 },
+  panel: { background: '#ffffff', borderRadius: 12, padding: 24, marginBottom: 16 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  title: { fontSize: 16, fontWeight: 600, color: '#90cdf4' },
+  title: { fontSize: 16, fontWeight: 600, color: '#1e3a8a' },
   refreshBtn: {
-    background: 'none', border: '1px solid #2d3748', borderRadius: 6,
-    color: '#a0aec0', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
+    background: 'none', border: '1px solid #e5e7eb', borderRadius: 6,
+    color: '#4b5563', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
   },
   empty: { color: '#4a5568', fontSize: 13, textAlign: 'center', padding: '20px 0' },
   card: {
-    background: '#0d1117', border: '1px solid #2d3748', borderRadius: 8,
+    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8,
     padding: '14px 16px', marginBottom: 10,
   },
   cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
-  cardName: { fontWeight: 600, color: '#e2e8f0', fontSize: 14 },
+  cardName: { fontWeight: 600, color: '#1f2937', fontSize: 14 },
   badge: {
     fontSize: 11, padding: '2px 8px', borderRadius: 20,
-    background: '#2b4c7e', color: '#90cdf4', fontWeight: 600,
+    background: '#1e40af', color: '#1e3a8a', fontWeight: 600,
   },
-  meta: { fontSize: 12, color: '#718096' },
+  meta: { fontSize: 12, color: '#6b7280' },
   actions: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' },
   rerunBtn: {
-    background: '#2f855a', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#15803d', color: '#fff', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
   addBtn: {
-    background: '#2b6cb0', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
   reportBtn: {
-    background: '#44337a', color: '#e9d8fd', border: 'none', borderRadius: 6,
+    background: '#6d28d9', color: '#ede9fe', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
   },
   rerenderBtn: {
-    background: 'transparent', color: '#a0aec0',
+    background: 'transparent', color: '#4b5563',
     border: '1px solid #4a5568', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
   subReportBtn: {
-    background: '#1a2e40', color: '#90cdf4', border: '1px solid #2c5282', borderRadius: 6,
+    background: '#1a2e40', color: '#1e3a8a', border: '1px solid #1e40af', borderRadius: 6,
     padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
   },
   editBtn: {
-    background: '#2d3748', color: '#a0aec0', border: '1px solid #4a5568', borderRadius: 6,
+    background: '#e5e7eb', color: '#4b5563', border: '1px solid #4a5568', borderRadius: 6,
     padding: '3px 9px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
   },
   staleBanner: {
-    background: '#2d2410', border: '1px solid #744210', borderRadius: 6,
-    padding: '7px 12px', fontSize: 12, color: '#f6ad55', marginTop: 8,
+    background: '#fef3c7', border: '1px solid #92400e', borderRadius: 6,
+    padding: '7px 12px', fontSize: 12, color: '#ea580c', marginTop: 8,
     display: 'flex', alignItems: 'center', gap: 8,
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
   logWrap: { marginTop: 10 },
   addForm: {
-    marginTop: 12, padding: 14, background: '#111827',
-    border: '1px solid #2d3748', borderRadius: 8,
+    marginTop: 12, padding: 14, background: '#d1d5db',
+    border: '1px solid #e5e7eb', borderRadius: 8,
   },
-  addFormTitle: { fontSize: 13, fontWeight: 600, color: '#90cdf4', marginBottom: 10 },
+  addFormTitle: { fontSize: 13, fontWeight: 600, color: '#1e3a8a', marginBottom: 10 },
   row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 },
-  label: { fontSize: 12, color: '#a0aec0', marginBottom: 4, display: 'block' },
+  label: { fontSize: 12, color: '#4b5563', marginBottom: 4, display: 'block' },
   input: {
-    width: '100%', background: '#0d1117', border: '1px solid #2d3748',
-    borderRadius: 6, padding: '7px 10px', color: '#e2e8f0', fontSize: 13,
+    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
+    borderRadius: 6, padding: '7px 10px', color: '#1f2937', fontSize: 13,
     boxSizing: 'border-box',
   },
   resultPicker: { display: 'flex', gap: 6 },
   resultBtn: (opt, selected) => ({
     flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer', fontSize: 12,
     fontWeight: 600, textAlign: 'center',
-    border: selected ? `2px solid ${opt.color}` : '2px solid #2d3748',
-    background: selected ? opt.bg : '#0d1117',
+    border: selected ? `2px solid ${opt.color}` : '2px solid #e5e7eb',
+    background: selected ? opt.bg : '#ffffff',
     color: selected ? opt.color : '#4a5568',
   }),
   submitBtn: (active) => ({
     width: '100%', marginTop: 10, padding: '9px 0', borderRadius: 6,
     border: 'none', cursor: active ? 'pointer' : 'not-allowed', fontSize: 13,
-    fontWeight: 700, background: active ? '#2b6cb0' : '#1a2535', color: active ? '#fff' : '#4a5568',
+    fontWeight: 700, background: active ? '#1e3a8a' : '#f9fafb', color: active ? '#fff' : '#4a5568',
   }),
   cancelBtn: {
-    background: 'none', border: 'none', color: '#718096', cursor: 'pointer',
+    background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer',
     fontSize: 12, marginLeft: 'auto',
   },
 }
@@ -157,7 +157,7 @@ function AddSubmissionForm({ project, onDone, onCancel }) {
             </div>
           </div>
           <DropZone label="제안서 PDF 드래그 또는 클릭" onFiles={setFile} />
-          {file && <div style={{ fontSize: 11, color: '#68d391', marginTop: 4 }}>✓ {file.name}</div>}
+          {file && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ {file.name}</div>}
           <button style={s.submitBtn(canSubmit)} onClick={canSubmit ? handleSubmit : undefined}>
             {running ? '처리 중...' : '추출 시작'}
           </button>
@@ -171,7 +171,7 @@ function AddSubmissionForm({ project, onDone, onCancel }) {
       )}
 
       {done && (
-        <div style={{ marginTop: 8, fontSize: 12, color: '#68d391' }}>
+        <div style={{ marginTop: 8, fontSize: 12, color: '#16a34a' }}>
           ✓ {company} 제안서 저장 완료. 비교분석 재실행 버튼으로 분석을 갱신하세요.
         </div>
       )}
@@ -189,8 +189,10 @@ function ProjectCard({ project, onRerunDone }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editingCompany, setEditingCompany] = useState(null)
   const [comparisonStale, setComparisonStale] = useState(false)
+  const [reportTs, setReportTs] = useState(Date.now())
 
   const hasReport = project.report_available
+  const freshReportUrl = () => getReportUrl(project.facility_type, project.competition_id) + '?t=' + reportTs
 
   const handleRerun = async () => {
     setRunning(true)
@@ -202,7 +204,8 @@ function ProjectCard({ project, onRerunDone }) {
         setEvents(prev => [...prev, { ...ev, _timestamp: startTime }])
         if (ev.type === 'complete') {
           setDone(true)
-          setComparisonStale(false)  // 비교분석 재실행 완료 → stale 해제
+          setComparisonStale(false)
+          setReportTs(Date.now())
           onRerunDone?.()
         }
         if (ev.type === 'error') break
@@ -218,6 +221,7 @@ function ProjectCard({ project, onRerunDone }) {
     setRerenderMsg('')
     try {
       const r = await rerenderReport(project.facility_type, project.competition_id)
+      setReportTs(Date.now())
       setRerenderMsg(`✓ 리포트 재생성 완료 (개별 ${r.submission_reports_regenerated}개)`)
       onRerunDone?.()
     } catch (e) {
@@ -230,7 +234,7 @@ function ProjectCard({ project, onRerunDone }) {
   const subs = project.submissions || []
   const winCount = subs.filter(s => s.result === 'win' || s.result === 'contracted').length
   const RESULT_KR = { win: '★ 당선', contracted: '◆ 수의계약', lose: '낙선' }
-  const RESULT_COLOR = { win: '#d4af37', contracted: '#68d391', lose: '#718096' }
+  const RESULT_COLOR = { win: '#b8860b', contracted: '#16a34a', lose: '#6b7280' }
 
   return (
     <div style={s.card}>
@@ -249,10 +253,10 @@ function ProjectCard({ project, onRerunDone }) {
         <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {subs.map(sub => (
             <div key={sub.company} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 12, color: RESULT_COLOR[sub.result] || '#a0aec0' }}>
+              <span style={{ fontSize: 12, color: RESULT_COLOR[sub.result] || '#4b5563' }}>
                 {RESULT_KR[sub.result] || sub.result}
               </span>
-              <span style={{ fontSize: 12, color: '#e2e8f0' }}>{sub.company}</span>
+              <span style={{ fontSize: 12, color: '#1f2937' }}>{sub.company}</span>
               {sub.has_sub_report && (
                 <a
                   href={getSubmissionReportUrl(project.facility_type, project.competition_id, sub.company)}
@@ -305,7 +309,7 @@ function ProjectCard({ project, onRerunDone }) {
         {(hasReport || done) && (
           <>
             <a
-              href={getReportUrl(project.facility_type, project.competition_id)}
+              href={freshReportUrl()}
               target="_blank"
               rel="noreferrer"
               style={s.reportBtn}
@@ -325,7 +329,7 @@ function ProjectCard({ project, onRerunDone }) {
       </div>
       {rerenderMsg && (
         <div style={{ marginTop: 8, fontSize: 12,
-                      color: rerenderMsg.startsWith('✓') ? '#68d391' : '#fc8181' }}>
+                      color: rerenderMsg.startsWith('✓') ? '#16a34a' : '#dc2626' }}>
           {rerenderMsg}
         </div>
       )}
@@ -392,7 +396,7 @@ export default function ProjectList() {
         : projects.length === 0
           ? (
             <div style={{ padding: '24px 0' }}>
-              <div style={{ fontSize: 13, color: '#718096', textAlign: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 20 }}>
                 아직 등록된 프로젝트가 없습니다.
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -402,7 +406,7 @@ export default function ProjectList() {
                   { step: '3', icon: '🔍', title: '제안서 진단 탭', desc: '새로 작성 중인 제안서를 올리면, 과거 당선 패턴과 비교해 잘된 점·부족한 점·개선 방향을 알려줍니다.' },
                 ].map(({ step, icon, title, desc }) => (
                   <div key={step} style={{
-                    background: '#111827', border: '1px solid #2d3748',
+                    background: '#d1d5db', border: '1px solid #e5e7eb',
                     borderRadius: 8, padding: '14px 16px',
                     display: 'flex', gap: 14, alignItems: 'flex-start',
                   }}>
@@ -411,15 +415,15 @@ export default function ProjectList() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>{icon}</div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#90cdf4', marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a', marginBottom: 4 }}>
                         <span style={{
                           display: 'inline-block', width: 18, height: 18, borderRadius: '50%',
-                          background: '#2b6cb0', color: '#fff', fontSize: 10, fontWeight: 700,
+                          background: '#1e3a8a', color: '#fff', fontSize: 10, fontWeight: 700,
                           textAlign: 'center', lineHeight: '18px', marginRight: 6,
                         }}>{step}</span>
                         {title}
                       </div>
-                      <div style={{ fontSize: 12, color: '#718096', lineHeight: 1.6 }}>{desc}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>{desc}</div>
                     </div>
                   </div>
                 ))}
@@ -436,8 +440,8 @@ export default function ProjectList() {
                     style={{
                       padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
                       cursor: 'pointer', border: 'none',
-                      background: ft === activeType ? '#90cdf4' : '#2d3748',
-                      color: ft === activeType ? '#0d1117' : '#a0aec0',
+                      background: ft === activeType ? '#1e3a8a' : '#e5e7eb',
+                      color: ft === activeType ? '#ffffff' : '#4b5563',
                     }}
                   >
                     {facilityLabel(ft)}

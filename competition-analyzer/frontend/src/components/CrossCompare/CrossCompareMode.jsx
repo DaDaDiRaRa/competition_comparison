@@ -5,78 +5,78 @@ import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_COLOR = {
-  win: { color: '#d4af37', bg: '#2d2410', label: '당선' },
-  contracted: { color: '#68d391', bg: '#1a2e1a', label: '수의계약' },
-  lose: { color: '#718096', bg: '#1a1f2e', label: '낙선' },
+  win: { color: '#b8860b', bg: '#fef3c7', label: '당선' },
+  contracted: { color: '#16a34a', bg: '#dcfce7', label: '수의계약' },
+  lose: { color: '#6b7280', bg: '#ffffff', label: '낙선' },
 }
 
 const s = {
   wrap: { display: 'flex', flexDirection: 'column', gap: 16 },
-  panel: { background: '#1a1f2e', borderRadius: 12, padding: 24 },
-  title: { fontSize: 18, fontWeight: 600, color: '#e2e8f0', marginBottom: 6 },
-  desc: { fontSize: 13, color: '#718096', lineHeight: 1.6, marginBottom: 20 },
+  panel: { background: '#ffffff', borderRadius: 12, padding: 24 },
+  title: { fontSize: 18, fontWeight: 600, color: '#1f2937', marginBottom: 6 },
+  desc: { fontSize: 13, color: '#6b7280', lineHeight: 1.6, marginBottom: 20 },
   typeTab: (active) => ({
     padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
     cursor: 'pointer', border: 'none',
-    background: active ? '#90cdf4' : '#2d3748',
-    color: active ? '#0d1117' : '#a0aec0',
+    background: active ? '#1e3a8a' : '#e5e7eb',
+    color: active ? '#ffffff' : '#4b5563',
   }),
   card: {
-    background: '#0d1117', border: '1px solid #2d3748',
+    background: '#ffffff', border: '1px solid #e5e7eb',
     borderRadius: 8, marginBottom: 8,
   },
   cardHeader: {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '12px 14px', cursor: 'pointer', userSelect: 'none',
   },
-  cardName: { fontWeight: 600, color: '#e2e8f0', fontSize: 14, flex: 1 },
+  cardName: { fontWeight: 600, color: '#1f2937', fontSize: 14, flex: 1 },
   badge: {
     fontSize: 11, padding: '2px 8px', borderRadius: 20,
-    background: '#2b4c7e', color: '#90cdf4', fontWeight: 600,
+    background: '#1e40af', color: '#1e3a8a', fontWeight: 600,
   },
   chevron: (open) => ({
     color: '#4a5568', fontSize: 12, transform: open ? 'rotate(180deg)' : 'none',
     transition: 'transform 0.15s',
   }),
-  subList: { borderTop: '1px solid #2d3748', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 },
+  subList: { borderTop: '1px solid #e5e7eb', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 },
   subRow: (checked) => ({
     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
     borderRadius: 6, cursor: 'pointer',
-    background: checked ? '#1a2535' : 'transparent',
-    border: checked ? '1px solid #2b6cb0' : '1px solid transparent',
+    background: checked ? '#f9fafb' : 'transparent',
+    border: checked ? '1px solid #1e3a8a' : '1px solid transparent',
     transition: 'all 0.1s',
   }),
   checkbox: (checked) => ({
     width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-    border: checked ? '2px solid #90cdf4' : '2px solid #4a5568',
-    background: checked ? '#90cdf4' : 'transparent',
+    border: checked ? '2px solid #1e3a8a' : '2px solid #4a5568',
+    background: checked ? '#1e3a8a' : 'transparent',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 10, color: '#0d1117', fontWeight: 700,
+    fontSize: 10, color: '#ffffff', fontWeight: 700,
   }),
-  subName: { fontSize: 13, color: '#e2e8f0', flex: 1 },
+  subName: { fontSize: 13, color: '#1f2937', flex: 1 },
   resultTag: (result) => ({
     fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600,
-    color: RESULT_COLOR[result]?.color || '#718096',
-    background: RESULT_COLOR[result]?.bg || '#1a1f2e',
+    color: RESULT_COLOR[result]?.color || '#6b7280',
+    background: RESULT_COLOR[result]?.bg || '#ffffff',
   }),
   projectMeta: { fontSize: 11, color: '#4a5568' },
   selBar: {
     display: 'flex', alignItems: 'center', gap: 12,
-    padding: '14px 20px', background: '#0d1117',
-    border: '1px solid #2d3748', borderRadius: 10, marginBottom: 4,
+    padding: '14px 20px', background: '#ffffff',
+    border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 4,
   },
-  selCount: { fontSize: 14, fontWeight: 600, color: '#90cdf4', flex: 1 },
+  selCount: { fontSize: 14, fontWeight: 600, color: '#1e3a8a', flex: 1 },
   selChip: {
     fontSize: 11, padding: '3px 10px', borderRadius: 20,
-    background: '#1a2535', color: '#a0aec0', border: '1px solid #2d3748',
+    background: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb',
     display: 'flex', alignItems: 'center', gap: 5,
   },
   clearBtn: {
-    background: 'none', border: 'none', color: '#fc8181',
+    background: 'none', border: 'none', color: '#dc2626',
     cursor: 'pointer', fontSize: 11, padding: 0,
   },
   runBtn: (active) => ({
-    background: active ? '#2f855a' : '#1a2e1a',
+    background: active ? '#15803d' : '#dcfce7',
     color: active ? '#fff' : '#4a5568',
     border: 'none', borderRadius: 8, padding: '10px 24px',
     cursor: active ? 'pointer' : 'not-allowed',
@@ -90,13 +90,13 @@ function SelectionBar({ selected, onRemove, onClear, onRun, running }) {
   return (
     <div style={s.selBar}>
       <div style={s.selCount}>
-        선택된 제안서 <span style={{ color: selected.length >= 2 ? '#68d391' : '#fc8181' }}>{selected.length}</span>개
+        선택된 제안서 <span style={{ color: selected.length >= 2 ? '#16a34a' : '#dc2626' }}>{selected.length}</span>개
         {selected.length < 2 && <span style={{ fontSize: 12, color: '#4a5568', fontWeight: 400, marginLeft: 6 }}>(최소 2개 필요)</span>}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 3 }}>
         {selected.map(item => (
           <div key={`${item.competition_id}__${item.company}`} style={s.selChip}>
-            <span style={{ color: '#718096' }}>{item.competition_name}</span>
+            <span style={{ color: '#6b7280' }}>{item.competition_name}</span>
             <span>·</span>
             <span>{item.company}</span>
             <button style={s.clearBtn} onClick={() => onRemove(item)}>✕</button>
@@ -104,7 +104,7 @@ function SelectionBar({ selected, onRemove, onClear, onRun, running }) {
         ))}
       </div>
       {selected.length > 0 && (
-        <button style={{ ...s.clearBtn, fontSize: 12, color: '#718096' }} onClick={onClear}>전체 해제</button>
+        <button style={{ ...s.clearBtn, fontSize: 12, color: '#6b7280' }} onClick={onClear}>전체 해제</button>
       )}
       <button style={s.runBtn(canRun)} onClick={canRun ? onRun : undefined} disabled={!canRun}>
         {running ? '분석 중...' : '비교분석 실행'}
@@ -247,7 +247,7 @@ export default function CrossCompareMode() {
 
       {events.length > 0 && (
         <div style={s.panel}>
-          <div style={{ fontSize: 13, color: '#a0aec0', marginBottom: 8 }}>진행 로그</div>
+          <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 8 }}>진행 로그</div>
           <ProgressLog events={events} />
         </div>
       )}
@@ -255,14 +255,14 @@ export default function CrossCompareMode() {
       {pastReports.length > 0 && (
         <div style={s.panel}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#e2e8f0', flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#1f2937', flex: 1 }}>
               저장된 교차비교 리포트 <span style={{ color: '#4a5568', fontWeight: 400, fontSize: 12 }}>({pastReports.length})</span>
             </div>
             <button
               onClick={loadPastReports}
               style={{
-                background: 'none', border: '1px solid #2d3748', borderRadius: 6,
-                color: '#a0aec0', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
+                background: 'none', border: '1px solid #e5e7eb', borderRadius: 6,
+                color: '#4b5563', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
               }}
             >새로고침</button>
           </div>
@@ -275,22 +275,22 @@ export default function CrossCompareMode() {
                 rel="noreferrer"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 14px', background: '#0d1117',
-                  border: '1px solid #2d3748', borderRadius: 6,
+                  padding: '10px 14px', background: '#ffffff',
+                  border: '1px solid #e5e7eb', borderRadius: 6,
                   textDecoration: 'none', transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#2c5282'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#2d3748'}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#1e40af'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = '#e5e7eb'}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: '#e2e8f0', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 13, color: '#1f2937', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {rep.labels.join('  vs  ')}
                   </div>
                   <div style={{ fontSize: 11, color: '#4a5568', marginTop: 3 }}>
                     {rep.created_at}
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: '#90cdf4' }}>열기 →</div>
+                <div style={{ fontSize: 11, color: '#1e3a8a' }}>열기 →</div>
               </a>
             ))}
           </div>
@@ -300,14 +300,14 @@ export default function CrossCompareMode() {
       {result?.comparison && (
         <div style={s.panel}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#90cdf4', flex: 1 }}>비교분석 결과</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#1e3a8a', flex: 1 }}>비교분석 결과</div>
             {result.report_filename && (
               <a
                 href={getCrossCompareReportUrl(result.report_filename)}
                 target="_blank"
                 rel="noreferrer"
                 style={{
-                  background: '#44337a', color: '#e9d8fd', borderRadius: 6,
+                  background: '#6d28d9', color: '#ede9fe', borderRadius: 6,
                   padding: '6px 14px', fontSize: 12, fontWeight: 600,
                   textDecoration: 'none',
                 }}

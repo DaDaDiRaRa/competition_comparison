@@ -8,34 +8,34 @@ import ProgressLog from '../common/ProgressLog'
 import DiagnosisResult from './DiagnosisResult'
 
 const s = {
-  panel: { background: '#1a1f2e', borderRadius: 12, padding: 24 },
-  title: { fontSize: 18, fontWeight: 600, marginBottom: 20, color: '#e2e8f0' },
-  label: { fontSize: 13, color: '#a0aec0', marginBottom: 6, display: 'block' },
+  panel: { background: '#ffffff', borderRadius: 12, padding: 24 },
+  title: { fontSize: 18, fontWeight: 600, marginBottom: 20, color: '#1f2937' },
+  label: { fontSize: 13, color: '#4b5563', marginBottom: 6, display: 'block' },
   input: {
-    width: '100%', background: '#0d1117', border: '1px solid #2d3748',
-    borderRadius: 6, padding: '8px 12px', color: '#e2e8f0', fontSize: 14,
+    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
+    borderRadius: 6, padding: '8px 12px', color: '#1f2937', fontSize: 14,
   },
   select: {
-    width: '100%', background: '#0d1117', border: '1px solid #2d3748',
-    borderRadius: 6, padding: '8px 12px', color: '#e2e8f0', fontSize: 14,
+    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
+    borderRadius: 6, padding: '8px 12px', color: '#1f2937', fontSize: 14,
   },
   group: { marginBottom: 14 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 },
   btn: {
-    background: '#553c9a', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6,
     padding: '12px 28px', cursor: 'pointer', fontSize: 15, fontWeight: 600,
     marginTop: 16, width: '100%',
   },
   btnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
   patternBadge: {
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    background: '#1a2a3a', border: '1px solid #2c5282',
-    borderRadius: 20, padding: '4px 12px', fontSize: 12, color: '#90cdf4',
+    background: '#f9fafb', border: '1px solid #1e40af',
+    borderRadius: 20, padding: '4px 12px', fontSize: 12, color: '#1e3a8a',
     marginTop: 8,
   },
   noPattern: {
-    background: '#2d1515', border: '1px solid #742a2a',
-    borderRadius: 8, padding: 12, fontSize: 13, color: '#fc8181', marginTop: 8,
+    background: '#fee2e2', border: '1px solid #b91c1c',
+    borderRadius: 8, padding: 12, fontSize: 13, color: '#dc2626', marginTop: 8,
   },
 }
 
@@ -163,9 +163,9 @@ export default function DiagnoseMode() {
               style={{
                 flex: 1, padding: '9px 0', borderRadius: 6, fontSize: 13,
                 fontWeight: 600, cursor: 'pointer',
-                border: refMode === opt.v ? '2px solid #b794f4' : '2px solid #2d3748',
-                background: refMode === opt.v ? '#2d2050' : '#0d1117',
-                color: refMode === opt.v ? '#e9d8fd' : '#718096',
+                border: refMode === opt.v ? '2px solid #a78bfa' : '2px solid #e5e7eb',
+                background: refMode === opt.v ? '#ede9fe' : '#ffffff',
+                color: refMode === opt.v ? '#ede9fe' : '#6b7280',
               }}
             >
               {opt.label}
@@ -181,13 +181,13 @@ export default function DiagnoseMode() {
             <label style={{ ...s.label, marginBottom: 0, flex: 1 }}>
               참조할 공모 선택 ({facilityTypes[facilityType] || facilityType})
             </label>
-            <span style={{ fontSize: 12, color: '#90cdf4', fontWeight: 600 }}>
+            <span style={{ fontSize: 12, color: '#1e3a8a', fontWeight: 600 }}>
               {selectedRefs.length}개 선택됨
             </span>
           </div>
           <div style={{
             maxHeight: 240, overflowY: 'auto',
-            background: '#0d1117', border: '1px solid #2d3748',
+            background: '#ffffff', border: '1px solid #e5e7eb',
             borderRadius: 6, padding: 8,
           }}>
             {filteredProjects.length === 0 ? (
@@ -196,7 +196,7 @@ export default function DiagnoseMode() {
               </div>
             ) : filteredProjects.map(p => (
               <div key={p.competition_id} style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 12, color: '#a0aec0', padding: '6px 8px', fontWeight: 600 }}>
+                <div style={{ fontSize: 12, color: '#4b5563', padding: '6px 8px', fontWeight: 600 }}>
                   {p.competition_name || p.competition_id}
                   <span style={{ marginLeft: 6, fontSize: 11, color: '#4a5568', fontWeight: 400 }}>
                     {p.year}
@@ -213,22 +213,22 @@ export default function DiagnoseMode() {
                         display: 'flex', alignItems: 'center', gap: 10,
                         padding: '6px 12px', marginLeft: 8, cursor: 'pointer',
                         borderRadius: 4,
-                        background: checked ? '#1a2535' : 'transparent',
-                        border: checked ? '1px solid #2b6cb0' : '1px solid transparent',
+                        background: checked ? '#f9fafb' : 'transparent',
+                        border: checked ? '1px solid #1e3a8a' : '1px solid transparent',
                       }}
                     >
                       <div style={{
                         width: 14, height: 14, borderRadius: 3, flexShrink: 0,
-                        border: checked ? '2px solid #90cdf4' : '2px solid #4a5568',
-                        background: checked ? '#90cdf4' : 'transparent',
+                        border: checked ? '2px solid #1e3a8a' : '2px solid #4a5568',
+                        background: checked ? '#1e3a8a' : 'transparent',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 9, color: '#0d1117', fontWeight: 700,
+                        fontSize: 9, color: '#ffffff', fontWeight: 700,
                       }}>{checked ? '✓' : ''}</div>
-                      <span style={{ fontSize: 12, color: '#e2e8f0', flex: 1 }}>{sub.company}</span>
+                      <span style={{ fontSize: 12, color: '#1f2937', flex: 1 }}>{sub.company}</span>
                       <span style={{
                         fontSize: 10, padding: '1px 6px', borderRadius: 10,
-                        color: sub.result === 'win' || sub.result === 'contracted' ? '#d4af37' : '#718096',
-                        background: '#1a1f2e',
+                        color: sub.result === 'win' || sub.result === 'contracted' ? '#b8860b' : '#6b7280',
+                        background: '#ffffff',
                       }}>
                         {sub.result === 'win' ? '당선' : sub.result === 'contracted' ? '수의계약' : '낙선'}
                       </span>
@@ -265,7 +265,7 @@ export default function DiagnoseMode() {
 
       {events.length > 0 && (
         <div style={{ marginTop: 20 }}>
-          <div style={{ fontSize: 13, color: '#a0aec0', marginBottom: 8 }}>진행 로그</div>
+          <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 8 }}>진행 로그</div>
           <ProgressLog events={events} />
         </div>
       )}
@@ -277,7 +277,7 @@ export default function DiagnoseMode() {
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              display: 'inline-block', background: '#553c9a', color: '#fff',
+              display: 'inline-block', background: '#7c3aed', color: '#fff',
               borderRadius: 6, padding: '8px 20px', fontSize: 14, fontWeight: 600,
               textDecoration: 'none',
             }}

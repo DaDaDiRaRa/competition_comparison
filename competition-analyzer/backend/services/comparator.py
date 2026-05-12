@@ -14,11 +14,11 @@ def _build_axes_strings(facility_type: str) -> dict:
         f"- {k}: {v['description']}" for k, v in axes_meta.items()
     )
     null_axes_block = ",\n".join(
-        f'      "{k}": {{"score":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""}}'
+        f'      "{k}": {{"grade":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""}}'
         for k in axes_keys
     )
     null_axes_diagnose = ",\n".join(
-        f'    "{k}":{{"score":null,"strengths":[],"weaknesses":[],"recommendations":[],"evidence":""}}'
+        f'    "{k}":{{"grade":null,"strengths":[],"weaknesses":[],"recommendations":[],"evidence":""}}'
         for k in axes_keys
     )
     brief_compliance_block = ",\n".join(
@@ -56,12 +56,25 @@ def _make_blind_static(facility_type: str) -> str:
         "\n"
         f"axis_keys: {ax['axes_key_str']}\n"
         "\n"
-        "SCORING: 0.0-10.0 per axis per submission (use decimals, e.g. 7.3)\n"
-        "STRENGTHS: {max_strengths} items, each a specific Korean phrase (~{strength_chars} chars), cite actual data\n"
-        "WEAKNESSES: {max_weaknesses} items, each a specific Korean phrase (~{strength_chars} chars), cite actual data\n"
+        "GRADING (5 levels, no numeric scores):\n"
+        '- "A": clearly best / strongly exceeds brief on this axis\n'
+        '- "B": good / meets or slightly exceeds brief\n'
+        '- "C": adequate / meets brief at typical level\n'
+        '- "D": below average / partially meets brief\n'
+        '- "E": poor / misses brief or has significant weakness\n'
+        "Use only A/B/C/D/E. Do NOT output numeric values.\n"
+        "\n"
+        "CITATION RULE (MANDATORY):\n"
+        "Each item in STRENGTHS and WEAKNESSES MUST end with a page reference in the form '(p.N)'\n"
+        "where N is the source page number from the input data's _page field (e.g. '남향 배치율 87% 우수 (p.12)').\n"
+        "If multiple pages support the same point, use '(p.N,M)'. If page is genuinely unknown, write '(p.?)'.\n"
+        "Items without page citations are invalid — re-anchor to specific pages.\n"
+        "\n"
+        "STRENGTHS: {max_strengths} items, each a specific Korean phrase (~{strength_chars} chars) + page citation\n"
+        "WEAKNESSES: {max_weaknesses} items, each a specific Korean phrase (~{strength_chars} chars) + page citation\n"
         "BRIEF_COMPLIANCE: yes|partial|no|unclear per axis\n"
-        "NOTES: max_{notes_chars}_chars, specific evidence-based observation (Korean)\n"
-        "blind_ranking: ordered list of submission labels, best first, based on overall analytical merit\n"
+        "NOTES: max_{notes_chars}_chars, specific evidence-based observation (Korean), include (p.N) if applicable\n"
+        "blind_ranking: ordered list of submission labels, best first, based on overall analytical merit (count of 상 > 중 > 하)\n"
         "\n"
         "OUTPUT_ONLY_JSON:\n"
         "{\n"
@@ -86,16 +99,17 @@ def _make_reveal_static(facility_type: str) -> str:
         "\n"
         "INSTRUCTIONS (data follows after this section):\n"
         "You will be given:\n"
-        "- BLIND_SCORES: per-axis scores + strengths/weaknesses/notes produced WITHOUT knowing actual results\n"
+        "- BLIND_GRADES: per-axis grade (상/중/하) + strengths/weaknesses/notes produced WITHOUT knowing actual results\n"
         "- ACTUAL_RESULTS: real competition outcome (win/lose) for each submission\n"
         "\n"
         "IMPORTANT: Raw submission data is NOT provided. Use only the strengths/weaknesses/notes already\n"
-        "captured in BLIND_SCORES.submissions[company] as your evidence. Do NOT invent new facts.\n"
+        "captured in BLIND_GRADES.submissions[company] as your evidence. Preserve original page citations\n"
+        "(p.N) when quoting. Do NOT invent new facts or page numbers.\n"
         "\n"
         "Your task:\n"
-        "1. winner_strengths: aggregate the strongest recurring strengths of actual winner(s) from BLIND_SCORES\n"
-        "2. loser_weaknesses: aggregate common weaknesses of actual losers from BLIND_SCORES\n"
-        "3. key_differentiators: what separated winners from losers (cite axes with biggest win-vs-lose score gap)\n"
+        "1. winner_strengths: aggregate the strongest recurring strengths of actual winner(s) from BLIND_GRADES\n"
+        "2. loser_weaknesses: aggregate common weaknesses of actual losers from BLIND_GRADES\n"
+        "3. key_differentiators: what separated winners from losers (cite axes where winners earned 상 while losers earned 하)\n"
         "4. gap_notes: brief reflection on whether the blind ranking matched the actual outcome\n"
         "   - If aligned (blind top == actual winner): note that design quality likely drove the decision\n"
         "   - If diverged: hypothesize undocumented external factors (정무적·발주처 선호·시공사 관계 등)\n"
@@ -125,15 +139,22 @@ def _make_diagnose_static(facility_type: str) -> str:
         "TEMPERATURE: 0\n"
         "\n"
         "INSTRUCTIONS (data follows after this section):\n"
+        "GRADING (5 levels, no numeric scores): A=best/clearly exceeds, B=good/meets+, C=adequate/typical, D=below avg/partial, E=poor/misses.\n"
+        "Use only A/B/C/D/E for axis grade and overall_grade. Do NOT output numeric values.\n"
+        "\n"
+        "CITATION RULE (MANDATORY):\n"
+        "Each item in strengths/weaknesses/recommendations MUST end with a page reference '(p.N)' from MY_SUBMISSION_DATA._page.\n"
+        "Use '(p.?)' only when truly unknown. Items without page citations are invalid.\n"
+        "\n"
         "DIAGNOSE_MY_SUBMISSION:\n"
         "1. brief_compliance: check each axis against BRIEF_REQUIREMENTS\n"
-        "2. requirement_mapping: for each item in BRIEF_REQUIREMENTS.requirements, assess compliance with short evidence\n"
+        "2. requirement_mapping: for each item in BRIEF_REQUIREMENTS.requirements, assess compliance with short evidence (include p.N)\n"
         "3. pattern_deviation: compare page_distribution and key metrics vs winning_patterns; if loser_stats present in patterns, flag metrics closer to loser range than winner range\n"
-        "4. axis_scores: score each axis 0.0-10.0, cite evidence from MY_SUBMISSION_DATA\n"
-        "5. strengths: top_3 strong points\n"
-        "6. weaknesses: top_3 weak points (include loser-pattern warnings if applicable)\n"
-        "7. recommendations: top_3 actionable improvement points (keyword_style)\n"
-        "8. overall_score: weighted_average\n"
+        "4. axis grades: assign A/B/C/D/E per axis, cite evidence from MY_SUBMISSION_DATA with (p.N)\n"
+        "5. strengths: top_3 strong points + (p.N)\n"
+        "6. weaknesses: top_3 weak points + (p.N) (include loser-pattern warnings if applicable)\n"
+        "7. recommendations: top_3 actionable improvement points (keyword_style) + (p.N) if anchored to specific page\n"
+        "8. overall_grade: A/B/C/D/E reflecting majority axis grade balance\n"
         "\n"
         "OUTPUT_ONLY_JSON:\n"
         "{\n"
@@ -141,7 +162,7 @@ def _make_diagnose_static(facility_type: str) -> str:
         f"{ax['brief_compliance_block']}\n"
         "  },\n"
         '  "requirement_mapping": [\n'
-        '    {"requirement": "<Korean 30chars>", "axis": "<axis_key>", "status": "yes|partial|no|unclear", "evidence": "<Korean 30chars>"}\n'
+        '    {"requirement": "<Korean 30chars>", "axis": "<axis_key>", "status": "yes|partial|no|unclear", "evidence": "<Korean 30chars (p.N)>"}\n'
         "  ],\n"
         '  "pattern_deviation": {\n'
         '    "page_distribution_gaps": [],\n'
@@ -151,7 +172,7 @@ def _make_diagnose_static(facility_type: str) -> str:
         '  "axes": {\n'
         f"{ax['null_axes_diagnose']}\n"
         "  },\n"
-        '  "overall_score": null,\n'
+        '  "overall_grade": null,\n'
         '  "strengths": [],\n'
         '  "weaknesses": [],\n'
         '  "recommendations": []\n'
@@ -178,14 +199,7 @@ def _trim_extracted(data: dict) -> dict:
     trimmed = {k: v for k, v in data.items() if k in keep_keys}
     # _by_type 등 내부 집계 키 제거
     trimmed.pop("_by_type", None)
-    # combined_data 내의 _page 필드 제거 (불필요한 메타)
-    for key, val in trimmed.items():
-        if isinstance(val, list):
-            for item in val:
-                if isinstance(item, dict):
-                    item.pop("_page", None)
-        elif isinstance(val, dict):
-            val.pop("_page", None)
+    # _page는 보존 — LLM의 strengths/weaknesses (p.N) 인용 근거로 사용됨
     return trimmed
 
 
@@ -256,7 +270,7 @@ def _build_reveal_prompt_parts(
               .replace("{global_chars}", "35"))
     dynamic = (
         "ACTUAL_RESULTS:\n" + _compact(results_map) + "\n\n"
-        "BLIND_SCORES (from Pass 1, identities now revealed):\n" + _compact(blind_result)
+        "BLIND_GRADES (from Pass 1, identities now revealed):\n" + _compact(blind_result)
     )
     return static, dynamic
 

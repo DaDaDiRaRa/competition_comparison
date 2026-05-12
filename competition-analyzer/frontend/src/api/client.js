@@ -37,6 +37,19 @@ export async function clearApiKey() {
   return r.json()
 }
 
+export async function setDbPath(dbPath) {
+  const r = await fetch(`${BASE}/settings/db-path`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ db_path: dbPath }),
+  })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || 'DB 경로 설정 실패')
+  }
+  return r.json()
+}
+
 export async function getFacilityTypes() {
   const r = await fetch(`${BASE}/settings/facility-types`)
   return r.json()

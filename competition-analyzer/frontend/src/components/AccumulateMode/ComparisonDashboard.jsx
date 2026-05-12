@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { GRADE_COLOR, GRADE_BG, toGrade } from '../../constants'
 
 /**
  * Dynamic version of competition_analysis.jsx
@@ -22,10 +23,10 @@ const AXIS_LABEL = {
   quantitative: { label: '정량 데이터', icon: '≡' },
 }
 
-const WIN_COLOR = '#E63946'
+const WIN_COLOR = '#dc2626'
 const PALETTE = [
-  '#E63946', '#457B9D', '#2A9D8F', '#E9C46A', '#264653',
-  '#9B5DE5', '#F15BB5', '#00BBF9',
+  '#dc2626', '#475569', '#0891b2', '#ca8a04', '#334155',
+  '#7c3aed', '#db2777', '#0284c7',
 ]
 
 function useCompanyColors(companies) {
@@ -92,10 +93,15 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
               <div style={{ fontSize: 11, color, fontWeight: 700, marginBottom: 6, letterSpacing: '0.05em' }}>
                 {company}
               </div>
-              {d.score != null && (
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#f6e05e', marginBottom: 6 }}>
-                  {Number(d.score).toFixed(1)}
-                  <span style={{ fontSize: 11, color: '#666', fontWeight: 400 }}> /10</span>
+              {toGrade(d) && (
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{
+                    display: 'inline-block', padding: '3px 12px', borderRadius: 14,
+                    background: GRADE_BG[toGrade(d)], color: GRADE_COLOR[toGrade(d)],
+                    fontWeight: 700, fontSize: 14, letterSpacing: 1,
+                  }}>
+                    {toGrade(d)}
+                  </span>
                 </div>
               )}
               {d.notes && (
@@ -114,13 +120,13 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
               </div>
               {d.strengths?.length > 0 && (
                 <div style={{ fontSize: 11, marginBottom: 4 }}>
-                  <span style={{ color: '#4CAF50', fontWeight: 600 }}>▲ 강점 </span>
+                  <span style={{ color: '#16a34a', fontWeight: 600 }}>▲ 강점 </span>
                   <span style={{ color: '#999' }}>{d.strengths.join(' · ')}</span>
                 </div>
               )}
               {d.weaknesses?.length > 0 && (
                 <div style={{ fontSize: 11 }}>
-                  <span style={{ color: '#FF7043', fontWeight: 600 }}>▼ 약점 </span>
+                  <span style={{ color: '#ea580c', fontWeight: 600 }}>▼ 약점 </span>
                   <span style={{ color: '#999' }}>{d.weaknesses.join(' · ')}</span>
                 </div>
               )}
@@ -128,9 +134,9 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
                 <div style={{ marginTop: 8 }}>
                   <span style={{
                     fontSize: 10, padding: '2px 8px', borderRadius: 2,
-                    background: d.brief_compliance === 'yes' ? '#2f855a'
-                      : d.brief_compliance === 'partial' ? '#744210'
-                      : d.brief_compliance === 'no' ? '#742a2a' : '#2d3748',
+                    background: d.brief_compliance === 'yes' ? '#15803d'
+                      : d.brief_compliance === 'partial' ? '#92400e'
+                      : d.brief_compliance === 'no' ? '#b91c1c' : '#e5e7eb',
                     color: '#fff', fontWeight: 600,
                   }}>지침 {d.brief_compliance}</span>
                 </div>
@@ -152,7 +158,7 @@ function CategoryRow({ axisId, axisData, companies, colors, selected, expanded, 
       borderRadius: 2, marginBottom: 12, overflow: 'hidden', transition: 'border-color 0.2s',
     }}>
       <button onClick={() => onToggle(axisId)} style={{
-        width: '100%', background: 'none', border: 'none', color: '#e0e0e0',
+        width: '100%', background: 'none', border: 'none', color: '#e5e7eb',
         padding: '16px 20px', display: 'flex', alignItems: 'center',
         gap: 12, cursor: 'pointer', fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
       }}>
@@ -241,7 +247,7 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
   return (
     <div style={{
       fontFamily: "'Pretendard', 'Noto Sans KR', -apple-system, sans-serif",
-      background: '#0a0a0a', color: '#e0e0e0',
+      background: '#e5e7eb', color: '#e5e7eb',
       borderRadius: 12, padding: '28px 24px', marginTop: 24,
     }}>
       <div style={{ marginBottom: 20 }}>
@@ -265,9 +271,9 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
         <div style={{
           background: 'rgba(230,57,70,0.08)', border: '1px solid rgba(230,57,70,0.2)',
           borderRadius: 2, padding: '12px 16px', marginBottom: 20,
-          fontSize: 13, color: '#e9c46a',
+          fontSize: 13, color: '#ca8a04',
         }}>
-          <strong style={{ color: '#fc8181' }}>핵심 차별화 요소: </strong>
+          <strong style={{ color: '#dc2626' }}>핵심 차별화 요소: </strong>
           {comparison.key_differentiators.join(' · ')}
         </div>
       )}

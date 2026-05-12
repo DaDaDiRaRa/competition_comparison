@@ -1,56 +1,58 @@
 import { useState, useEffect } from 'react'
-import { getSettings, updateSettings, setApiKey, clearApiKey } from '../../api/client'
+import { getSettings, updateSettings, setApiKey, clearApiKey, setDbPath } from '../../api/client'
 import PatternViewer from './PatternViewer'
 
 const s = {
-  panel: { background: '#1a1f2e', borderRadius: 12, padding: 24 },
-  title: { fontSize: 18, fontWeight: 600, marginBottom: 20, color: '#e2e8f0' },
+  panel: { background: '#ffffff', borderRadius: 12, padding: 24 },
+  title: { fontSize: 18, fontWeight: 600, marginBottom: 20, color: '#1f2937' },
   group: { marginBottom: 16 },
-  label: { fontSize: 13, color: '#a0aec0', marginBottom: 6, display: 'block' },
+  label: { fontSize: 13, color: '#4b5563', marginBottom: 6, display: 'block' },
   input: {
-    width: '100%', background: '#0d1117', border: '1px solid #2d3748',
-    borderRadius: 6, padding: '8px 12px', color: '#e2e8f0', fontSize: 14,
+    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
+    borderRadius: 6, padding: '8px 12px', color: '#1f2937', fontSize: 14,
     boxSizing: 'border-box',
   },
   inputReadonly: {
-    width: '100%', background: '#0a0d12', border: '1px solid #1f2937',
-    borderRadius: 6, padding: '8px 12px', color: '#718096', fontSize: 13,
+    width: '100%', background: '#f3f4f6', border: '1px solid #e5e7eb',
+    borderRadius: 6, padding: '8px 12px', color: '#6b7280', fontSize: 13,
     boxSizing: 'border-box', fontFamily: 'monospace',
   },
   inputWrap: { position: 'relative' },
   inputWithToggle: {
-    width: '100%', background: '#0d1117', border: '1px solid #2d3748',
-    borderRadius: 6, padding: '8px 44px 8px 12px', color: '#e2e8f0', fontSize: 14,
+    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
+    borderRadius: 6, padding: '8px 44px 8px 12px', color: '#1f2937', fontSize: 14,
     fontFamily: 'monospace', boxSizing: 'border-box',
   },
   toggle: {
     position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-    background: 'transparent', border: 'none', color: '#90cdf4', cursor: 'pointer',
+    background: 'transparent', border: 'none', color: '#1e3a8a', cursor: 'pointer',
     fontSize: 16, padding: 6,
   },
   btn: {
-    background: '#3182ce', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
     padding: '8px 16px', cursor: 'pointer', fontSize: 13, marginRight: 8,
   },
   btnDanger: {
-    background: '#742a2a', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 6,
     padding: '8px 16px', cursor: 'pointer', fontSize: 13,
   },
   btnPrimary: {
-    background: '#3182ce', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
     padding: '10px 20px', cursor: 'pointer', fontSize: 14, marginTop: 8,
   },
-  success: { color: '#68d391', fontSize: 13, marginTop: 8 },
-  hint: { fontSize: 12, color: '#718096', marginTop: 4 },
+  success: { color: '#16a34a', fontSize: 13, marginTop: 8 },
+  hint: { fontSize: 12, color: '#6b7280', marginTop: 4 },
   status: (active) => ({
     display: 'inline-block', fontSize: 12, padding: '2px 8px', borderRadius: 4,
-    background: active ? '#22543d' : '#742a2a', color: active ? '#9ae6b4' : '#fc8181',
+    background: active ? '#dcfce7' : '#fee2e2', color: active ? '#15803d' : '#b91c1c',
     marginLeft: 8,
   }),
 }
 
 export default function SettingsPanel() {
   const [form, setForm] = useState({ db_path: '', model_id: '' })
+  const [hasDbPath, setHasDbPath] = useState(false)
+  const [dbPathMsg, setDbPathMsg] = useState('')
   const [hasKey, setHasKey] = useState(false)
   const [keyInput, setKeyInput] = useState('')
   const [showKey, setShowKey] = useState(false)
@@ -64,6 +66,7 @@ export default function SettingsPanel() {
         db_path: data.db_path || '',
         model_id: data.model_id || 'claude-sonnet-4-6',
       })
+      setHasDbPath(!!data.has_db_path)
       setHasKey(!!data.has_api_key)
       setLoading(false)
     })
@@ -72,6 +75,19 @@ export default function SettingsPanel() {
   useEffect(() => { refresh() }, [])
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const saveDbPath = async () => {
+    if (!form.db_path.trim()) return
+    setDbPathMsg('')
+    try {
+      await setDbPath(form.db_path.trim())
+      setDbPathMsg('✓ DB 경로가 저장되었습니다')
+      setHasDbPath(true)
+      setTimeout(() => setDbPathMsg(''), 3000)
+    } catch (e) {
+      setDbPathMsg('✗ ' + (e.message || '저장 실패'))
+    }
+  }
 
   const saveModel = async () => {
     await updateSettings({ model_id: form.model_id })
@@ -99,7 +115,7 @@ export default function SettingsPanel() {
     refresh()
   }
 
-  if (loading) return <div style={{ color: '#a0aec0' }}>로딩 중...</div>
+  if (loading) return <div style={{ color: '#4b5563' }}>로딩 중...</div>
 
   return (
     <div style={s.panel}>
@@ -107,10 +123,22 @@ export default function SettingsPanel() {
 
       <div style={s.group}>
         <label style={s.label}>
-          DB 경로 <span style={{ color: '#718096', fontSize: 11 }}>(코드 상수 — 변경 불가)</span>
+          DB 경로
+          <span style={s.status(hasDbPath)}>{hasDbPath ? '사용자 설정' : '기본 경로'}</span>
         </label>
-        <input style={s.inputReadonly} value={form.db_path} readOnly />
-        <div style={s.hint}>경로 변경은 향후 앱 업데이트로 적용됩니다.</div>
+        <input
+          style={s.input}
+          value={form.db_path}
+          onChange={e => set('db_path', e.target.value)}
+          placeholder="예: C:\Users\홍길동\CompetitionDB"
+        />
+        <div style={s.hint}>
+          미설정 시 기본 경로(~/CompetitionAnalyzerDB)를 사용합니다.
+        </div>
+        <button style={{ ...s.btn, marginTop: 8 }} onClick={saveDbPath} disabled={!form.db_path.trim()}>
+          DB 경로 저장
+        </button>
+        {dbPathMsg && <div style={s.success}>{dbPathMsg}</div>}
       </div>
 
       <div style={s.group}>

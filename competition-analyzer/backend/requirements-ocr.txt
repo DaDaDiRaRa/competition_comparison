@@ -1,0 +1,4 @@
+# PaddleOCR 선택적 의존성 — 이미지 기반(텍스트 없는) PDF OCR에만 필요
+# 설치: pip install -r requirements-ocr.txt
+paddlepaddle>=2.6.0
+paddleocr>=2.8.0

@@ -16,17 +16,51 @@ PALETTE = [
 COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미충족', 'unclear': '불명'}
 
 
-def _score_bar(score) -> str:
-    if score is None:
-        return '<span style="color:#4a5568">-</span>'
-    pct = int(float(score) * 10)
-    color = "#68d391" if float(score) >= 7 else "#f6ad55" if float(score) >= 5 else "#fc8181"
+_GRADE_COLORS = {
+    "A": ("#16a34a", "#dcfce7"),
+    "B": ("#0891b2", "#cffafe"),
+    "C": ("#ca8a04", "#fef3c7"),
+    "D": ("#ea580c", "#fed7aa"),
+    "E": ("#dc2626", "#fee2e2"),
+}
+
+_LEGACY_GRADE_MAP = {"상": "B", "중": "C", "하": "D"}
+
+
+def _to_grade(d) -> str | None:
+    """axis dict에서 grade 추출. 구 상/중/하 및 score(0-10) 데이터는 A-E로 자동 변환."""
+    if not isinstance(d, dict):
+        return None
+    g = d.get("grade")
+    if g in ("A", "B", "C", "D", "E"):
+        return g
+    if g in _LEGACY_GRADE_MAP:
+        return _LEGACY_GRADE_MAP[g]
+    s = d.get("score")
+    if s is None:
+        return None
+    try:
+        s = float(s)
+    except (TypeError, ValueError):
+        return None
+    if s >= 8.5:
+        return "A"
+    if s >= 7.0:
+        return "B"
+    if s >= 5.0:
+        return "C"
+    if s >= 3.0:
+        return "D"
+    return "E"
+
+
+def _grade_badge(grade) -> str:
+    if grade not in _GRADE_COLORS:
+        return '<span style="color:#6b7280;font-size:13px">-</span>'
+    fg, bg = _GRADE_COLORS[grade]
     return (
-        f'<div style="display:flex;align-items:center;gap:6px">'
-        f'<div style="flex:1;background:#2d3748;border-radius:3px;height:8px;overflow:hidden">'
-        f'<div style="width:{pct}%;background:{color};height:100%;border-radius:3px"></div></div>'
-        f'<span style="font-size:12px;color:{color};font-weight:700;min-width:28px">{float(score):.1f}</span>'
-        f'</div>'
+        f'<span style="display:inline-block;padding:3px 12px;border-radius:14px;'
+        f'background:{bg};color:{fg};font-weight:700;font-size:14px;letter-spacing:1px">{grade}</span>'
     )
 
 
@@ -48,7 +82,7 @@ def _hex_to_rgba(hex_color: str, alpha: float = 0.13) -> str:
 
 
 def _compliance_bg_color(compliance: str) -> str:
-    return {'yes': '#3a7d5e', 'partial': '#7d5e2a', 'no': '#7d3a3a'}.get(compliance, '#3b466b')
+    return {'yes': '#15803d', 'partial': '#b45309', 'no': '#b91c1c'}.get(compliance, '#d1d5db')
 
 
 def _fmt_num(n: int) -> str:
@@ -326,39 +360,39 @@ def _insight_box(title: str, items: list[str]) -> str:
 _CSS = """
 <style>
 :root {
-  /* surfaces */
-  --bg-base:        #1a2138;
-  --bg-elevated:    #222b46;
-  --bg-card:        #171d33;
-  --bg-deep:        #0e1428;
+  /* surfaces — 화이트 톤 */
+  --bg-base:        #fafafa;
+  --bg-elevated:    #ffffff;
+  --bg-card:        #ffffff;
+  --bg-deep:        #f3f4f6;
   /* borders */
-  --border-subtle:  #2c3656;
-  --border-strong:  #3b466b;
+  --border-subtle:  #e5e7eb;
+  --border-strong:  #d1d5db;
   /* text */
-  --text-primary:   #f5f7fb;
-  --text-secondary: #cbd5e0;
-  --text-muted:     #a0aec0;
-  --text-faint:     #718096;
-  --text-fade:      #4a5568;
-  /* accents */
-  --accent-blue:    #90cdf4;
-  --accent-gold:    #d4af37;
-  --accent-gold-soft: rgba(212,175,55,0.12);
-  --accent-mint:    #68d391;
-  --accent-coral:   #fc8181;
-  /* tag palette (softer) */
-  --tag-strength:   #76d7a3; --tag-strength-bg: rgba(118,215,163,0.13);
-  --tag-weakness:   #f4a4a4; --tag-weakness-bg: rgba(244,164,164,0.13);
-  --tag-partial:    #f6c87a; --tag-partial-bg:  rgba(246,200,122,0.13);
-  --tag-unclear:    #a0aec0; --tag-unclear-bg:  rgba(160,174,192,0.10);
-  /* matrix categories — used as cell backgrounds (light pastels) in chunk 3-4 */
-  --cat-residence:  #f5d6c0;
-  --cat-public:     #f5c0d0;
-  --cat-culture:    #d8c5e8;
-  --cat-commerce:   #fff2c0;
-  --cat-office:     #c5e0d8;
-  --cat-core:       #d0d8e0;
-  --cat-other:      #e0e0e8;
+  --text-primary:   #111827;
+  --text-secondary: #e5e7eb;
+  --text-muted:     #4b5563;
+  --text-faint:     #6b7280;
+  --text-fade:      #9ca3af;
+  /* accents — 네이비 + 골드 */
+  --accent-blue:    #1e3a8a;
+  --accent-gold:    #b8860b;
+  --accent-gold-soft: rgba(184,134,11,0.10);
+  --accent-mint:    #16a34a;
+  --accent-coral:   #dc2626;
+  /* tag palette (light bg + dark text for white theme) */
+  --tag-strength:   #15803d; --tag-strength-bg: #dcfce7;
+  --tag-weakness:   #b91c1c; --tag-weakness-bg: #fee2e2;
+  --tag-partial:    #b45309; --tag-partial-bg:  #fef3c7;
+  --tag-unclear:    #4b5563; --tag-unclear-bg:  #f3f4f6;
+  /* matrix categories — 화이트 BG 위 파스텔 */
+  --cat-residence:  #fde8d4;
+  --cat-public:     #fcdbe4;
+  --cat-culture:    #e5d6f3;
+  --cat-commerce:   #fff5d1;
+  --cat-office:     #d4ebe1;
+  --cat-core:       #dfe5ec;
+  --cat-other:      #ebebef;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -388,11 +422,11 @@ body {
 }
 .hdr-badge-primary {
   background: var(--accent-gold-soft); color: var(--accent-gold);
-  border: 1px solid rgba(212,175,55,0.3);
+  border: 1px solid rgba(184,134,11,0.30);
 }
 .hdr-badge-facility {
-  background: rgba(144,205,244,0.10); color: var(--accent-blue);
-  border: 1px solid rgba(144,205,244,0.25);
+  background: rgba(30,58,138,0.08); color: var(--accent-blue);
+  border: 1px solid rgba(30,58,138,0.25);
 }
 .hdr-title {
   font-size: 26px; font-weight: 800; color: var(--text-primary);
@@ -493,7 +527,7 @@ body {
   font-size: 12px; min-width: 50px;
   border-right: 1px solid var(--border-strong);
 }
-.mtx-cell { color: #2d3748; }
+.mtx-cell { color: #e5e7eb; }
 .mtx-cell.empty {
   background: transparent; color: var(--text-fade);
   text-align: center; font-style: normal;
@@ -553,7 +587,7 @@ body {
 .qt-table thead .qt-rec, .qt-table tbody .qt-rec {
   background: var(--accent-gold-soft);
   color: var(--accent-gold); font-weight: 700;
-  border-left: 1px solid rgba(212,175,55,0.3);
+  border-left: 1px solid rgba(184,134,11,0.30);
 }
 .qt-table tbody tr:hover td { background: rgba(144,205,244,0.03); }
 .qt-table tbody tr:hover .qt-rec { background: rgba(212,175,55,0.18); }
@@ -597,14 +631,14 @@ body {
 }
 .badge-win {
   background: var(--accent-gold-soft); color: var(--accent-gold);
-  border: 1px solid rgba(212,175,55,0.3);
+  border: 1px solid rgba(184,134,11,0.30);
 }
 .badge-contracted {
   background: rgba(104,211,145,0.13); color: var(--accent-mint);
   border: 1px solid rgba(104,211,145,0.3);
 }
 .badge-lose {
-  background: rgba(160,174,192,0.10); color: var(--text-muted);
+  background: #f3f4f6; color: var(--text-muted);
   border: 1px solid rgba(160,174,192,0.2);
 }
 .sub-company { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
@@ -649,7 +683,7 @@ body {
 .rank-no { font-size: 24px; font-weight: 900; color: var(--border-strong); }
 .rank-no.r1 { color: var(--accent-gold); }
 .rank-no.r2 { color: var(--text-muted); }
-.rank-no.r3 { color: #c5713a; }
+.rank-no.r3 { color: #9a3412; }
 .rank-co { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 
 /* Differentiator / win-loss */
@@ -870,7 +904,7 @@ def _generate_dashboard_section(
     ) if ranking else ''
 
     keydiff_section = (
-        f'<div class="db-keydiff"><strong style="color:#fc8181">핵심 차별화 요소: </strong>'
+        f'<div class="db-keydiff"><strong style="color:#dc2626">핵심 차별화 요소: </strong>'
         f'{" · ".join(key_diff)}</div>'
     ) if key_diff else ''
 
@@ -911,16 +945,15 @@ def _generate_dashboard_section(
                 )
                 continue
 
-            score = d.get('score')
+            grade = _to_grade(d)
             notes = d.get('notes', '')
             strengths = d.get('strengths', [])
             weaknesses = d.get('weaknesses', [])
             compliance = d.get('brief_compliance', '')
 
             score_html = (
-                f'<div class="db-card-score">{float(score):.1f}'
-                f'<span class="db-card-score-unit"> /10</span></div>'
-            ) if score is not None else ''
+                f'<div class="db-card-score">{_grade_badge(grade)}</div>'
+            ) if grade else ''
 
             notes_html = f'<div class="db-card-notes">{notes}</div>' if notes else ''
 
@@ -931,7 +964,7 @@ def _generate_dashboard_section(
             )
 
             str_html = (
-                f'<div class="db-card-strength"><span style="color:#4CAF50;font-weight:600">▲ 강점 </span>'
+                f'<div class="db-card-strength"><span style="color:#16a34a;font-weight:600">▲ 강점 </span>'
                 f'<span style="color:#999">{" · ".join(strengths)}</span></div>'
             ) if strengths else ''
 
@@ -1153,7 +1186,7 @@ def generate_comparison_report(
 
     # ── 비교 테이블 ───────────────────────────────────────
     th_cols = "".join(
-        f'<th style="{"background:#2d3748;color:#f6d860;" if c in winners else ""}min-width:200px">{c}{"  ★" if c in winners else ""}</th>'
+        f'<th style="{"background:#e5e7eb;color:#92400e;" if c in winners else ""}min-width:200px">{c}{"  ★" if c in winners else ""}</th>'
         for c in company_list
     )
 
@@ -1163,7 +1196,7 @@ def generate_comparison_report(
         cells = ""
         for company in company_list:
             ax         = comp_subs.get(company, {}).get(axis, {})
-            score      = ax.get("score")
+            grade      = _to_grade(ax)
             strengths  = ax.get("strengths", [])
             weaknesses = ax.get("weaknesses", [])
             compliance = ax.get("brief_compliance", "unclear")
@@ -1174,7 +1207,7 @@ def generate_comparison_report(
             cell_bg = "rgba(246,216,96,0.03)" if company in winners else ""
             cells  += (
                 f'<td style="background:{cell_bg}">'
-                f'{_score_bar(score)}'
+                f'<div>{_grade_badge(grade)}</div>'
                 f'<div style="margin-top:6px">{_compliance_tag(compliance)}</div>'
                 f'<div style="margin-top:5px">{s_tags}</div>'
                 f'<div style="margin-top:3px">{w_tags}</div>'
@@ -1182,7 +1215,7 @@ def generate_comparison_report(
                 + "</td>"
             )
 
-        rows += f'<tr><td style="min-width:90px;background:#0d1117"><div class="ax-label">{label}</div></td>{cells}</tr>'
+        rows += f'<tr><td style="min-width:90px;background:#f9fafb"><div class="ax-label">{label}</div></td>{cells}</tr>'
 
     table_section = f"""
     <div class="sec">
@@ -1227,26 +1260,26 @@ def generate_comparison_report(
         actual_wins  = gap_analysis.get("actual_winners") or []
         top1_match   = gap_analysis.get("top1_matches_winner", False)
         gap_notes    = gap_analysis.get("notes", "")
-        align_color  = {"high": "#68d391", "partial": "#f6ad55", "low": "#fc8181"}.get(alignment, "#718096")
+        align_color  = {"high": "#16a34a", "partial": "#ea580c", "low": "#dc2626"}.get(alignment, "#6b7280")
         align_kr     = {"high": "일치도 높음", "partial": "부분 일치", "low": "낮은 일치", "unknown": "—"}.get(alignment, "—")
         match_badge  = (
-            f'<span style="background:#1c4a2e;color:#68d391;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">✓ AI 1위 = 실제 당선</span>'
+            f'<span style="background:#dcfce7;color:#16a34a;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">✓ AI 1위 = 실제 당선</span>'
             if top1_match
-            else f'<span style="background:#2d1515;color:#fc8181;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">⚠ AI 1위 ≠ 실제 당선</span>'
+            else f'<span style="background:#fee2e2;color:#dc2626;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">⚠ AI 1위 ≠ 실제 당선</span>'
         )
         actual_str = " · ".join(actual_wins) if actual_wins else "—"
         gap_section = f'''<div class="sec">{_sec_title(_next_n(), "블라인드 분석 vs 실제 결과")}
-<div style="background:#0d1117;border-left:4px solid {align_color};border-radius:8px;padding:14px 18px;margin-bottom:12px">
+<div style="background:#f9fafb;border-left:4px solid {align_color};border-radius:8px;padding:14px 18px;margin-bottom:12px">
   <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
     <span style="font-size:13px;font-weight:700;color:{align_color}">정렬 상태: {align_kr}</span>
     {match_badge}
   </div>
   <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px;font-size:13px">
-    <div><span style="color:#718096">AI 블라인드 1위:</span> <strong style="color:#e2e8f0">{blind_top1}</strong></div>
-    <div><span style="color:#718096">실제 당선:</span> <strong style="color:#e2e8f0">{actual_str}</strong></div>
+    <div><span style="color:#6b7280">AI 블라인드 1위:</span> <strong style="color:#1f2937">{blind_top1}</strong></div>
+    <div><span style="color:#6b7280">실제 당선:</span> <strong style="color:#1f2937">{actual_str}</strong></div>
   </div>
-  {f'<div style="font-size:13px;color:#cbd5e0;line-height:1.6;margin-top:6px;padding-top:8px;border-top:1px solid #1a2535">{gap_notes}</div>' if gap_notes else ""}
-  <div style="font-size:11px;color:#4a5568;margin-top:8px;font-style:italic">
+  {f'<div style="font-size:13px;color:#374151;line-height:1.6;margin-top:6px;padding-top:8px;border-top:1px solid #f9fafb">{gap_notes}</div>' if gap_notes else ""}
+  <div style="font-size:11px;color:#6b7280;margin-top:8px;font-style:italic">
     * 블라인드 분석: 결과 정보 없이 익명 채점 → 분석 결과를 사후 결과와 비교
   </div>
 </div></div>'''
@@ -1279,14 +1312,14 @@ def generate_comparison_report(
             ax        = wd.get(axis, {})
             strengths = ax.get("strengths", [])
             notes     = ax.get("notes", "")
-            score     = ax.get("score")
+            grade     = _to_grade(ax)
             if not strengths and not notes:
                 continue
             label     = _axis_labels_ko.get(axis, axis)
-            score_txt = f" ({float(score):.1f})" if score is not None else ""
+            grade_txt = f" [{grade}]" if grade else ""
             tags      = "".join(f'<span class="tag tag-strength">{t}</span>' for t in strengths)
             axis_items += (
-                f'<div class="w-axis"><div class="w-axis-label">{label}{score_txt}</div>'
+                f'<div class="w-axis"><div class="w-axis-label">{label}{grade_txt}</div>'
                 f'<div>{tags}</div>'
                 + (f'<div class="notes">{notes}</div>' if notes else "")
                 + "</div>"

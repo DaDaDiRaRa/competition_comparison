@@ -19,6 +19,10 @@ class ApiKeyRequest(BaseModel):
     api_key: str
 
 
+class DbPathRequest(BaseModel):
+    db_path: str
+
+
 @router.get("")
 def get_settings():
     return settings.to_dict()
@@ -51,6 +55,21 @@ def set_api_key(req: ApiKeyRequest):
 def clear_api_key():
     settings.clear_api_key()
     return {"ok": True, "has_key": False}
+
+
+@router.post("/db-path")
+def set_db_path(req: DbPathRequest):
+    path_str = req.db_path.strip()
+    if not path_str:
+        raise HTTPException(status_code=400, detail="DB 경로를 입력하세요.")
+    try:
+        from pathlib import Path
+        path = Path(path_str)
+        settings.set_db_path(str(path))
+        init_db()
+        return {"ok": True, "db_path": str(settings.db_path)}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"경로 설정 실패: {e}")
 
 
 @router.get("/facility-types")

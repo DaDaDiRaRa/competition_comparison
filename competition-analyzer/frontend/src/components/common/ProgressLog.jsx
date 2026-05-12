@@ -32,15 +32,15 @@ export default function ProgressLog({ events }) {
     <div
       ref={ref}
       style={{
-        background: '#0d1117', border: '1px solid #2d3748', borderRadius: 8,
+        background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8,
         padding: '12px 16px', fontFamily: 'monospace', fontSize: 12,
-        color: '#a0aec0', maxHeight: 280, overflowY: 'auto', lineHeight: 1.6,
+        color: '#4b5563', maxHeight: 280, overflowY: 'auto', lineHeight: 1.6,
       }}
     >
       {events.length === 0
         ? <span style={{ color: '#4a5568' }}>분석 로그가 여기에 표시됩니다...</span>
         : events.map((ev, i) => (
-          <div key={i} style={{ color: ev.type === 'error' ? '#fc8181' : ev.type === 'complete' ? '#68d391' : undefined, whiteSpace: 'pre-wrap' }}>
+          <div key={i} style={{ color: ev.type === 'error' ? '#dc2626' : ev.type === 'complete' ? '#16a34a' : undefined, whiteSpace: 'pre-wrap' }}>
             {eventToText(ev)}
           </div>
         ))

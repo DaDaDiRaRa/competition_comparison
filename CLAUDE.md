@@ -13,6 +13,7 @@ Competition Analyzer is a full-stack application for analyzing architectural com
 - AI: Anthropic Claude (claude-sonnet-4-6) via Anthropic API
 - PDF Processing: PyMuPDF (fitz) — primary rasterizer in `services/utils.py`
 - Database: Custom JSON-based storage
+- 배포: PyInstaller(`--onedir`) + PyWebView 네이티브 윈도우 (Windows EdgeChromium WebView2)
 
 ## Architecture
 
@@ -47,6 +48,7 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
    - Manages app_settings.json (database path, API key, DPI settings)
    - `GET /settings/facility-types` — `{key: label_ko}` 딕셔너리 반환
    - `GET /settings/meta` — 프론트 `useMeta()` 훅이 소비하는 단일 메타 엔드포인트. `facility_types`, `page_types`, `axes_by_group` 포함
+   - `POST /settings/db-path` — DB 경로 저장 후 `init_db()` 자동 실행. `{ db_path: str }` 바디
 
 **Core Services:**
 
@@ -85,6 +87,10 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
   - `axes_for(facility_type) → dict` — facility_type의 group에 맞는 axes 반환
   - `axes_keys_for(facility_type) → list` — axes 키 목록
   - `COMPARISON_AXES_META` / `COMPARISON_AXES` — legacy aliases (redev 그룹, 하위호환용)
+  - `DEFAULT_DB_PATH = Path.home() / "CompetitionAnalyzerDB"` — 미설정 시 홈 디렉터리 기본값
+  - `settings.db_path` — `app_settings.json`의 `db_path` 값 우선, 없으면 `DEFAULT_DB_PATH`
+  - `settings.has_db_path` — 사용자가 명시적으로 경로를 설정했는지 여부
+  - `settings.set_db_path(path)` — 경로를 `app_settings.json`에 저장
 - `app_settings.json` - User-configurable settings (created at runtime)
 
 ### Frontend (React + Vite)
@@ -121,14 +127,17 @@ Located in `competition-analyzer/frontend/`, the app has five main tabs:
 - `listDiagnosisReports()` — 저장된 진단 리포트 목록 fetch
 - `rerunCompare(facilityType, competitionId)` — compare-only SSE stream
 - `rerenderReport(facilityType, competitionId)` — LLM 없이 HTML 재생성 (JSON 응답)
+- `setDbPath(dbPath)` — DB 경로 저장 (`POST /api/settings/db-path`)
 - All SSE events include `_timestamp` (pipeline start time in ms) for elapsed time display
 - Endpoints: `/api/accumulate`, `/api/diagnose`, `/api/patterns`, `/api/settings`
 
 **Styling:**
 
 - Inline styles (no CSS framework)
-- Dark theme (#0f1117 background, #90cdf4 accent)
+- **화이트 테마 + 네이비 액센트** (기본). 메인 BG `#fafafa`, 패널 `#ffffff`, 액센트 `#1e3a8a`, 텍스트 `#1f2937`, 테두리 `#e5e7eb`
+- 색 토큰 단일 명세: `frontend/src/theme.js` (참고용 문서). 단, 각 컴포넌트는 인라인 hex로 박혀 있어 토큰을 import하지는 않음
 - Components use consistent style object pattern
+- 일괄 색 교체: `tools/change_theme.py <preset>` (navy/charcoal/forest/burgundy/indigo/blackgold) 또는 `custom --accent ... --hover ... --highlight ...`
 
 ## Common Development Tasks
 
@@ -211,8 +220,7 @@ Test with curl or Postman by uploading files to:
 
 ```json
 {
-  "db_path": "M:\\06_설계사업6본부\\...",
-  "anthropic_api_key": "",
+  "db_path": "C:\\Users\\사용자명\\CompetitionAnalyzerDB",
   "raster_dpi_classify": 72,
   "raster_dpi_extract": 120,
   "model_id": "claude-sonnet-4-6",
@@ -220,6 +228,7 @@ Test with curl or Postman by uploading files to:
 }
 ```
 
+- `db_path`는 설정 탭 UI 또는 `POST /api/settings/db-path`로 변경. 미설정 시 `~/CompetitionAnalyzerDB` 자동 사용.
 - `anthropic_api_key`는 메모리에만 보관 — `app_settings.json`에 저장되지 않음(서버 재시작 시 초기화).
 - **Environment fallback:** `ANTHROPIC_API_KEY` env var
 
@@ -242,6 +251,12 @@ Test with curl or Postman by uploading files to:
 - **LLM 호출:** 모든 Claude 호출은 `services/llm_client.py::call_messages()`. 502 오류는 Anthropic 서버 일시 장애 — 재시도.
 - **Prompt Caching:** compare(2-pass) / diagnose 호출 시 `system` 배열 + 정적 content 블록 + 동적 content 블록 각각에 `cache_control: {"type": "ephemeral"}` 부여. 5분 TTL, 캐시 히트 시 입력 토큰 90% 할인 / 캐시 쓰기 1.25× 비용. Sonnet은 1024 토큰 이상 블록만 캐시 가능. `rerun-compare`로 재실행 시 큰 비용 절감.
 - **2-pass Blind-Reveal 의도:** Pass 1에서 LLM이 결과 라벨(`win`/`lose`)을 모르게 채점 → 앵커링·할로 효과 제거. Pass 2에서 실제 결과를 공개하고 사후 분석 → 블라인드 1위와 실제 당선이 다를 때 `gap_analysis.alignment != "high"`로 경고 가능. 완벽한 익명화는 불가능 (PDF 내 로고·텍스트 등 식별 정보 잔존)지만 명시적 결과 라벨 제거가 가장 강한 시그널 차단.
+- **Grading (5-level A/B/C/D/E):** 점수는 0.0-10.0 숫자가 아닌 `grade: "A"|"B"|"C"|"D"|"E"` 문자열. `overall_grade`도 동일. 이유: 임원 검토 시 무의미한 정밀도 논쟁 차단 + 환각 검증 부담 감소. A=최우수(#68d391), B=우수(#4fd1c5), C=보통(#f6c46a), D=미흡(#f6ad55), E=불량(#fc8181).
+  - 구 데이터 자동 변환: `score`(0-10) → ≥8.5=A, ≥7=B, ≥5=C, ≥3=D, else=E. 구 `grade`("상"→B, "중"→C, "하"→D). 새 비교 실행하면 LLM이 직접 A-E 출력.
+  - 백엔드 헬퍼: `report_generator.py::_to_grade()` + `_grade_badge()`, `diagnosis_report_generator.py::_to_grade()` + `_grade_color()`
+  - 프론트 헬퍼: `constants/index.js`의 `GRADE_COLOR`, `GRADE_BG`, `toGrade(d)` (구 score 호환)
+  - `blind_ranking`은 그대로 유지 — LLM이 상 개수 우선으로 순위 부여
+- **페이지 인용 강제:** compare/diagnose 프롬프트에 "각 strength/weakness/recommendation은 반드시 `(p.N)` 형식 페이지 인용 포함" 룰 명시. `_page` 필드를 `_trim_extracted()`에서 보존하여 LLM에 페이지 번호 노출. 임원 검토 시 즉시 PDF 원문 검증 가능 → 환각 억제 효과도 큼. Pass 2도 Pass 1 결과 내 (p.N)을 그대로 인용하도록 지시.
 - **Report Generation Rule:** `report_generator.py`, `submission_report_generator.py`, `diagnosis_report_generator.py` 모두 Claude API 호출 금지. 기존 데이터를 HTML로 렌더링만.
 - **Prompt Templating Rule:** `comparator.py` prompt templates use `.replace("{key}", value)` — JSON braces would cause `KeyError` with `.format()`.
 - **DPI Settings:** Classify 72 DPI (Haiku, fast), extract 120 DPI (Sonnet). 150→120 변경으로 이미지 토큰 약 36% 절감, OCR 품질 유지선.
@@ -250,9 +265,24 @@ Test with curl or Postman by uploading files to:
 - **File Naming:** Components PascalCase. API paths kebab-case.
 - **Page Types:** 27개 — 일반 20개 + 재건축 전용 7개(`BUSINESS_VIABILITY`, `AREA_INCREASE`, `VIEW_ANALYSIS`, `COMMUNITY_PROGRAM`, `COMPANY_PORTFOLIO`, `CONSTRUCTION_PLAN`, `UNIT_PLAN_PENTHOUSE`). `PAGE_TYPES_META`에 전체 한국어명 정의.
 - **ProgressLog Events:** All SSE events must include `_timestamp` for elapsed time display.
-- **PDF Rasterizer:** Primary: `services/utils.py::rasterize_pdf` (PyMuPDF). `services/pdf_rasterizer.py` is legacy.
+- **PDF Rasterizer:** Primary: `services/utils.py::rasterize_pdf` (PyMuPDF). `services/pdf_rasterizer.py` is legacy. PaddleOCR은 `services/utils.py::ocr_page()`에서 lazy-load — `requirements-ocr.txt` 미설치 시 자동 스킵.
+- **FastAPI Lifespan:** `main.py`는 `@app.on_event` 대신 `@asynccontextmanager async def lifespan()` 사용. `init_db()` 실패해도 서버가 뜨도록 graceful 처리.
+- **데스크톱 앱 (PyWebView + PyInstaller):** `backend/launcher.py`가 진입점. uvicorn을 백그라운드 스레드로 띄운 뒤 `webview.create_window()`로 EdgeChromium 네이티브 창 표시 (`gui` 미지정 시 Windows에서 자동 선택). `JsApi.open_external(url)` JS API 노출 → 프론트의 `App.jsx`가 `target="_blank"` 클릭을 가로채 `window.pywebview.api.open_external()`로 시스템 기본 브라우저에 위임 (리포트 인쇄/다운로드 편의). `frozen` 모드 감지(`getattr(sys, 'frozen', False)`)로 `sys._MEIPASS` 안의 `frontend_dist` 서빙.
+- **PyInstaller spec:** `backend/competition_analyzer.spec`. `collect_all('webview')`, `collect_all('clr_loader')`, `collect_all('pythonnet')` 필수 — pywebview는 .NET 어셈블리(`System`, `System.Windows`, `System.Drawing`)를 동적 로드하므로 정적 분석으로 못 잡힘. PaddleOCR 등 무거운 의존성은 `excludes`. 산출물: `backend/dist/CompetitionAnalyzer/CompetitionAnalyzer.exe` (~14MB) + `_internal/` (~120MB). `console=False` (windowed 빌드) — CMD 창 미표시.
+- **로깅 (windowed 빌드):** `console=False`이면 stdout/stderr가 어디에도 표시되지 않음. `launcher.py::_setup_logging()`이 `RotatingFileHandler`로 `~/.competition-analyzer/app.log`(2MB×3 백업)에 기록. 치명적 오류는 `_show_error_dialog()`로 Win32 MessageBox 표시 (`ctypes.windll.user32.MessageBoxW`). uvicorn 자체 로그는 console 없으면 사라지지만 launcher 핵심 이벤트는 모두 파일에 남음. 디버깅 시 이 파일을 먼저 확인.
+- **빌드 스크립트:** 저장소 루트의 `build.ps1` — npm install → vite build → PyInstaller 일괄 실행. PowerShell의 `$ErrorActionPreference = "Stop"`이 PyInstaller stderr(INFO 로그)를 에러로 오인할 수 있어 일부 환경에서 실패 표시될 수 있으나, 실제 산출물은 정상 생성됨. 직접 `.\venv\Scripts\python.exe -m PyInstaller competition_analyzer.spec --noconfirm` 실행하면 우회.
+- **테마/색상 시스템:** 화이트 테마 + 네이비 액센트가 기본. 색상이 정의된 위치 4곳:
+  1. `frontend/src/theme.js` — 색 토큰 명세 (참고용)
+  2. `frontend/src/constants/index.js` — `GRADE_COLOR`, `GRADE_BG`, `COMPLIANCE_COLOR`
+  3. `backend/services/report_generator.py` — `_CSS`의 `:root` CSS 변수 26개 (비교 리포트)
+  4. 각 `.jsx` 컴포넌트 인라인 스타일 + `submission_report_generator.py`/`diagnosis_report_generator.py` 인라인 hex
+  - **일괄 교체 도구:** `tools/change_theme.py`. 프리셋: `navy`(현재), `charcoal`, `forest`, `burgundy`, `indigo`, `blackgold`. 또는 `custom --accent ... --hover ... --highlight ...`. 실행 후 `npm run build` + PyInstaller 재빌드 필요.
+  - **현재 액센트 계열 색상:** accent `#1e3a8a` / hover `#1e40af` / light `#3b82f6` / soft `#dbeafe`. 강조 골드: `#b8860b` / soft `rgba(184,134,11,0.10)` / strong `rgba(184,134,11,0.30)`.
+  - **등급 색상 (5-level, 화이트 BG용):** A `#16a34a` / B `#0891b2` / C `#ca8a04` / D `#ea580c` / E `#dc2626`. 배경(`GRADE_BG`)은 같은 hue의 옅은 톤 (`#dcfce7`, `#cffafe`, `#fef3c7`, `#fed7aa`, `#fee2e2`).
+  - 색 변경 시 `theme.js`도 같이 갱신해 단일 명세 유지.
 - **ProjectList Filtering:** 데이터 존재하는 시설 유형만 탭 노출. 첫 번째 유형 자동 선택.
-- **New Machine Setup:** `git clone` → `pip install -r requirements.txt` + `npm install`. `app_settings.json`의 `db_path` 수정 + API 키 입력.
+- **New Machine Setup:** `git clone` → `pip install -r requirements.txt` + `npm install` → 백엔드 실행 → 브라우저에서 설정 탭에서 DB 경로 입력 + API 키 입력. DB 경로 미입력 시 `~/CompetitionAnalyzerDB` 자동 사용.
+- **PaddleOCR (선택):** 이미지 기반 PDF(텍스트 없는) OCR 필요 시만 `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision으로 동작하므로 불필요.
 - **Page Taxonomy 갱신:** `init_db()`는 `_config/page_taxonomy.json` 없을 때만 생성. PAGE_TYPES 추가 후 기존 DB 반영하려면 해당 파일 삭제 후 백엔드 재시작.
 - **재건축사업 타입:** `facility_type="reconstruction"` / `"alternative"`. 분류 신뢰도 < `REDEV_CONFIDENCE_FLOOR=0.65`이면 `REDEV_FALLBACK`으로 안전 강등(`page_classifier.py::_normalise_result`).
 - **Cross-Compare:** `routers/accumulate.py::cross_compare` — 여러 프로젝트 제출물 임의 조합 비교. `{db_path}/_cross_reports/` 저장.
@@ -261,5 +291,6 @@ Test with curl or Postman by uploading files to:
   - `POST rerender-report` — LLM 없음. 기존 `_comparison.json` 사용해 HTML만 재생성. JSON 응답.
   - `POST rerun-compare` — LLM 재실행 (토큰 비용). 비교 결과 자체 갱신.
 - **HTML Comparison Report:** 다크 톤(#1a2138) + 골드 액센트(#d4af37). 자동 섹션 넘버링. `report_generator.py::_CSS`의 `:root` CSS 변수로 26개 토큰 통합 관리. Ctrl+P → A4 landscape PDF 출력 지원. `gap_section` 블록이 순위와 차별화 사이에 배치되어 alignment 색상(green/orange/red)으로 정합도 강조.
-- **comparison.json 스키마:** `{submissions, ranking, blind_ranking, key_differentiators, winner_strengths, loser_weaknesses, gap_analysis: {blind_top1, actual_winners, top1_matches_winner, alignment, notes}}`. `ranking`은 호환성을 위해 `blind_ranking`과 동일 값 유지.
+- **comparison.json 스키마:** `{submissions: {company: {axis: {grade, strengths, weaknesses, brief_compliance, notes}}}, ranking, blind_ranking, key_differentiators, winner_strengths, loser_weaknesses, gap_analysis: {blind_top1, actual_winners, top1_matches_winner, alignment, notes}}`. `ranking`은 호환성을 위해 `blind_ranking`과 동일 값 유지. `grade`는 "A"|"B"|"C"|"D"|"E"|null.
+- **diagnosis.json 스키마:** `{axes: {axis: {grade, strengths, weaknesses, recommendations, evidence}}, overall_grade, brief_compliance, requirement_mapping, pattern_deviation, strengths, weaknesses, recommendations}`. `overall_grade`도 "A"|"B"|"C"|"D"|"E".
 - **Project Number:** 폴더명 = `{project_number}_{slugified_competition_name}`. 구 데이터(`year` 필드만 있는 폴더)는 폴백 처리.

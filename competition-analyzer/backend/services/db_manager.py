@@ -232,7 +232,10 @@ def list_projects(facility_type: str | None = None) -> list[dict]:
             if comp_dir.is_dir():
                 meta_path = comp_dir / "_meta.json"
                 if meta_path.exists():
-                    projects.append(_read_json(meta_path))
+                    meta = _read_json(meta_path)
+                    # _meta.json에 저장 여부와 무관하게 파일 존재로 판단
+                    meta["report_available"] = (comp_dir / "_report.html").exists()
+                    projects.append(meta)
     return projects
 
 

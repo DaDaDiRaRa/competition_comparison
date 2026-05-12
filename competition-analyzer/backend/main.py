@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -9,7 +10,17 @@ from routers import accumulate, diagnose, settings, patterns
 from services.db_manager import init_db
 from version import __version__
 
-app = FastAPI(title="Competition Analyzer API", version=__version__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        init_db()
+    except Exception as e:
+        print(f"[WARNING] DB 초기화 실패 ({e}) — 설정 탭에서 DB 경로를 확인하세요.")
+    yield
+
+
+app = FastAPI(title="Competition Analyzer API", version=__version__, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,11 +36,6 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(patterns.router, prefix="/api/patterns", tags=["patterns"])
 
 
-@app.on_event("startup")
-def on_startup():
-    init_db()
-
-
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -42,7 +48,15 @@ def version():
 
 # ---------------- 정적 프론트엔드 서빙 ----------------
 def _resolve_frontend_dist() -> Path | None:
-    """개발 모드에서 frontend/dist 위치 탐색."""
+    """개발 모드 + PyInstaller 번들 모드 모두 대응."""
+    import sys
+    # PyInstaller --onedir/--onefile 번들: sys._MEIPASS에 리소스 추출됨
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        candidate = Path(bundle) / "frontend_dist"
+        if candidate.exists():
+            return candidate
+    # 개발 모드
     dev = Path(__file__).parent.parent / "frontend" / "dist"
     if dev.exists():
         return dev

@@ -5,11 +5,11 @@ const s = {
     borderWidth: 2, borderStyle: 'dashed', borderColor: '#4a5568',
     borderRadius: 8, padding: 24,
     textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
-    background: '#1a1f2e',
+    background: '#ffffff',
   },
-  zoneActive: { borderColor: '#63b3ed', background: '#1e2a3a' },
-  label: { color: '#a0aec0', fontSize: 14, marginTop: 8 },
-  files: { marginTop: 8, fontSize: 13, color: '#68d391' },
+  zoneActive: { borderColor: '#3b82f6', background: '#f9fafb' },
+  label: { color: '#4b5563', fontSize: 14, marginTop: 8 },
+  files: { marginTop: 8, fontSize: 13, color: '#16a34a' },
 }
 
 export default function DropZone({ label, accept = '.pdf', multiple = false, onFiles }) {

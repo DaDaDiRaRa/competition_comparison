@@ -95,10 +95,9 @@ def get_report(facility_type: str, competition_id: str):
     path = get_report_path(facility_type, competition_id)
     if not path.exists():
         raise HTTPException(404, "Report not found")
-    return FileResponse(
-        path, media_type="text/html",
-        filename=f"{competition_id}_report.html",
-    )
+    resp = FileResponse(path, media_type="text/html")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.get("/projects/{facility_type}/{competition_id}/submissions/{company}/report")
