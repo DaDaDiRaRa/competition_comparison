@@ -32,7 +32,7 @@ const s = {
   cardName: { fontWeight: 600, color: '#1f2937', fontSize: 14, flex: 1 },
   badge: {
     fontSize: 11, padding: '2px 8px', borderRadius: 20,
-    background: '#475569', color: '#334155', fontWeight: 600,
+    background: '#475569', color: '#ffffff', fontWeight: 600,
   },
   chevron: (open) => ({
     color: '#4a5568', fontSize: 12, transform: open ? 'rotate(180deg)' : 'none',
