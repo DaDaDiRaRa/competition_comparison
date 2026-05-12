@@ -226,7 +226,10 @@ python tools/change_theme.py custom --accent "#2563eb" --hover "#1d4ed8" --highl
 
 ```powershell
 cd competition-analyzer/frontend && npm run build
-cd ../backend && python -m PyInstaller competition_analyzer.spec --noconfirm
+
+cd ../backend 
+.\venv\Scripts\activate
+python -m PyInstaller competition_analyzer.spec --noconfirm
 # (또는 루트의 .\build.ps1)
 ```
 

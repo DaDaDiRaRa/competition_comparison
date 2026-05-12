@@ -19,7 +19,7 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
        background: #fafafa; color: #1f2937; padding: 24px; font-size: 14px; }
 .wrap { max-width: 1100px; margin: 0 auto; }
 .hdr { background: #ffffff; border-radius: 12px; padding: 24px 28px; margin-bottom: 20px;
-       border-left: 4px solid #1e3a8a; }
+       border-left: 4px solid #334155; }
 .hdr-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .hdr-title { font-size: 22px; font-weight: 700; color: #1f2937; }
 .hdr-sub { font-size: 13px; color: #4b5563; }
@@ -28,7 +28,7 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 .hdr-meta strong { color: #1f2937; }
 
 .sec { background: #ffffff; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; }
-.sec-title { font-size: 15px; font-weight: 700; color: #1e3a8a; margin-bottom: 14px;
+.sec-title { font-size: 15px; font-weight: 700; color: #334155; margin-bottom: 14px;
              padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
 
 .kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
@@ -39,12 +39,12 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 
 .concept-card { background: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 10px; }
 .concept-name { font-size: 18px; font-weight: 700; color: #f6e05e; margin-bottom: 6px; }
-.concept-type { font-size: 12px; color: #1e3a8a; background: #1e2d40;
+.concept-type { font-size: 12px; color: #334155; background: #1e2d40;
                 padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
 .concept-strategy { font-size: 13px; color: #374151; line-height: 1.7; }
 .keywords { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.kw { background: #1a2e40; color: #1e3a8a; font-size: 12px; padding: 3px 10px;
-      border-radius: 20px; border: 1px solid #1e40af; }
+.kw { background: #1a2e40; color: #334155; font-size: 12px; padding: 3px 10px;
+      border-radius: 20px; border: 1px solid #475569; }
 
 .floor-table { width: 100%; border-collapse: collapse; }
 .floor-table th { background: #f9fafb; padding: 8px 12px; text-align: left;
@@ -59,7 +59,7 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 
 .elev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .elev-card { background: #f9fafb; border-radius: 6px; padding: 12px; }
-.elev-dir { font-size: 12px; font-weight: 700; color: #1e3a8a; text-transform: uppercase;
+.elev-dir { font-size: 12px; font-weight: 700; color: #334155; text-transform: uppercase;
             margin-bottom: 6px; }
 .elev-row { font-size: 12px; color: #4b5563; margin-bottom: 3px; }
 .elev-row strong { color: #1f2937; }
@@ -68,13 +68,13 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 .note-item { background: #f9fafb; border-radius: 6px; padding: 10px 14px;
              font-size: 13px; color: #374151; line-height: 1.6;
              border-left: 3px solid #6b7280; }
-.note-item.accent { border-left-color: #1e3a8a; }
+.note-item.accent { border-left-color: #334155; }
 
 .dist-bar-wrap { display: flex; flex-direction: column; gap: 6px; }
 .dist-row { display: flex; align-items: center; gap: 8px; }
 .dist-label { font-size: 12px; color: #4b5563; min-width: 120px; }
 .dist-bar-bg { flex: 1; background: #f9fafb; border-radius: 3px; height: 14px; overflow: hidden; }
-.dist-bar-fill { height: 100%; border-radius: 3px; background: #1e40af; }
+.dist-bar-fill { height: 100%; border-radius: 3px; background: #475569; }
 .dist-count { font-size: 12px; color: #6b7280; min-width: 28px; text-align: right; }
 
 .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 24px; padding: 12px; }
@@ -195,7 +195,7 @@ def _render_site_plan(site_plans: list) -> str:
             val = sp.get(key)
             if val:
                 rows.append(f'<div class="note-item accent">'
-                            f'<strong style="color:#1e3a8a">{label}: </strong>{val}</div>')
+                            f'<strong style="color:#334155">{label}: </strong>{val}</div>')
     if not rows:
         return ""
     content = "".join(rows)
@@ -535,7 +535,7 @@ def _pct_str(value):
         return str(value)
 
 
-def _tag_cluster(items: list, color: str = '#1e3a8a') -> str:
+def _tag_cluster(items: list, color: str = '#334155') -> str:
     """키워드 태그 클러스터 HTML. 빈 항목 자동 필터."""
     items = [str(i) for i in (items or []) if i]
     if not items:
@@ -555,7 +555,7 @@ def _note_item(text: str, accent: bool = False) -> str:
     """노트 아이템 한 줄. accent=True면 강조 왼쪽 바."""
     if not text:
         return ''
-    border = '#1e3a8a' if accent else '#6b7280'
+    border = '#334155' if accent else '#6b7280'
     return (
         f'<div style="background:#f9fafb;border-radius:5px;padding:9px 13px;'
         f'margin-bottom:6px;font-size:13px;color:#374151;line-height:1.6;'
@@ -598,7 +598,7 @@ def _kv_grid(*blocks: str, cols: int = 3) -> str:
 def _sec_open(title: str, icon: str = '', badge: str = '') -> str:
     """섹션 열기 (기존 sec + sec-title CSS 재사용)."""
     b = (
-        f'<span style="font-size:10px;background:#1a2e40;color:#1e3a8a;'
+        f'<span style="font-size:10px;background:#1a2e40;color:#334155;'
         f'padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:400">{badge}</span>'
     ) if badge else ''
     ic = f'<span style="opacity:0.7;margin-right:6px">{icon}</span>' if icon else ''
@@ -654,7 +654,7 @@ def _render_key_message(branding_list: list, concept_list: list) -> str:
     massing = concept.get('massing_type', '')
     metaphor = concept.get('metaphor_reference', '')
     badges = (
-        (f'<span style="background:#1e2d40;color:#1e3a8a;font-size:11px;'
+        (f'<span style="background:#1e2d40;color:#334155;font-size:11px;'
          f'padding:3px 9px;border-radius:3px;margin-right:6px">매스: {massing}</span>'
          if massing else '')
         + (f'<span style="background:#ede9fe;color:#a78bfa;font-size:11px;'
@@ -691,7 +691,7 @@ def _render_key_message(branding_list: list, concept_list: list) -> str:
     body = (
         '<div style="background:#f9fafb;border-radius:8px;padding:18px 20px">'
         + name_html + slogan_html + badges_html + strat_html + sub_slogan_html
-        + _tag_cluster(kws, '#1e3a8a')
+        + _tag_cluster(kws, '#334155')
         + (_tag_cluster(targets, '#ea580c') if targets else '')
         + '</div>'
     )
@@ -749,7 +749,7 @@ def _render_business_viability(bv_list: list) -> str:
                 '<div style="font-size:11px;color:#6b7280;margin-bottom:8px">용적률 인센티브</div>'
                 '<div style="display:flex;align-items:center;gap:8px;font-size:13px">'
                 + (f'<span style="color:#4b5563">기준 {fb}</span>' if fb else '')
-                + (f'<span style="color:#6b7280">→</span><span style="color:#1e3a8a">+인센티브 {fi}</span>' if fi else '')
+                + (f'<span style="color:#6b7280">→</span><span style="color:#334155">+인센티브 {fi}</span>' if fi else '')
                 + (f'<span style="color:#6b7280">→</span>'
                    f'<span style="font-weight:700;color:#f6e05e">최종 {ff}</span>' if ff else '')
                 + '</div></div>'
@@ -928,13 +928,13 @@ def _render_unit_plan_std(up_list: list) -> str:
         p_disp = int(actual_p) if isinstance(actual_p, float) and actual_p == int(actual_p) else actual_p
 
         card = (
-            '<div style="background:#f9fafb;border-radius:6px;padding:14px 16px;border-top:3px solid #1e40af">'
-            f'<div style="font-size:17px;font-weight:800;color:#1e3a8a;margin-bottom:2px">{u_type}</div>'
+            '<div style="background:#f9fafb;border-radius:6px;padding:14px 16px;border-top:3px solid #475569">'
+            f'<div style="font-size:17px;font-weight:800;color:#334155;margin-bottom:2px">{u_type}</div>'
             + (f'<div style="font-size:24px;font-weight:700;color:#1f2937">{p_disp}<span style="font-size:12px;color:#6b7280;font-weight:400">평</span></div>' if actual_p else '')
             + (f'<div style="font-size:11px;color:#6b7280">{count}세대</div>' if count else '')
             + (f'<div style="font-size:11px;color:#6b7280;line-height:1.7;margin:4px 0">{"  /  ".join(area_parts)}</div>' if area_parts else '')
             + (f'<div style="font-size:11px;color:#6b7280;margin-bottom:4px">{meta}</div>' if meta else '')
-            + (_tag_cluster(features, '#1e3a8a') if features else '')
+            + (_tag_cluster(features, '#334155') if features else '')
             + '</div>'
         )
         cards.append(card)
@@ -1073,7 +1073,7 @@ def _render_site_planning(sp_list: list, sc_list: list, lc_list: list) -> str:
                         + _tag_cluster(facilities, '#16a34a') + '</div>')
         if transport:
             sc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#6b7280">교통: </span>'
-                        + _tag_cluster(transport, '#1e3a8a') + '</div>')
+                        + _tag_cluster(transport, '#334155') + '</div>')
         if issues:
             sc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#6b7280">사이트 이슈: </span>'
                         + _tag_cluster(issues, '#dc2626') + '</div>')
@@ -1105,7 +1105,7 @@ def _render_site_planning(sp_list: list, sc_list: list, lc_list: list) -> str:
                         + _tag_cluster(trees, '#16a34a') + '</div>')
         if programs:
             lc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#6b7280">야외 프로그램: </span>'
-                        + _tag_cluster(programs, '#1e3a8a') + '</div>')
+                        + _tag_cluster(programs, '#334155') + '</div>')
         if pavement:
             lc_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#6b7280">포장재: </span>'
                         + _tag_cluster(pavement, '#4b5563') + '</div>')
@@ -1153,7 +1153,7 @@ def _render_community(cp_list: list, ss_list: list) -> str:
                         + _tag_cluster(sig, '#ea580c') + '</div>')
         if hotel:
             cp_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#6b7280">호텔식 서비스: </span>'
-                        + _tag_cluster(hotel, '#1e3a8a') + '</div>')
+                        + _tag_cluster(hotel, '#334155') + '</div>')
         if premium:
             cp_html += _tag_cluster(premium, '#a78bfa')
         if msg:
@@ -1177,7 +1177,7 @@ def _render_community(cp_list: list, ss_list: list) -> str:
             continue
 
         type_color = {
-            'community': '#16a34a', 'culture': '#1e3a8a', 'lobby': '#ea580c',
+            'community': '#16a34a', 'culture': '#334155', 'lobby': '#ea580c',
             'rooftop':   '#f6e05e', 'children': '#dc2626', 'council': '#a78bfa',
         }.get(s_type, '#4b5563')
 
@@ -1187,7 +1187,7 @@ def _render_community(cp_list: list, ss_list: list) -> str:
             + (f'<div style="font-size:14px;font-weight:700;color:#1f2937;margin-bottom:4px">{name}</div>' if name else '')
             + (f'<span style="background:{type_color}1a;color:{type_color};font-size:10px;'
                f'padding:2px 7px;border-radius:3px;margin-bottom:8px;display:inline-block">{s_type}</span>' if s_type else '')
-            + (_tag_cluster(features, '#1e3a8a') if features else '')
+            + (_tag_cluster(features, '#334155') if features else '')
             + (_tag_cluster(users, '#ea580c')    if users    else '')
             + (_note_item(strategy)              if strategy else '')
             + '</div>'
@@ -1321,7 +1321,7 @@ def _render_construction_plan(cp_list: list) -> str:
         tag_html = ''
         if smart:
             tag_html += ('<div style="margin-top:6px"><span style="font-size:11px;color:#6b7280">스마트 주차: </span>'
-                         + _tag_cluster(smart, '#1e3a8a') + '</div>')
+                         + _tag_cluster(smart, '#334155') + '</div>')
         if strats:
             tag_html += ('<div style="margin-top:4px"><span style="font-size:11px;color:#6b7280">시공 전략: </span>'
                          + _tag_cluster(strats, '#ea580c') + '</div>')
@@ -1380,7 +1380,7 @@ def _render_company_portfolio(port_list: list) -> str:
         if projects:
             proj_cards = ''.join(
                 f'<div style="background:#f9fafb;border-radius:5px;padding:10px 12px">'
-                f'<div style="font-size:12px;font-weight:600;color:#1e3a8a">{p.get("name","")}</div>'
+                f'<div style="font-size:12px;font-weight:600;color:#334155">{p.get("name","")}</div>'
                 + (f'<div style="font-size:10px;color:#6b7280">{p.get("year","")}</div>' if p.get("year") else '')
                 + (f'<div style="font-size:11px;color:#6b7280;margin-top:3px;line-height:1.5">{p.get("highlight","")}</div>' if p.get("highlight") else '')
                 + '</div>'
@@ -1430,7 +1430,7 @@ def generate_submission_report(sub_doc: dict) -> str:
     header = f"""
     <div class="hdr">
       <div class="hdr-top">
-        <span style="background:#2b4c7e;color:#1e3a8a;font-size:11px;padding:3px 10px;
+        <span style="background:#2b4c7e;color:#334155;font-size:11px;padding:3px 10px;
                      border-radius:20px;font-weight:700">{facility_label}</span>
         {result_badge}
       </div>

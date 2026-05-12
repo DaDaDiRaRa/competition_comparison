@@ -29,8 +29,8 @@ const s = {
   btnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
   patternBadge: {
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    background: '#f9fafb', border: '1px solid #1e40af',
-    borderRadius: 20, padding: '4px 12px', fontSize: 12, color: '#1e3a8a',
+    background: '#f9fafb', border: '1px solid #475569',
+    borderRadius: 20, padding: '4px 12px', fontSize: 12, color: '#334155',
     marginTop: 8,
   },
   noPattern: {
@@ -165,7 +165,7 @@ export default function DiagnoseMode() {
                 fontWeight: 600, cursor: 'pointer',
                 border: refMode === opt.v ? '2px solid #a78bfa' : '2px solid #e5e7eb',
                 background: refMode === opt.v ? '#ede9fe' : '#ffffff',
-                color: refMode === opt.v ? '#ede9fe' : '#6b7280',
+                color: refMode === opt.v ? '#5b21b6' : '#6b7280',
               }}
             >
               {opt.label}
@@ -181,7 +181,7 @@ export default function DiagnoseMode() {
             <label style={{ ...s.label, marginBottom: 0, flex: 1 }}>
               참조할 공모 선택 ({facilityTypes[facilityType] || facilityType})
             </label>
-            <span style={{ fontSize: 12, color: '#1e3a8a', fontWeight: 600 }}>
+            <span style={{ fontSize: 12, color: '#334155', fontWeight: 600 }}>
               {selectedRefs.length}개 선택됨
             </span>
           </div>
@@ -214,20 +214,20 @@ export default function DiagnoseMode() {
                         padding: '6px 12px', marginLeft: 8, cursor: 'pointer',
                         borderRadius: 4,
                         background: checked ? '#f9fafb' : 'transparent',
-                        border: checked ? '1px solid #1e3a8a' : '1px solid transparent',
+                        border: checked ? '1px solid #334155' : '1px solid transparent',
                       }}
                     >
                       <div style={{
                         width: 14, height: 14, borderRadius: 3, flexShrink: 0,
-                        border: checked ? '2px solid #1e3a8a' : '2px solid #4a5568',
-                        background: checked ? '#1e3a8a' : 'transparent',
+                        border: checked ? '2px solid #334155' : '2px solid #4a5568',
+                        background: checked ? '#334155' : 'transparent',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 9, color: '#ffffff', fontWeight: 700,
                       }}>{checked ? '✓' : ''}</div>
                       <span style={{ fontSize: 12, color: '#1f2937', flex: 1 }}>{sub.company}</span>
                       <span style={{
                         fontSize: 10, padding: '1px 6px', borderRadius: 10,
-                        color: sub.result === 'win' || sub.result === 'contracted' ? '#b8860b' : '#6b7280',
+                        color: sub.result === 'win' || sub.result === 'contracted' ? '#0d9488' : '#6b7280',
                         background: '#ffffff',
                       }}>
                         {sub.result === 'win' ? '당선' : sub.result === 'contracted' ? '수의계약' : '낙선'}

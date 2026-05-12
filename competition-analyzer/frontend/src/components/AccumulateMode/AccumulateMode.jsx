@@ -27,7 +27,7 @@ const s = {
   },
   btnDisabled: { opacity: 0.5, cursor: 'not-allowed' },
   section: { marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 16 },
-  sectionTitle: { fontSize: 15, fontWeight: 600, color: '#1e3a8a', marginBottom: 12 },
+  sectionTitle: { fontSize: 15, fontWeight: 600, color: '#334155', marginBottom: 12 },
   subCard: {
     background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8,
     padding: 16, marginBottom: 12,
@@ -79,7 +79,7 @@ function SubmissionInput({ idx, onChange, onRemove }) {
       {file && <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>✓ {file.name}</div>}
       {(result === 'win' || result === 'contracted') && (
         <div style={{ ...s.tag, display: 'inline-block', marginTop: 8,
-          background: result === 'contracted' ? '#1e3a8a' : '#15803d' }}>
+          background: result === 'contracted' ? '#334155' : '#15803d' }}>
           {result === 'win' ? '당선작' : '수의계약'}
         </div>
       )}
@@ -151,7 +151,7 @@ export default function AccumulateMode() {
       <div style={s.title}>경쟁 공모 등록</div>
       <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, marginBottom: 20 }}>
         <strong style={{ color: '#1f2937' }}>한 공모에 참여한 여러 회사의 제안서</strong>를 한꺼번에 등록합니다.<br />
-        PDF를 분석해 구조화된 데이터로 저장하며, <strong style={{ color: '#1e3a8a' }}>비교분석·리포트</strong>는
+        PDF를 분석해 구조화된 데이터로 저장하며, <strong style={{ color: '#334155' }}>비교분석·리포트</strong>는
         저장 후 상단 목록의 "비교분석 실행" 버튼으로 별도 실행합니다.<br />
         <span style={{ color: '#4a5568', fontSize: 12 }}>
           * 우리 회사 단독 등록은 상단 "내 프로젝트 등록" 탭을 이용하세요.
@@ -212,7 +212,7 @@ export default function AccumulateMode() {
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
           <div style={s.sectionTitle}>제안서 PDF</div>
           <button onClick={addSub}
-            style={{ marginLeft: 'auto', background: '#1e3a8a', color: '#fff', border: 'none',
+            style={{ marginLeft: 'auto', background: '#334155', color: '#fff', border: 'none',
               borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
             + 추가
           </button>
@@ -265,7 +265,7 @@ export default function AccumulateMode() {
                 <span style={{
                   ...s.tag,
                   ...(sub.result === 'lose' ? s.tagLose : {}),
-                  ...(sub.result === 'contracted' ? { background: '#1e3a8a' } : {}),
+                  ...(sub.result === 'contracted' ? { background: '#334155' } : {}),
                 }}>
                   {sub.result === 'win' ? '당선' : sub.result === 'contracted' ? '수의계약' : '낙선'}
                 </span>

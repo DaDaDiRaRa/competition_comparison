@@ -6,7 +6,7 @@ import PageDistChart from '../common/PageDistChart'
 import { GRADE_COLOR, GRADE_BG, toGrade } from '../../constants'
 
 const RESULT_OPTIONS = [
-  { value: 'win', label: '당선', color: '#b8860b', bg: '#fef3c7' },
+  { value: 'win', label: '당선', color: '#0d9488', bg: '#fef3c7' },
   { value: 'contracted', label: '수의계약', color: '#16a34a', bg: '#dcfce7' },
   { value: 'lose', label: '참여 (낙선)', color: '#6b7280', bg: '#ffffff' },
 ]
@@ -38,7 +38,7 @@ const s = {
   group: { marginBottom: 14 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   divider: { borderTop: '1px solid #e5e7eb', marginTop: 20, paddingTop: 20 },
-  sectionTitle: { fontSize: 14, fontWeight: 600, color: '#1e3a8a', marginBottom: 12 },
+  sectionTitle: { fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 12 },
   resultPicker: { display: 'flex', gap: 8 },
   resultBtn: (opt, selected) => ({
     flex: 1, padding: '10px 0', borderRadius: 8, cursor: 'pointer', fontSize: 13,
@@ -133,7 +133,7 @@ function DiagnosisPanel({ diagnosis }) {
         {/* 개선 방향 */}
         {diagnosis.recommendations?.length > 0 && (
           <div style={s.card}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a', marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 10 }}>
               개선 방향
             </div>
             {diagnosis.recommendations.map((r, i) => (

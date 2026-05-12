@@ -375,9 +375,9 @@ _CSS = """
   --text-faint:     #6b7280;
   --text-fade:      #9ca3af;
   /* accents — 네이비 + 골드 */
-  --accent-blue:    #1e3a8a;
-  --accent-gold:    #b8860b;
-  --accent-gold-soft: rgba(184,134,11,0.10);
+  --accent-blue:    #334155;
+  --accent-gold:    #0d9488;
+  --accent-gold-soft: rgba(13,148,136,0.10);
   --accent-mint:    #16a34a;
   --accent-coral:   #dc2626;
   /* tag palette (light bg + dark text for white theme) */
@@ -422,7 +422,7 @@ body {
 }
 .hdr-badge-primary {
   background: var(--accent-gold-soft); color: var(--accent-gold);
-  border: 1px solid rgba(184,134,11,0.30);
+  border: 1px solid rgba(13,148,136,0.30);
 }
 .hdr-badge-facility {
   background: rgba(30,58,138,0.08); color: var(--accent-blue);
@@ -587,7 +587,7 @@ body {
 .qt-table thead .qt-rec, .qt-table tbody .qt-rec {
   background: var(--accent-gold-soft);
   color: var(--accent-gold); font-weight: 700;
-  border-left: 1px solid rgba(184,134,11,0.30);
+  border-left: 1px solid rgba(13,148,136,0.30);
 }
 .qt-table tbody tr:hover td { background: rgba(144,205,244,0.03); }
 .qt-table tbody tr:hover .qt-rec { background: rgba(212,175,55,0.18); }
@@ -631,7 +631,7 @@ body {
 }
 .badge-win {
   background: var(--accent-gold-soft); color: var(--accent-gold);
-  border: 1px solid rgba(184,134,11,0.30);
+  border: 1px solid rgba(13,148,136,0.30);
 }
 .badge-contracted {
   background: rgba(104,211,145,0.13); color: var(--accent-mint);

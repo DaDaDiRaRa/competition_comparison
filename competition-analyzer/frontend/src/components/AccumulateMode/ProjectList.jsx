@@ -6,7 +6,7 @@ import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_OPTIONS = [
-  { value: 'win', label: '당선', color: '#b8860b', bg: '#fef3c7' },
+  { value: 'win', label: '당선', color: '#0d9488', bg: '#fef3c7' },
   { value: 'contracted', label: '수의계약', color: '#16a34a', bg: '#dcfce7' },
   { value: 'lose', label: '낙선', color: '#6b7280', bg: '#ffffff' },
 ]
@@ -14,7 +14,7 @@ const RESULT_OPTIONS = [
 const s = {
   panel: { background: '#ffffff', borderRadius: 12, padding: 24, marginBottom: 16 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  title: { fontSize: 16, fontWeight: 600, color: '#1e3a8a' },
+  title: { fontSize: 16, fontWeight: 600, color: '#334155' },
   refreshBtn: {
     background: 'none', border: '1px solid #e5e7eb', borderRadius: 6,
     color: '#4b5563', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
@@ -28,7 +28,7 @@ const s = {
   cardName: { fontWeight: 600, color: '#1f2937', fontSize: 14 },
   badge: {
     fontSize: 11, padding: '2px 8px', borderRadius: 20,
-    background: '#1e40af', color: '#1e3a8a', fontWeight: 600,
+    background: '#475569', color: '#ffffff', fontWeight: 600,
   },
   meta: { fontSize: 12, color: '#6b7280' },
   actions: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' },
@@ -37,7 +37,7 @@ const s = {
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
   addBtn: {
-    background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
   reportBtn: {
@@ -51,7 +51,7 @@ const s = {
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
   },
   subReportBtn: {
-    background: '#1a2e40', color: '#1e3a8a', border: '1px solid #1e40af', borderRadius: 6,
+    background: '#334155', color: '#ffffff', border: '1px solid #475569', borderRadius: 6,
     padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
     textDecoration: 'none', display: 'inline-block',
   },
@@ -71,7 +71,7 @@ const s = {
     marginTop: 12, padding: 14, background: '#d1d5db',
     border: '1px solid #e5e7eb', borderRadius: 8,
   },
-  addFormTitle: { fontSize: 13, fontWeight: 600, color: '#1e3a8a', marginBottom: 10 },
+  addFormTitle: { fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 10 },
   row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 },
   label: { fontSize: 12, color: '#4b5563', marginBottom: 4, display: 'block' },
   input: {
@@ -90,7 +90,7 @@ const s = {
   submitBtn: (active) => ({
     width: '100%', marginTop: 10, padding: '9px 0', borderRadius: 6,
     border: 'none', cursor: active ? 'pointer' : 'not-allowed', fontSize: 13,
-    fontWeight: 700, background: active ? '#1e3a8a' : '#f9fafb', color: active ? '#fff' : '#4a5568',
+    fontWeight: 700, background: active ? '#334155' : '#f9fafb', color: active ? '#fff' : '#4a5568',
   }),
   cancelBtn: {
     background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer',
@@ -234,7 +234,7 @@ function ProjectCard({ project, onRerunDone }) {
   const subs = project.submissions || []
   const winCount = subs.filter(s => s.result === 'win' || s.result === 'contracted').length
   const RESULT_KR = { win: '★ 당선', contracted: '◆ 수의계약', lose: '낙선' }
-  const RESULT_COLOR = { win: '#b8860b', contracted: '#16a34a', lose: '#6b7280' }
+  const RESULT_COLOR = { win: '#0d9488', contracted: '#16a34a', lose: '#6b7280' }
 
   return (
     <div style={s.card}>
@@ -415,10 +415,10 @@ export default function ProjectList() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>{icon}</div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a', marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
                         <span style={{
                           display: 'inline-block', width: 18, height: 18, borderRadius: '50%',
-                          background: '#1e3a8a', color: '#fff', fontSize: 10, fontWeight: 700,
+                          background: '#334155', color: '#fff', fontSize: 10, fontWeight: 700,
                           textAlign: 'center', lineHeight: '18px', marginRight: 6,
                         }}>{step}</span>
                         {title}
@@ -440,7 +440,7 @@ export default function ProjectList() {
                     style={{
                       padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
                       cursor: 'pointer', border: 'none',
-                      background: ft === activeType ? '#1e3a8a' : '#e5e7eb',
+                      background: ft === activeType ? '#334155' : '#e5e7eb',
                       color: ft === activeType ? '#ffffff' : '#4b5563',
                     }}
                   >

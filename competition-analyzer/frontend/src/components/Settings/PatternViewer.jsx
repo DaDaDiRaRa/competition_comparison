@@ -19,7 +19,7 @@ const s = {
     padding: 16, marginBottom: 14,
   },
   secTitle: {
-    fontSize: 13, fontWeight: 700, color: '#1e3a8a', marginBottom: 12,
+    fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12,
     paddingBottom: 6, borderBottom: '1px solid #e5e7eb',
   },
 }
@@ -41,7 +41,7 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#4b5563' }}>
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#1e3a8a', display: 'inline-block' }} />
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#334155', display: 'inline-block' }} />
           당선
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#4b5563' }}>
@@ -62,7 +62,7 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ flex: 1, background: '#f9fafb', borderRadius: 2, height: 11, overflow: 'hidden' }}>
-                  <div style={{ width: `${(wm / maxVal) * 100}%`, height: '100%', background: '#1e3a8a', borderRadius: 2 }} />
+                  <div style={{ width: `${(wm / maxVal) * 100}%`, height: '100%', background: '#334155', borderRadius: 2 }} />
                 </div>
                 <span style={{ fontSize: 10, color: '#6b7280', minWidth: 42 }}>
                   {wm.toFixed(1)}{wStd != null ? `±${wStd.toFixed(1)}` : ''}
@@ -99,7 +99,7 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
       <thead>
         <tr style={{ color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>
           <th style={{ textAlign: 'left', padding: '4px 8px' }}>지표</th>
-          <th style={{ textAlign: 'right', padding: '4px 8px', color: '#1e3a8a' }}>당선 평균</th>
+          <th style={{ textAlign: 'right', padding: '4px 8px', color: '#334155' }}>당선 평균</th>
           {hasLose && (
             <th style={{ textAlign: 'right', padding: '4px 8px', color: '#92400e' }}>낙선 평균</th>
           )}
@@ -251,9 +251,9 @@ export default function PatternViewer() {
             style={{
               padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
               cursor: 'pointer',
-              border: selectedFt === ft.key ? '2px solid #1e3a8a' : '2px solid #e5e7eb',
+              border: selectedFt === ft.key ? '2px solid #334155' : '2px solid #e5e7eb',
               background: selectedFt === ft.key ? '#f9fafb' : '#ffffff',
-              color: selectedFt === ft.key ? '#1e3a8a' : '#6b7280',
+              color: selectedFt === ft.key ? '#334155' : '#6b7280',
             }}
           >
             {ft.label_ko}
@@ -285,7 +285,7 @@ export default function PatternViewer() {
           onClick={rebuild}
           disabled={rebuilding}
           style={{
-            background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
+            background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
             padding: '5px 14px', fontSize: 12, cursor: rebuilding ? 'not-allowed' : 'pointer',
             opacity: rebuilding ? 0.6 : 1,
           }}

@@ -8,7 +8,7 @@ function AxisCard({ axis, data, axisLabel }) {
       background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 14,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontWeight: 600, color: '#1e3a8a' }}>{axisLabel(axis)}</span>
+        <span style={{ fontWeight: 600, color: '#334155' }}>{axisLabel(axis)}</span>
         {grade && (
           <span style={{
             padding: '3px 12px', borderRadius: 14,
@@ -57,7 +57,7 @@ function GapAnalysisCard({ gap }) {
       background: '#ffffff', borderLeft: `4px solid ${alignColor}`,
       borderRadius: 8, padding: 14, marginBottom: 16,
     }}>
-      <div style={{ fontSize: 13, color: '#1e3a8a', fontWeight: 600, marginBottom: 8 }}>
+      <div style={{ fontSize: 13, color: '#334155', fontWeight: 600, marginBottom: 8 }}>
         🔍 블라인드 분석 vs 실제 결과
       </div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -95,7 +95,7 @@ export default function ComparisonResult({ data, facility_type = '' }) {
 
   return (
     <div style={{ marginTop: 24 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: '#1e3a8a', marginBottom: 12 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: '#334155', marginBottom: 12 }}>
         비교분석 결과
       </div>
 

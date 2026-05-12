@@ -25,11 +25,11 @@ const s = {
   },
   toggle: {
     position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-    background: 'transparent', border: 'none', color: '#1e3a8a', cursor: 'pointer',
+    background: 'transparent', border: 'none', color: '#334155', cursor: 'pointer',
     fontSize: 16, padding: 6,
   },
   btn: {
-    background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
     padding: '8px 16px', cursor: 'pointer', fontSize: 13, marginRight: 8,
   },
   btnDanger: {
@@ -37,7 +37,7 @@ const s = {
     padding: '8px 16px', cursor: 'pointer', fontSize: 13,
   },
   btnPrimary: {
-    background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
     padding: '10px 20px', cursor: 'pointer', fontSize: 14, marginTop: 8,
   },
   success: { color: '#16a34a', fontSize: 13, marginTop: 8 },

@@ -32,14 +32,14 @@ function QuantCompare({ subQuant = {}, winQuant = {}, loseQuant = {} }) {
       background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 10,
       padding: 16, marginBottom: 16,
     }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', marginBottom: 12 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 12 }}>
         정량 지표 비교
         <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 400, marginLeft: 8 }}>
           (당선 평균 vs {hasLose ? '낙선 평균 vs ' : ''}내 제출물)
         </span>
       </div>
       <div style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
-        <LegendDot color="#1e3a8a" label="당선 평균" />
+        <LegendDot color="#334155" label="당선 평균" />
         {hasLose && <LegendDot color="#92400e" label="낙선 평균" />}
         <LegendDot color="#7c3aed" label="내 제출물" />
       </div>
@@ -67,7 +67,7 @@ function QuantCompare({ subQuant = {}, winQuant = {}, loseQuant = {} }) {
                   {meta.label} <span style={{ color: '#4a5568' }}>({meta.unit})</span>
                 </span>
               </div>
-              <BarRow pct={wPct} color="#1e3a8a" value={fmt(wVal)} unit={meta.unit} />
+              <BarRow pct={wPct} color="#334155" value={fmt(wVal)} unit={meta.unit} />
               {hasLose && lVal != null && (
                 <BarRow pct={lPct} color="#92400e" value={fmt(lVal)} unit={meta.unit} />
               )}
@@ -134,7 +134,7 @@ function RequirementMapping({ mapping, axisLabel }) {
       background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 10,
       padding: 16, marginBottom: 16,
     }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', marginBottom: 10 }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 10 }}>
         지침서 요구사항 충족도
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -196,7 +196,7 @@ function AxisDiagCard({ axis, data, axisLabel }) {
       <GradeRing grade={toGrade(data)} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontWeight: 700, color: '#1e3a8a', fontSize: 14 }}>
+          <span style={{ fontWeight: 700, color: '#334155', fontSize: 14 }}>
             {axisLabel(axis)}
           </span>
           {compliance && (
@@ -309,7 +309,7 @@ export default function DiagnosisResult({ data, pattern }) {
         background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 10,
         padding: 16, marginBottom: 16,
       }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', marginBottom: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 8 }}>
           페이지 구성
         </div>
         <PageDistChart distribution={data.page_distribution} total={data.total_pages} />
@@ -367,15 +367,15 @@ export default function DiagnosisResult({ data, pattern }) {
 
       {data.recommendations?.length > 0 && (
         <div style={{
-          background: '#f9fafb', border: '1px solid #1e40af', borderRadius: 10, padding: 16,
+          background: '#f9fafb', border: '1px solid #475569', borderRadius: 10, padding: 16,
         }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#334155', marginBottom: 10 }}>
             보강 포인트
           </div>
           {data.recommendations.map((rec, i) => (
             <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 6 }}>
               <span style={{
-                background: '#1e3a8a', color: '#fff', borderRadius: '50%',
+                background: '#334155', color: '#fff', borderRadius: '50%',
                 width: 20, height: 20, display: 'flex', alignItems: 'center',
                 justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0,
               }}>{i + 1}</span>

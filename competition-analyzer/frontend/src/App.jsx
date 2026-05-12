@@ -21,19 +21,19 @@ const s = {
     background: '#ffffff', borderBottom: '1px solid #e5e7eb',
     padding: '0 24px', display: 'flex', alignItems: 'center', gap: 24,
   },
-  logo: { fontSize: 15, fontWeight: 700, color: '#1e3a8a', padding: '16px 0', flexShrink: 0 },
+  logo: { fontSize: 15, fontWeight: 700, color: '#334155', padding: '16px 0', flexShrink: 0 },
   nav: { display: 'flex', gap: 4 },
   tab: (active) => ({
     padding: '16px 18px', cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400,
-    color: active ? '#1e3a8a' : '#6b7280',
+    color: active ? '#334155' : '#6b7280',
     borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-    borderBottom: active ? '2px solid #1e3a8a' : '2px solid transparent',
+    borderBottom: active ? '2px solid #334155' : '2px solid transparent',
     background: 'none', transition: 'all 0.15s',
     display: 'flex', alignItems: 'center', gap: 6,
   }),
   content: { maxWidth: 1100, margin: '0 auto', padding: 24 },
   badge: {
-    fontSize: 10, background: '#1e3a8a', color: '#fff',
+    fontSize: 10, background: '#334155', color: '#fff',
     padding: '1px 6px', borderRadius: 10, marginLeft: 4,
   },
 }

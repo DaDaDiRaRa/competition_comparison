@@ -1,8 +1,8 @@
 import { useMeta } from '../../hooks/useMeta'
 
 const COLORS = [
-  '#3b82f6','#16a34a','#ea580c','#dc2626','#a78bfa',
-  '#22d3ee','#fef08a','#fee2e2','#bbf7d0','#dbeafe',
+  '#64748b','#16a34a','#ea580c','#dc2626','#a78bfa',
+  '#22d3ee','#fef08a','#fee2e2','#bbf7d0','#f1f5f9',
   '#ede9fe','#fed7aa','#fbcfe8','#bbf7d0','#1f2937',
   '#0891b2','#ec4899',
 ]

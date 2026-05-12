@@ -35,13 +35,13 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 .tag { font-size: 12px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
 
 .sec { background: #ffffff; border-radius: 10px; padding: 20px 24px; margin-bottom: 16px; }
-.sec-title { font-size: 15px; font-weight: 700; color: #1e3a8a; margin-bottom: 14px;
+.sec-title { font-size: 15px; font-weight: 700; color: #334155; margin-bottom: 14px;
              padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
 
 .dist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
 .dist-label { font-size: 12px; color: #4b5563; min-width: 130px; }
 .dist-bar-bg { flex: 1; background: #f9fafb; border-radius: 3px; height: 14px; overflow: hidden; }
-.dist-bar-fill { height: 100%; border-radius: 3px; background: #1e40af; }
+.dist-bar-fill { height: 100%; border-radius: 3px; background: #475569; }
 .dist-count { font-size: 12px; color: #6b7280; min-width: 28px; text-align: right; }
 
 .compliance-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
@@ -70,7 +70,7 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 .axis-ring-score { font-size: 20px; font-weight: 700; }
 .axis-ring-sub { font-size: 9px; color: #6b7280; }
 .axis-body { flex: 1; min-width: 0; }
-.axis-name { font-size: 14px; font-weight: 700; color: #1e3a8a; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.axis-name { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
 .axis-strengths { font-size: 12px; color: #16a34a; margin-bottom: 3px; }
 .axis-weaknesses { font-size: 12px; color: #dc2626; margin-bottom: 3px; }
 .axis-recs { font-size: 12px; color: #ea580c; margin-bottom: 3px; }
@@ -78,7 +78,7 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 
 .rec-list { display: flex; flex-direction: column; gap: 8px; }
 .rec-item { display: flex; gap: 10px; align-items: flex-start; }
-.rec-num { background: #1e3a8a; color: #fff; border-radius: 50%; width: 22px; height: 22px;
+.rec-num { background: #334155; color: #fff; border-radius: 50%; width: 22px; height: 22px;
            display: flex; align-items: center; justify-content: center;
            font-size: 11px; font-weight: 700; flex-shrink: 0; }
 .rec-text { font-size: 13px; color: #1f2937; padding-top: 2px; }
@@ -358,7 +358,7 @@ def _render_recommendations(recs: list) -> str:
             f'</div>'
         )
     return (
-        f'<div class="sec" style="border-left:4px solid #1e3a8a">'
+        f'<div class="sec" style="border-left:4px solid #334155">'
         f'<div class="sec-title">보강 포인트</div>'
         f'<div class="rec-list">{items}</div>'
         f'</div>'

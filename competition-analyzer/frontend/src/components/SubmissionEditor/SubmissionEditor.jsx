@@ -20,7 +20,7 @@ const MASS_TYPE_OPTIONS = [
 ]
 
 const RESULT_OPTIONS = [
-  { value: 'win',        label: '★ 당선',    color: '#b8860b', bg: '#fef3c7' },
+  { value: 'win',        label: '★ 당선',    color: '#0d9488', bg: '#fef3c7' },
   { value: 'contracted', label: '◆ 수의계약', color: '#16a34a', bg: '#dcfce7' },
   { value: 'lose',       label: '낙선',       color: '#6b7280', bg: '#ffffff' },
 ]
@@ -65,8 +65,8 @@ const s = {
     display: 'block', width: '100%', textAlign: 'left',
     padding: '9px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
     fontSize: 12, fontWeight: active ? 700 : 400,
-    background: active ? '#1e40af' : 'transparent',
-    color: active ? '#1e3a8a' : '#6b7280',
+    background: active ? '#475569' : 'transparent',
+    color: active ? '#ffffff' : '#6b7280',
     marginBottom: 2,
   }),
   content: { flex: 1, overflowY: 'auto', padding: 24 },
@@ -101,12 +101,12 @@ const s = {
   },
   group: { marginBottom: 16 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: 700, color: '#1e3a8a', marginBottom: 16 },
+  sectionTitle: { fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 },
   original: { fontSize: 11, color: '#4a5568', marginTop: 3 },
   tag: {
     display: 'inline-flex', alignItems: 'center', gap: 5,
-    background: '#1a2e40', border: '1px solid #1e40af', borderRadius: 20,
-    padding: '3px 10px', fontSize: 12, color: '#1e3a8a', margin: '3px 3px 3px 0',
+    background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 20,
+    padding: '3px 10px', fontSize: 12, color: '#1f2937', margin: '3px 3px 3px 0',
   },
   tagRemove: {
     background: 'none', border: 'none', color: '#6b7280',
@@ -117,7 +117,7 @@ const s = {
     padding: '12px 14px', marginBottom: 8,
   },
   addBtn: {
-    background: '#1e3a8a', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 12, marginTop: 8,
   },
   removeBtn: {

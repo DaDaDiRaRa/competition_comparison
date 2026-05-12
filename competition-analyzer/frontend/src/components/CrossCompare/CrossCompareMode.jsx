@@ -5,7 +5,7 @@ import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_COLOR = {
-  win: { color: '#b8860b', bg: '#fef3c7', label: '당선' },
+  win: { color: '#0d9488', bg: '#fef3c7', label: '당선' },
   contracted: { color: '#16a34a', bg: '#dcfce7', label: '수의계약' },
   lose: { color: '#6b7280', bg: '#ffffff', label: '낙선' },
 }
@@ -18,7 +18,7 @@ const s = {
   typeTab: (active) => ({
     padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
     cursor: 'pointer', border: 'none',
-    background: active ? '#1e3a8a' : '#e5e7eb',
+    background: active ? '#334155' : '#e5e7eb',
     color: active ? '#ffffff' : '#4b5563',
   }),
   card: {
@@ -32,7 +32,7 @@ const s = {
   cardName: { fontWeight: 600, color: '#1f2937', fontSize: 14, flex: 1 },
   badge: {
     fontSize: 11, padding: '2px 8px', borderRadius: 20,
-    background: '#1e40af', color: '#1e3a8a', fontWeight: 600,
+    background: '#475569', color: '#334155', fontWeight: 600,
   },
   chevron: (open) => ({
     color: '#4a5568', fontSize: 12, transform: open ? 'rotate(180deg)' : 'none',
@@ -43,13 +43,13 @@ const s = {
     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
     borderRadius: 6, cursor: 'pointer',
     background: checked ? '#f9fafb' : 'transparent',
-    border: checked ? '1px solid #1e3a8a' : '1px solid transparent',
+    border: checked ? '1px solid #334155' : '1px solid transparent',
     transition: 'all 0.1s',
   }),
   checkbox: (checked) => ({
     width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-    border: checked ? '2px solid #1e3a8a' : '2px solid #4a5568',
-    background: checked ? '#1e3a8a' : 'transparent',
+    border: checked ? '2px solid #334155' : '2px solid #4a5568',
+    background: checked ? '#334155' : 'transparent',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: 10, color: '#ffffff', fontWeight: 700,
   }),
@@ -65,7 +65,7 @@ const s = {
     padding: '14px 20px', background: '#ffffff',
     border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 4,
   },
-  selCount: { fontSize: 14, fontWeight: 600, color: '#1e3a8a', flex: 1 },
+  selCount: { fontSize: 14, fontWeight: 600, color: '#334155', flex: 1 },
   selChip: {
     fontSize: 11, padding: '3px 10px', borderRadius: 20,
     background: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb',
@@ -279,7 +279,7 @@ export default function CrossCompareMode() {
                   border: '1px solid #e5e7eb', borderRadius: 6,
                   textDecoration: 'none', transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#1e40af'}
+                onMouseEnter={e => e.currentTarget.style.borderColor = '#475569'}
                 onMouseLeave={e => e.currentTarget.style.borderColor = '#e5e7eb'}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -290,7 +290,7 @@ export default function CrossCompareMode() {
                     {rep.created_at}
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: '#1e3a8a' }}>열기 →</div>
+                <div style={{ fontSize: 11, color: '#334155' }}>열기 →</div>
               </a>
             ))}
           </div>
@@ -300,7 +300,7 @@ export default function CrossCompareMode() {
       {result?.comparison && (
         <div style={s.panel}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#1e3a8a', flex: 1 }}>비교분석 결과</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#334155', flex: 1 }}>비교분석 결과</div>
             {result.report_filename && (
               <a
                 href={getCrossCompareReportUrl(result.report_filename)}

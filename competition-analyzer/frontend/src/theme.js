@@ -13,9 +13,9 @@ export const theme = {
   borderStrong: '#d1d5db',
 
   // 액센트 (네이비)
-  accent: '#1e3a8a',
-  accentHover: '#1e40af',
-  accentSoft: '#dbeafe',
+  accent: '#334155',
+  accentHover: '#475569',
+  accentSoft: '#f1f5f9',
   accentText: '#ffffff',
 
   // 텍스트
@@ -41,5 +41,5 @@ export const theme = {
   },
 
   // 골드 (특별 강조)
-  gold: '#b8860b',
+  gold: '#0d9488',
 }

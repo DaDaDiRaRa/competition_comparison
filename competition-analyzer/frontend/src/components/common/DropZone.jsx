@@ -7,7 +7,7 @@ const s = {
     textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
     background: '#ffffff',
   },
-  zoneActive: { borderColor: '#3b82f6', background: '#f9fafb' },
+  zoneActive: { borderColor: '#64748b', background: '#f9fafb' },
   label: { color: '#4b5563', fontSize: 14, marginTop: 8 },
   files: { marginTop: 8, fontSize: 13, color: '#16a34a' },
 }

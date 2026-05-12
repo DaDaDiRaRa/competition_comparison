@@ -11,7 +11,7 @@ const s = {
     background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 12,
     padding: 32, width: 460, maxWidth: '90vw', boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
   },
-  title: { fontSize: 18, fontWeight: 700, color: '#1e3a8a', marginBottom: 8 },
+  title: { fontSize: 18, fontWeight: 700, color: '#334155', marginBottom: 8 },
   desc: { fontSize: 13, color: '#4b5563', marginBottom: 20, lineHeight: 1.6 },
   label: { fontSize: 13, color: '#374151', marginBottom: 6, display: 'block' },
   inputWrap: { position: 'relative' },
@@ -22,11 +22,11 @@ const s = {
   },
   toggle: {
     position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-    background: 'transparent', border: 'none', color: '#1e3a8a', cursor: 'pointer',
+    background: 'transparent', border: 'none', color: '#334155', cursor: 'pointer',
     fontSize: 16, padding: 6, borderRadius: 4,
   },
   btn: {
-    width: '100%', background: '#1e3a8a', color: '#fff', border: 'none',
+    width: '100%', background: '#334155', color: '#fff', border: 'none',
     borderRadius: 6, padding: '12px', cursor: 'pointer', fontSize: 14,
     fontWeight: 600, marginTop: 16,
   },
