@@ -16,6 +16,7 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_dyn
 
 spec_dir = Path(SPECPATH)
 frontend_dist = spec_dir.parent / "frontend" / "dist"
+readme_html = spec_dir.parent.parent / "README.html"
 
 # pywebview / pythonnet은 .NET 어셈블리를 동적 로드 → 정적 분석 불가
 # collect_all로 데이터+바이너리+모듈 전체 수집
@@ -37,6 +38,7 @@ a = Analysis(
     binaries=webview_binaries + clr_binaries + pythonnet_binaries,
     datas=[
         (str(frontend_dist), 'frontend_dist'),
+        *( [(str(readme_html), '.')] if readme_html.exists() else [] ),
     ] + webview_datas + clr_datas + pythonnet_datas,
     hiddenimports=webview_hidden + clr_hidden + pythonnet_hidden + [
         # uvicorn 동적 import

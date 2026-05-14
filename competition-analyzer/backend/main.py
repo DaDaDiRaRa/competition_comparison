@@ -1,7 +1,8 @@
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +40,22 @@ app.include_router(patterns.router, prefix="/api/patterns", tags=["patterns"])
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/readme")
+def readme():
+    bundle = getattr(sys, "_MEIPASS", None)
+    candidates = []
+    if bundle:
+        candidates.append(Path(bundle) / "README.html")
+    candidates.extend([
+        Path(__file__).parent.parent.parent / "README.html",
+        Path(__file__).parent.parent.parent / "docs" / "README.html",
+    ])
+    for p in candidates:
+        if p.exists():
+            return FileResponse(p, media_type="text/html")
+    raise HTTPException(404, "README.html not found")
 
 
 @app.get("/api/version")
