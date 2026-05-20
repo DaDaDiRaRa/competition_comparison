@@ -25,3 +25,10 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+
+key.json
+echo node_modules/
+echo venv/
+echo __pycache__/
+echo *.pyc
