@@ -17,6 +17,16 @@ import traceback
 
 logger = logging.getLogger(__name__)
 
+_MAX_PDF_BYTES = 50 * 1024 * 1024  # 50MB
+_PDF_MAGIC = b"%PDF"
+
+
+def _validate_pdf(data: bytes, name: str = "파일"):
+    if len(data) > _MAX_PDF_BYTES:
+        raise HTTPException(400, f"{name}: 파일 크기가 50MB를 초과합니다 ({len(data) // 1024 // 1024}MB).")
+    if not data.startswith(_PDF_MAGIC):
+        raise HTTPException(400, f"{name}: PDF 형식이 아닙니다.")
+
 
 def _user_error_msg(e: Exception) -> str:
     msg = str(e)
@@ -223,6 +233,7 @@ async def add_submission(
     meta = load_project_meta(facility_type, competition_id)
     if not meta:
         raise HTTPException(404, "Project not found")
+    _validate_pdf(submission_pdf, "제안서 PDF")
 
     async def event_stream():
         ts = int(time.time() * 1000)
@@ -426,6 +437,11 @@ async def run_pipeline(
 
     brief_bytes = brief_pdf
     sub_bytes_list = list(submission_pdfs)
+
+    if brief_bytes:
+        _validate_pdf(brief_bytes, "지침서 PDF")
+    for i, sb in enumerate(sub_bytes_list):
+        _validate_pdf(sb, f"제안서 PDF [{i+1}]")
 
     async def event_stream():
         # _timestamp: 파이프라인 시작 시각(ms). 이후 모든 SSE 이벤트에 포함.
@@ -706,7 +722,10 @@ async def cross_compare(
     items_json: str = Form(...),  # [{facility_type, competition_id, company}]
 ):
     """여러 프로젝트에서 선택한 제안서들을 교차 비교분석."""
-    items = json.loads(items_json)
+    try:
+        items = json.loads(items_json)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "items_json must be valid JSON array")
 
     async def event_stream():
         ts = int(time.time() * 1000)

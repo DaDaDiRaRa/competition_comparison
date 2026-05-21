@@ -26,7 +26,7 @@ app = FastAPI(title="Competition Analyzer API", version=__version__, lifespan=li
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -92,7 +92,8 @@ if _FRONTEND_DIST is not None:
     @app.get("/{full_path:path}")
     def _spa_fallback(full_path: str):
         # API 경로는 위에서 매칭되므로 여기로 안 옴
-        target = _FRONTEND_DIST / full_path
-        if target.is_file():
+        target = (_FRONTEND_DIST / full_path).resolve()
+        # 경로 탐색 방지: dist 하위가 아니면 index.html로 폴백
+        if target.is_file() and str(target).startswith(str(_FRONTEND_DIST.resolve())):
             return FileResponse(target)
         return FileResponse(_FRONTEND_DIST / "index.html")

@@ -12,7 +12,7 @@ class SettingsUpdateRequest(BaseModel):
     raster_dpi_classify: Optional[int] = None
     raster_dpi_extract: Optional[int] = None
     model_id: Optional[str] = None
-    model_id_classify: Optional[int] = None
+    model_id_classify: Optional[str] = None
 
 
 class ApiKeyRequest(BaseModel):

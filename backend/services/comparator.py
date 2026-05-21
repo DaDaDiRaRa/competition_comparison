@@ -74,7 +74,7 @@ def _make_blind_static(facility_type: str) -> str:
         "WEAKNESSES: {max_weaknesses} items, each a specific Korean phrase (~{strength_chars} chars) + page citation\n"
         "BRIEF_COMPLIANCE: yes|partial|no|unclear per axis\n"
         "NOTES: max_{notes_chars}_chars, specific evidence-based observation (Korean), include (p.N) if applicable\n"
-        "blind_ranking: ordered list of submission labels, best first, based on overall analytical merit (count of 상 > 중 > 하)\n"
+        "blind_ranking: ordered list of submission labels, best first, based on overall analytical merit (count of A > B > C > D > E)\n"
         "\n"
         "OUTPUT_ONLY_JSON:\n"
         "{\n"
@@ -99,7 +99,7 @@ def _make_reveal_static(facility_type: str) -> str:
         "\n"
         "INSTRUCTIONS (data follows after this section):\n"
         "You will be given:\n"
-        "- BLIND_GRADES: per-axis grade (상/중/하) + strengths/weaknesses/notes produced WITHOUT knowing actual results\n"
+        "- BLIND_GRADES: per-axis grade (A/B/C/D/E) + strengths/weaknesses/notes produced WITHOUT knowing actual results\n"
         "- ACTUAL_RESULTS: real competition outcome (win/lose) for each submission\n"
         "\n"
         "IMPORTANT: Raw submission data is NOT provided. Use only the strengths/weaknesses/notes already\n"
@@ -342,7 +342,10 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
             ],
         }],
     )
-    blind_result = parse_json_response(blind_raw)
+    try:
+        blind_result = parse_json_response(blind_raw)
+    except Exception as e:
+        raise ValueError(f"블라인드 채점 JSON 파싱 실패: {e}\n원문(앞 200자): {blind_raw[:200]}")
     blind_result = _deanonymize_blind_result(blind_result, reverse_map)
 
     # ── Pass 2: 결과 공개 후 사후 분석 ────────────────────────────────────────
@@ -362,7 +365,10 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
             ],
         }],
     )
-    reveal_result = parse_json_response(reveal_raw)
+    try:
+        reveal_result = parse_json_response(reveal_raw)
+    except Exception as e:
+        raise ValueError(f"리빌 분석 JSON 파싱 실패: {e}\n원문(앞 200자): {reveal_raw[:200]}")
 
     # ── 병합 ─────────────────────────────────────────────────────────────────
     results_map = {s["company"]: s.get("result", "unknown") for s in submissions}
@@ -418,7 +424,10 @@ def _run_diagnose_sync(
             ],
         }],
     )
-    return parse_json_response(raw_text)
+    try:
+        return parse_json_response(raw_text)
+    except Exception as e:
+        raise ValueError(f"진단 JSON 파싱 실패: {e}\n원문(앞 200자): {raw_text[:200]}")
 
 
 async def diagnose_submission(
