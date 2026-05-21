@@ -21,7 +21,7 @@ router = APIRouter()
 
 _TMP = Path("/tmp/cc_uploads")
 _MAX_CHUNK = 25 * 1024 * 1024   # 25MB (Cloud Run 32MB 한도 이내)
-_MAX_TOTAL = 300 * 1024 * 1024  # 총 300MB 상한
+_MAX_TOTAL = 600 * 1024 * 1024  # 총 600MB 상한 (제출물 여러 개 합산)
 
 
 @router.post("/start")

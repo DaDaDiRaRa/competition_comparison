@@ -17,7 +17,7 @@ import traceback
 
 logger = logging.getLogger(__name__)
 
-_MAX_PDF_BYTES = 50 * 1024 * 1024  # 50MB
+_MAX_PDF_BYTES = 200 * 1024 * 1024  # 200MB
 _PDF_MAGIC = b"%PDF"
 
 
