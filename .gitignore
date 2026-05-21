@@ -28,6 +28,8 @@ Thumbs.db
 
 
 key.json
+*-sa-key.json
+gcp-sa-key.json
 echo node_modules/
 echo venv/
 echo __pycache__/

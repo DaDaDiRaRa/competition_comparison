@@ -1,11 +1,8 @@
 name: Deploy to Cloud Run
 
-# 수동 실행 전용 (workflow_dispatch).
-# push 자동 실행을 끈 이유:
-#   - GCP_SA_KEY 시크릿이 현재 competition-comparison 프로젝트를 가리키고 있어
-#     push할 때마다 잘못된 프로젝트에 설정 없는 빈 서비스가 재배포됨.
-#   - SA 키를 arch-diagnose 프로젝트의 키로 교체한 후 push 트리거로 되돌릴 것.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 env:
