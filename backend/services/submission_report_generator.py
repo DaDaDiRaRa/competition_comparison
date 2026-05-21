@@ -38,23 +38,23 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 .kv-unit { font-size: 11px; color: #4b5563; font-weight: 400; }
 
 .concept-card { background: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 10px; }
-.concept-name { font-size: 18px; font-weight: 700; color: #f6e05e; margin-bottom: 6px; }
-.concept-type { font-size: 12px; color: #334155; background: #1e2d40;
+.concept-name { font-size: 18px; font-weight: 700; color: #1e3a8a; margin-bottom: 6px; }
+.concept-type { font-size: 12px; color: #1e40af; background: #dbeafe;
                 padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
 .concept-strategy { font-size: 13px; color: #374151; line-height: 1.7; }
 .keywords { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.kw { background: #1a2e40; color: #334155; font-size: 12px; padding: 3px 10px;
-      border-radius: 20px; border: 1px solid #475569; }
+.kw { background: #eff6ff; color: #1e3a8a; font-size: 12px; padding: 3px 10px;
+      border-radius: 20px; border: 1px solid #bfdbfe; }
 
 .floor-table { width: 100%; border-collapse: collapse; }
 .floor-table th { background: #f9fafb; padding: 8px 12px; text-align: left;
                   font-size: 12px; color: #4b5563; border-bottom: 1px solid #e5e7eb; }
-.floor-table td { padding: 8px 12px; border-bottom: 1px solid #1e2533;
+.floor-table td { padding: 8px 12px; border-bottom: 1px solid #e5e7eb;
                   font-size: 13px; vertical-align: top; }
 .floor-table tr:hover td { background: rgba(144,205,244,0.03); }
 .floor-level { font-weight: 600; color: #1f2937; }
 .prog-list { display: flex; flex-wrap: wrap; gap: 4px; }
-.prog-tag { background: #1e2533; color: #4b5563; font-size: 11px;
+.prog-tag { background: #f1f5f9; color: #475569; font-size: 11px;
             padding: 2px 7px; border-radius: 3px; }
 
 .elev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
@@ -570,8 +570,8 @@ def _kv_card(label: str, value, unit: str = '', hl: bool = False) -> str:
     if isinstance(value, float) and value == int(value):
         value = int(value)
     disp = f'{value:,}' if isinstance(value, (int, float)) else str(value)
-    col = '#f6e05e' if hl else '#1f2937'
-    brd = ';border:1px solid #f6e05e33' if hl else ''
+    col = '#1e3a8a' if hl else '#1f2937'
+    brd = ';border:1px solid #1e3a8a33' if hl else ''
     u = f' <span style="font-size:11px;color:#4b5563">{unit}</span>' if unit else ''
     return (
         f'<div style="background:#f9fafb;border-radius:6px;padding:12px 16px{brd}">'
@@ -598,7 +598,7 @@ def _kv_grid(*blocks: str, cols: int = 3) -> str:
 def _sec_open(title: str, icon: str = '', badge: str = '') -> str:
     """섹션 열기 (기존 sec + sec-title CSS 재사용)."""
     b = (
-        f'<span style="font-size:10px;background:#1a2e40;color:#334155;'
+        f'<span style="font-size:10px;background:#dbeafe;color:#1e40af;'
         f'padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:400">{badge}</span>'
     ) if badge else ''
     ic = f'<span style="opacity:0.7;margin-right:6px">{icon}</span>' if icon else ''
@@ -634,19 +634,19 @@ def _render_key_message(branding_list: list, concept_list: list) -> str:
     name_html = ''
     if name_ko:
         name_html = (
-            f'<div style="font-size:26px;font-weight:800;color:#f6e05e;'
+            f'<div style="font-size:26px;font-weight:800;color:#1e3a8a;'
             f'letter-spacing:-0.01em;margin-bottom:2px">{name_ko}</div>'
             + (f'<div style="font-size:13px;color:#6b7280;margin-bottom:8px">{name_en}</div>'
                if name_en and name_en != name_ko else '')
         )
     elif name_en:
-        name_html = f'<div style="font-size:24px;font-weight:800;color:#f6e05e;margin-bottom:8px">{name_en}</div>'
+        name_html = f'<div style="font-size:24px;font-weight:800;color:#1e3a8a;margin-bottom:8px">{name_en}</div>'
 
     # ── 슬로건 ──
     slogan = brand.get('main_slogan', '')
     slogan_html = (
         f'<div style="font-size:14px;color:#1f2937;font-style:italic;padding:8px 12px;'
-        f'border-left:3px solid #f6e05e;margin-bottom:12px;background:#ffffff;'
+        f'border-left:3px solid #1e3a8a;margin-bottom:12px;background:#f0f4ff;'
         f'border-radius:0 4px 4px 0">{slogan}</div>'
     ) if slogan else ''
 
@@ -654,7 +654,7 @@ def _render_key_message(branding_list: list, concept_list: list) -> str:
     massing = concept.get('massing_type', '')
     metaphor = concept.get('metaphor_reference', '')
     badges = (
-        (f'<span style="background:#1e2d40;color:#334155;font-size:11px;'
+        (f'<span style="background:#dbeafe;color:#1e40af;font-size:11px;'
          f'padding:3px 9px;border-radius:3px;margin-right:6px">매스: {massing}</span>'
          if massing else '')
         + (f'<span style="background:#ede9fe;color:#a78bfa;font-size:11px;'
@@ -751,7 +751,7 @@ def _render_business_viability(bv_list: list) -> str:
                 + (f'<span style="color:#4b5563">기준 {fb}</span>' if fb else '')
                 + (f'<span style="color:#6b7280">→</span><span style="color:#334155">+인센티브 {fi}</span>' if fi else '')
                 + (f'<span style="color:#6b7280">→</span>'
-                   f'<span style="font-weight:700;color:#f6e05e">최종 {ff}</span>' if ff else '')
+                   f'<span style="font-weight:700;color:#1e3a8a">최종 {ff}</span>' if ff else '')
                 + '</div></div>'
             )
 
@@ -807,7 +807,7 @@ def _render_area_increase(ai_list: list) -> str:
             rv_s = p.get('redev_actual_sqm')
             inc_p = p.get('increase_pyeong')
             inc_pct = _pct_str(p.get('increase_pct'))
-            _td = 'padding:8px 12px;border-bottom:1px solid #1e2533'
+            _td = 'padding:8px 12px;border-bottom:1px solid #e5e7eb'
             rows += (
                 f'<tr>'
                 f'<td style="{_td};color:#4b5563">{ex_t}</td>'
@@ -974,7 +974,7 @@ def _render_unit_plan_penthouse(upp_list: list) -> str:
 
         area_rows = ''.join(
             f'<div style="display:flex;justify-content:space-between;padding:4px 0;'
-            f'border-bottom:1px solid #1e2533;font-size:12px">'
+            f'border-bottom:1px solid #e5e7eb;font-size:12px">'
             f'<span style="color:#6b7280">{lbl}</span>'
             f'<span style="color:#1f2937">{v:.1f}㎡</span></div>'
             for lbl, v in [
@@ -992,10 +992,10 @@ def _render_unit_plan_penthouse(upp_list: list) -> str:
         p_disp = int(actual_p) if isinstance(actual_p, float) and actual_p == int(actual_p) else actual_p
 
         cards.append(
-            '<div style="background:#f9fafb;border-radius:8px;padding:18px 20px;'
-            'border:2px solid #f6e05e33;border-top:4px solid #f6e05e">'
+            '<div style="background:#f0f4ff;border-radius:8px;padding:18px 20px;'
+            'border:2px solid #bfdbfe;border-top:4px solid #1e3a8a">'
             f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">'
-            f'<div style="font-size:20px;font-weight:800;color:#f6e05e">{u_type}</div>'
+            f'<div style="font-size:20px;font-weight:800;color:#1e3a8a">{u_type}</div>'
             f'<span style="background:#b7791f;color:#fefcbf;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">펜트하우스</span>'
             f'</div>'
             + (f'<div style="font-size:32px;font-weight:800;color:#1f2937;margin-bottom:6px">'
@@ -1003,7 +1003,7 @@ def _render_unit_plan_penthouse(upp_list: list) -> str:
                + (f' <span style="font-size:13px;color:#4b5563">({actual_s:.2f}㎡)</span>' if actual_s else '')
                + '</div>' if actual_p else '')
             + (f'<div style="margin:10px 0">{area_rows}</div>' if area_rows else '')
-            + (_tag_cluster(spec_tags, '#f6e05e') if spec_tags else '')
+            + (_tag_cluster(spec_tags, '#1e3a8a') if spec_tags else '')
             + (_tag_cluster(sig, '#ea580c') if sig else '')
             + (_tag_cluster(lux, '#a78bfa') if lux else '')
             + '</div>'
@@ -1023,7 +1023,7 @@ def _sub_header(title: str) -> str:
     return (
         f'<div style="font-size:12px;font-weight:700;color:#4b5563;'
         f'letter-spacing:0.05em;margin:14px 0 8px;padding-bottom:4px;'
-        f'border-bottom:1px solid #1e2533">{title}</div>'
+        f'border-bottom:1px solid #e5e7eb">{title}</div>'
     )
 
 
@@ -1178,7 +1178,7 @@ def _render_community(cp_list: list, ss_list: list) -> str:
 
         type_color = {
             'community': '#16a34a', 'culture': '#334155', 'lobby': '#ea580c',
-            'rooftop':   '#f6e05e', 'children': '#dc2626', 'council': '#a78bfa',
+            'rooftop':   '#b8860b', 'children': '#dc2626', 'council': '#a78bfa',
         }.get(s_type, '#4b5563')
 
         ss_cards.append(
@@ -1244,7 +1244,7 @@ def _render_design(concept_list: list, elevation_list: list) -> str:
 
         dir_ko = {'north': '북', 'south': '남', 'east': '동', 'west': '서'}.get(direction, direction)
         title  = f'{dir_ko}측 입면' if dir_ko else '입면'
-        _td = 'display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2533;font-size:12px'
+        _td = 'display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e5e7eb;font-size:12px'
         rows = ''.join(
             f'<div style="{_td}"><span style="color:#6b7280">{lbl}</span>'
             f'<span style="color:#1f2937;font-weight:500">{val}</span></div>'
@@ -1372,7 +1372,7 @@ def _render_company_portfolio(port_list: list) -> str:
 
         award_html = (
             '<div style="margin-top:6px"><span style="font-size:11px;color:#6b7280">디자인 어워드: </span>'
-            + _tag_cluster(awards, '#f6e05e') + '</div>'
+            + _tag_cluster(awards, '#b8860b') + '</div>'
         ) if awards else ''
 
         # 유사 프로젝트 미니카드

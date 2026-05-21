@@ -370,7 +370,7 @@ _CSS = """
   --border-strong:  #d1d5db;
   /* text */
   --text-primary:   #111827;
-  --text-secondary: #e5e7eb;
+  --text-secondary: #374151;
   --text-muted:     #4b5563;
   --text-faint:     #6b7280;
   --text-fade:      #9ca3af;
@@ -527,7 +527,7 @@ body {
   font-size: 12px; min-width: 50px;
   border-right: 1px solid var(--border-strong);
 }
-.mtx-cell { color: #e5e7eb; }
+.mtx-cell { color: #374151; }
 .mtx-cell.empty {
   background: transparent; color: var(--text-fade);
   text-align: center; font-style: normal;
