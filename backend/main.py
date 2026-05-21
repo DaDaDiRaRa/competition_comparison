@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from routers import accumulate, diagnose, settings, patterns
+from routers import accumulate, diagnose, settings, patterns, upload
 from services.db_manager import init_db
 from version import __version__
 
@@ -35,6 +35,7 @@ app.include_router(accumulate.router, prefix="/api/accumulate", tags=["accumulat
 app.include_router(diagnose.router, prefix="/api/diagnose", tags=["diagnose"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(patterns.router, prefix="/api/patterns", tags=["patterns"])
+app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 
 
 @app.get("/api/health")

@@ -28,6 +28,7 @@ from fastapi import APIRouter, File, Form, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
 from config import settings, FACILITY_TYPES
+from routers.upload import resolve_file_ref
 from services.db_manager import (
     load_pattern, load_submission,
     save_diagnosis_report, get_diagnosis_report_path, list_diagnosis_reports,
@@ -46,14 +47,20 @@ router = APIRouter()
 async def run_diagnosis(
     facility_type: str = Form(...),
     competition_name: str = Form(""),
-    submission_pdf: bytes = File(...),
+    submission_pdf: bytes | None = File(None),
+    submission_pdf_ref: str | None = Form(None),
     brief_pdf: bytes | None = File(None),
+    brief_pdf_ref: str | None = Form(None),
 ):
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
 
-    brief_bytes = brief_pdf
-    submission_bytes = submission_pdf
+    submission_bytes = (resolve_file_ref(submission_pdf_ref).read_bytes()
+                        if submission_pdf_ref else submission_pdf)
+    if not submission_bytes:
+        raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
+    brief_bytes = (resolve_file_ref(brief_pdf_ref).read_bytes()
+                   if brief_pdf_ref else brief_pdf)
 
     async def event_stream():
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_diag_"))
@@ -169,8 +176,10 @@ async def run_diagnosis_vs_projects(
     facility_type: str = Form(...),
     competition_name: str = Form(""),
     reference_items_json: str = Form(...),  # [{facility_type, competition_id, company}]
-    submission_pdf: bytes = File(...),
+    submission_pdf: bytes | None = File(None),
+    submission_pdf_ref: str | None = Form(None),
     brief_pdf: bytes | None = File(None),
+    brief_pdf_ref: str | None = Form(None),
 ):
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
@@ -182,8 +191,12 @@ async def run_diagnosis_vs_projects(
     if not ref_items:
         raise HTTPException(400, "참조할 공모를 1개 이상 선택해주세요.")
 
-    brief_bytes = brief_pdf
-    submission_bytes = submission_pdf
+    submission_bytes = (resolve_file_ref(submission_pdf_ref).read_bytes()
+                        if submission_pdf_ref else submission_pdf)
+    if not submission_bytes:
+        raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
+    brief_bytes = (resolve_file_ref(brief_pdf_ref).read_bytes()
+                   if brief_pdf_ref else brief_pdf)
 
     async def event_stream():
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_diag_"))

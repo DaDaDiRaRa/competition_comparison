@@ -28,6 +28,13 @@ def _validate_pdf(data: bytes, name: str = "파일"):
         raise HTTPException(400, f"{name}: PDF 형식이 아닙니다.")
 
 
+def _resolve_pdf(file_bytes: bytes | None, file_ref: str | None, name: str = "파일") -> bytes | None:
+    """직접 업로드 bytes 또는 chunked upload file_ref 중 하나를 bytes로 반환."""
+    if file_ref:
+        return resolve_file_ref(file_ref).read_bytes()
+    return file_bytes
+
+
 def _user_error_msg(e: Exception) -> str:
     msg = str(e)
     if "502" in msg or "Bad Gateway" in msg:
@@ -45,6 +52,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from routers.upload import resolve_file_ref
 
 from config import settings, FACILITY_TYPES
 from services.db_manager import (
@@ -227,13 +235,17 @@ async def add_submission(
     competition_id: str,
     company: str = Form(...),
     result: str = Form(...),  # "win" | "contracted" | "lose"
-    submission_pdf: bytes = File(...),
+    submission_pdf: bytes | None = File(None),
+    submission_pdf_ref: str | None = Form(None),  # chunked upload file_ref
 ):
     """기존 프로젝트에 제안서 1개 추가. 분류→추출→저장만. 비교분석 없음."""
     meta = load_project_meta(facility_type, competition_id)
     if not meta:
         raise HTTPException(404, "Project not found")
-    _validate_pdf(submission_pdf, "제안서 PDF")
+    sub_bytes = _resolve_pdf(submission_pdf, submission_pdf_ref, "제안서 PDF")
+    if not sub_bytes:
+        raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
+    _validate_pdf(sub_bytes, "제안서 PDF")
 
     async def event_stream():
         ts = int(time.time() * 1000)
@@ -243,7 +255,7 @@ async def add_submission(
                        "msg": f"제안서 처리: {company}", "_timestamp": ts})
 
             sub_path = tmp_root / "submission.pdf"
-            sub_path.write_bytes(submission_pdf)
+            sub_path.write_bytes(sub_bytes)
 
             sub_classifications = await classify_all_pages(sub_path)
             total_sub = len(sub_classifications)
@@ -418,12 +430,15 @@ async def run_pipeline(
     client: str = Form(""),
     location: str = Form(""),
     brief_pdf: bytes | None = File(None),
+    brief_pdf_ref: str | None = Form(None),        # chunked upload file_ref
     submissions_json: str = Form(...),
-    submission_pdfs: list[bytes] = File(...),
+    submission_pdfs: list[bytes] | None = File(None),
+    submission_pdf_refs: str | None = Form(None),  # JSON array of file_refs
 ):
     """
     submissions_json: JSON array of {company, result} matching submission_pdfs order.
-    brief_pdf is optional — omit if no brief document available.
+    brief_pdf / brief_pdf_ref: 지침서 PDF (선택). 둘 중 하나.
+    submission_pdfs / submission_pdf_refs: 제안서 PDFs. 둘 중 하나.
     Streams SSE progress events.
     """
     if facility_type not in FACILITY_TYPES:
@@ -432,11 +447,23 @@ async def run_pipeline(
         sub_meta = json.loads(submissions_json)
     except json.JSONDecodeError:
         raise HTTPException(400, "submissions_json must be valid JSON array")
-    if len(sub_meta) != len(submission_pdfs):
+
+    # file_ref 방식 (chunked upload)
+    if submission_pdf_refs:
+        try:
+            refs = json.loads(submission_pdf_refs)
+        except json.JSONDecodeError:
+            raise HTTPException(400, "submission_pdf_refs must be valid JSON array")
+        sub_bytes_list = [resolve_file_ref(r).read_bytes() for r in refs]
+    elif submission_pdfs:
+        sub_bytes_list = list(submission_pdfs)
+    else:
+        raise HTTPException(400, "submission_pdfs 또는 submission_pdf_refs 중 하나가 필요합니다.")
+
+    if len(sub_meta) != len(sub_bytes_list):
         raise HTTPException(400, "submissions_json length must match submission_pdfs count")
 
-    brief_bytes = brief_pdf
-    sub_bytes_list = list(submission_pdfs)
+    brief_bytes = _resolve_pdf(brief_pdf, brief_pdf_ref)
 
     if brief_bytes:
         _validate_pdf(brief_bytes, "지침서 PDF")
@@ -586,12 +613,21 @@ async def run_single_pipeline(
     company: str = Form(...),
     result: str = Form(...),  # "win" | "contracted" | "lose"
     brief_pdf: bytes | None = File(None),
-    submission_pdf: bytes = File(...),
+    brief_pdf_ref: str | None = Form(None),
+    submission_pdf: bytes | None = File(None),
+    submission_pdf_ref: str | None = Form(None),
 ):
     """지침서(선택) + 제안서 1개. 비교 없이 DB 저장 → 패턴 갱신.
     낙선(lose)인 경우 기존 패턴 대비 원인 진단을 추가로 수행."""
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
+    sub_bytes = _resolve_pdf(submission_pdf, submission_pdf_ref, "제안서 PDF")
+    if not sub_bytes:
+        raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
+    _validate_pdf(sub_bytes, "제안서 PDF")
+    brief_bytes_single = _resolve_pdf(brief_pdf, brief_pdf_ref)
+    if brief_bytes_single:
+        _validate_pdf(brief_bytes_single, "지침서 PDF")
 
     async def event_stream():
         ts = int(time.time() * 1000)
@@ -603,11 +639,11 @@ async def run_single_pipeline(
             brief_data: dict = {}
 
             # ── BRIEF (선택 사항) ──────────────────────────────────────────────
-            if brief_pdf:
+            if brief_bytes_single:
                 yield sse({"type": "stage", "stage": "brief",
                            "msg": "지침서 PDF 처리 중", "_timestamp": ts})
                 brief_path = tmp_root / "brief.pdf"
-                brief_path.write_bytes(brief_pdf)
+                brief_path.write_bytes(brief_bytes_single)
 
                 brief_classifications = await classify_all_pages(brief_path)
                 total_brief = len(brief_classifications)
@@ -636,7 +672,7 @@ async def run_single_pipeline(
             yield sse({"type": "stage", "stage": "submission", "company": company,
                        "msg": f"제안서 처리: {company}", "_timestamp": ts})
             sub_path = tmp_root / "submission.pdf"
-            sub_path.write_bytes(submission_pdf)
+            sub_path.write_bytes(sub_bytes)
 
             sub_classifications = await classify_all_pages(sub_path)
             total_sub = len(sub_classifications)

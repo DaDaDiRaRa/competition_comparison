@@ -1,5 +1,27 @@
 const BASE = '/api'
 
+// ── 청크 업로드 헬퍼 ──────────────────────────────────────────────────────────
+import { uploadIfLarge, cleanupUpload } from './chunkUpload.js'
+
+/**
+ * FormData에서 대용량 File을 청크 업로드로 교체한다.
+ * fileFields: { formKey: File } 맵. 교체된 field는 formKey → formKey_ref 로 변경.
+ * refs: 생성된 file_ref 목록 (파이프라인 완료 후 정리용)
+ */
+async function upgradeFormDataFiles(formData, fileFields) {
+  const refs = []
+  for (const [key, file] of Object.entries(fileFields)) {
+    if (!file) continue
+    const ref = await uploadIfLarge(file)
+    if (ref) {
+      formData.delete(key)
+      formData.append(`${key}_ref`, ref)
+      refs.push(ref)
+    }
+  }
+  return refs
+}
+
 export async function getSettings() {
   const r = await fetch(`${BASE}/settings`)
   return r.json()
@@ -121,8 +143,15 @@ export async function rerenderReport(facilityType, competitionId) {
   return r.json()
 }
 
-export function addSubmission(facilityType, competitionId, formData) {
-  return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/add-submission`, formData)
+export async function* addSubmission(facilityType, competitionId, formData) {
+  const refs = await upgradeFormDataFiles(formData, {
+    submission_pdf: formData.get('submission_pdf') instanceof File ? formData.get('submission_pdf') : null,
+  })
+  try {
+    yield* streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/add-submission`, formData)
+  } finally {
+    refs.forEach(cleanupUpload)
+  }
 }
 
 /**
@@ -130,23 +159,70 @@ export function addSubmission(facilityType, competitionId, formData) {
  * formData must include: competition_name, facility_type, year, client, location,
  *   brief_pdf (File), submissions_json (string), submission_pdfs (File[])
  */
-export function runAccumulatePipeline(formData) {
-  return streamSSE(`${BASE}/accumulate/run`, formData)
+export async function* runAccumulatePipeline(formData) {
+  const { chunkUpload } = await import('./chunkUpload.js')
+  const THRESHOLD = 25 * 1024 * 1024
+  const refs = []
+
+  // submission_pdfs: 하나라도 크면 전부 ref로 업로드 (backend는 섞음 불허)
+  const subFiles = formData.getAll('submission_pdfs')
+  const anyLarge = subFiles.some(f => f instanceof File && f.size > THRESHOLD)
+  if (anyLarge) {
+    const allRefs = []
+    for (const file of subFiles) {
+      const ref = await chunkUpload(file)
+      allRefs.push(ref)
+      refs.push(ref)
+    }
+    formData.delete('submission_pdfs')
+    formData.set('submission_pdf_refs', JSON.stringify(allRefs))
+  }
+
+  // brief_pdf
+  const briefFile = formData.get('brief_pdf')
+  if (briefFile instanceof File && briefFile.size > THRESHOLD) {
+    const ref = await chunkUpload(briefFile)
+    formData.delete('brief_pdf')
+    formData.set('brief_pdf_ref', ref)
+    refs.push(ref)
+  }
+
+  try {
+    yield* streamSSE(`${BASE}/accumulate/run`, formData)
+  } finally {
+    refs.forEach(cleanupUpload)
+  }
 }
 
 /**
  * Run diagnosis pipeline. formData: facility_type, competition_name, brief_pdf, submission_pdf
  */
-export function runDiagnosePipeline(formData) {
-  return streamSSE(`${BASE}/diagnose/run`, formData)
+export async function* runDiagnosePipeline(formData) {
+  const refs = await upgradeFormDataFiles(formData, {
+    brief_pdf: formData.get('brief_pdf') instanceof File ? formData.get('brief_pdf') : null,
+    submission_pdf: formData.get('submission_pdf') instanceof File ? formData.get('submission_pdf') : null,
+  })
+  try {
+    yield* streamSSE(`${BASE}/diagnose/run`, formData)
+  } finally {
+    refs.forEach(cleanupUpload)
+  }
 }
 
 /**
  * Run diagnosis against user-selected reference projects.
  * formData: facility_type, competition_name, reference_items_json, submission_pdf, brief_pdf (선택)
  */
-export function runDiagnoseVsProjects(formData) {
-  return streamSSE(`${BASE}/diagnose/run-vs-projects`, formData)
+export async function* runDiagnoseVsProjects(formData) {
+  const refs = await upgradeFormDataFiles(formData, {
+    brief_pdf: formData.get('brief_pdf') instanceof File ? formData.get('brief_pdf') : null,
+    submission_pdf: formData.get('submission_pdf') instanceof File ? formData.get('submission_pdf') : null,
+  })
+  try {
+    yield* streamSSE(`${BASE}/diagnose/run-vs-projects`, formData)
+  } finally {
+    refs.forEach(cleanupUpload)
+  }
 }
 
 export function getDiagnosisReportUrl(filename) {
@@ -163,8 +239,16 @@ export async function listDiagnosisReports() {
  * formData: competition_name, facility_type, year, client, location,
  *   company, result ("win"|"contracted"|"lose"), brief_pdf, submission_pdf
  */
-export function runMyProjectPipeline(formData) {
-  return streamSSE(`${BASE}/accumulate/run-single`, formData)
+export async function* runMyProjectPipeline(formData) {
+  const refs = await upgradeFormDataFiles(formData, {
+    brief_pdf: formData.get('brief_pdf') instanceof File ? formData.get('brief_pdf') : null,
+    submission_pdf: formData.get('submission_pdf') instanceof File ? formData.get('submission_pdf') : null,
+  })
+  try {
+    yield* streamSSE(`${BASE}/accumulate/run-single`, formData)
+  } finally {
+    refs.forEach(cleanupUpload)
+  }
 }
 
 /**
