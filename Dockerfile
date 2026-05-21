@@ -1,0 +1,22 @@
+# Stage 1: React 프론트엔드 빌드
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Python 백엔드
+FROM python:3.12-slim
+WORKDIR /app
+
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+COPY backend/requirements-server.txt ./
+RUN pip install --no-cache-dir -r requirements-server.txt
+
+COPY backend/ ./backend/
+WORKDIR /app/backend
+
+ENV PYTHONUNBUFFERED=1
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
