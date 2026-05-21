@@ -255,7 +255,12 @@ class AppSettings:
 
     def set_api_key(self, key: str):
         """세션 메모리에만 저장. 디스크에 쓰지 않음."""
-        self._memory_api_key = (key or "").strip()
+        key = (key or "").strip()
+        # 셸 복붙 아티팩트 제거: echo -n "sk-ant-..." → sk-ant-...
+        if key.startswith("-n "):
+            key = key[3:].strip()
+        key = key.strip('"').strip("'")
+        self._memory_api_key = key
 
     def clear_api_key(self):
         self._memory_api_key = ""
