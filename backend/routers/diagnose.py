@@ -24,7 +24,7 @@ def _user_error_msg(e: Exception) -> str:
 
 from datetime import datetime
 
-from fastapi import APIRouter, File, Form, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from config import settings, FACILITY_TYPES
@@ -47,20 +47,22 @@ router = APIRouter()
 async def run_diagnosis(
     facility_type: str = Form(...),
     competition_name: str = Form(""),
-    submission_pdf: bytes | None = File(None),
+    submission_pdf: UploadFile | None = File(None),
     submission_pdf_ref: str | None = Form(None),
-    brief_pdf: bytes | None = File(None),
+    brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
 ):
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
 
     submission_bytes = (resolve_file_ref(submission_pdf_ref).read_bytes()
-                        if submission_pdf_ref else submission_pdf)
+                        if submission_pdf_ref
+                        else (await submission_pdf.read() if submission_pdf else None))
     if not submission_bytes:
         raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
     brief_bytes = (resolve_file_ref(brief_pdf_ref).read_bytes()
-                   if brief_pdf_ref else brief_pdf)
+                   if brief_pdf_ref
+                   else (await brief_pdf.read() if brief_pdf else None))
 
     async def event_stream():
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_diag_"))
@@ -176,9 +178,9 @@ async def run_diagnosis_vs_projects(
     facility_type: str = Form(...),
     competition_name: str = Form(""),
     reference_items_json: str = Form(...),  # [{facility_type, competition_id, company}]
-    submission_pdf: bytes | None = File(None),
+    submission_pdf: UploadFile | None = File(None),
     submission_pdf_ref: str | None = Form(None),
-    brief_pdf: bytes | None = File(None),
+    brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
 ):
     if facility_type not in FACILITY_TYPES:
@@ -192,11 +194,13 @@ async def run_diagnosis_vs_projects(
         raise HTTPException(400, "참조할 공모를 1개 이상 선택해주세요.")
 
     submission_bytes = (resolve_file_ref(submission_pdf_ref).read_bytes()
-                        if submission_pdf_ref else submission_pdf)
+                        if submission_pdf_ref
+                        else (await submission_pdf.read() if submission_pdf else None))
     if not submission_bytes:
         raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
     brief_bytes = (resolve_file_ref(brief_pdf_ref).read_bytes()
-                   if brief_pdf_ref else brief_pdf)
+                   if brief_pdf_ref
+                   else (await brief_pdf.read() if brief_pdf else None))
 
     async def event_stream():
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_diag_"))

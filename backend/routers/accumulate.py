@@ -28,11 +28,18 @@ def _validate_pdf(data: bytes, name: str = "파일"):
         raise HTTPException(400, f"{name}: PDF 형식이 아닙니다.")
 
 
-def _resolve_pdf(file_bytes: bytes | None, file_ref: str | None, name: str = "파일") -> bytes | None:
-    """직접 업로드 bytes 또는 chunked upload file_ref 중 하나를 bytes로 반환."""
+async def _read_upload(file: "UploadFile | None") -> bytes | None:
+    """UploadFile → bytes. None이면 None 반환."""
+    if file is None:
+        return None
+    return await file.read()
+
+
+async def _resolve_pdf(file: "UploadFile | None", file_ref: str | None) -> bytes | None:
+    """UploadFile 또는 file_ref 중 하나를 bytes로 반환."""
     if file_ref:
         return resolve_file_ref(file_ref).read_bytes()
-    return file_bytes
+    return await _read_upload(file)
 
 
 def _user_error_msg(e: Exception) -> str:
@@ -50,7 +57,7 @@ def _user_error_msg(e: Exception) -> str:
     return f"처리 중 오류가 발생했습니다. 문제가 반복되면 관리자에게 문의해주세요. (상세: {msg[:120]})"
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from routers.upload import resolve_file_ref
 
@@ -235,14 +242,14 @@ async def add_submission(
     competition_id: str,
     company: str = Form(...),
     result: str = Form(...),  # "win" | "contracted" | "lose"
-    submission_pdf: bytes | None = File(None),
+    submission_pdf: UploadFile | None = File(None),
     submission_pdf_ref: str | None = Form(None),  # chunked upload file_ref
 ):
     """기존 프로젝트에 제안서 1개 추가. 분류→추출→저장만. 비교분석 없음."""
     meta = load_project_meta(facility_type, competition_id)
     if not meta:
         raise HTTPException(404, "Project not found")
-    sub_bytes = _resolve_pdf(submission_pdf, submission_pdf_ref, "제안서 PDF")
+    sub_bytes = await _resolve_pdf(submission_pdf, submission_pdf_ref)
     if not sub_bytes:
         raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
     _validate_pdf(sub_bytes, "제안서 PDF")
@@ -429,10 +436,10 @@ async def run_pipeline(
     project_number: str = Form(...),
     client: str = Form(""),
     location: str = Form(""),
-    brief_pdf: bytes | None = File(None),
-    brief_pdf_ref: str | None = Form(None),        # chunked upload file_ref
+    brief_pdf: UploadFile | None = File(None),
+    brief_pdf_ref: str | None = Form(None),
     submissions_json: str = Form(...),
-    submission_pdfs: list[bytes] | None = File(None),
+    submission_pdfs: list[UploadFile] | None = File(None),
     submission_pdf_refs: str | None = Form(None),  # JSON array of file_refs
 ):
     """
@@ -448,7 +455,6 @@ async def run_pipeline(
     except json.JSONDecodeError:
         raise HTTPException(400, "submissions_json must be valid JSON array")
 
-    # file_ref 방식 (chunked upload)
     if submission_pdf_refs:
         try:
             refs = json.loads(submission_pdf_refs)
@@ -456,14 +462,14 @@ async def run_pipeline(
             raise HTTPException(400, "submission_pdf_refs must be valid JSON array")
         sub_bytes_list = [resolve_file_ref(r).read_bytes() for r in refs]
     elif submission_pdfs:
-        sub_bytes_list = list(submission_pdfs)
+        sub_bytes_list = [await f.read() for f in submission_pdfs]
     else:
         raise HTTPException(400, "submission_pdfs 또는 submission_pdf_refs 중 하나가 필요합니다.")
 
     if len(sub_meta) != len(sub_bytes_list):
         raise HTTPException(400, "submissions_json length must match submission_pdfs count")
 
-    brief_bytes = _resolve_pdf(brief_pdf, brief_pdf_ref)
+    brief_bytes = await _resolve_pdf(brief_pdf, brief_pdf_ref)
 
     if brief_bytes:
         _validate_pdf(brief_bytes, "지침서 PDF")
@@ -612,20 +618,20 @@ async def run_single_pipeline(
     location: str = Form(""),
     company: str = Form(...),
     result: str = Form(...),  # "win" | "contracted" | "lose"
-    brief_pdf: bytes | None = File(None),
+    brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
-    submission_pdf: bytes | None = File(None),
+    submission_pdf: UploadFile | None = File(None),
     submission_pdf_ref: str | None = Form(None),
 ):
     """지침서(선택) + 제안서 1개. 비교 없이 DB 저장 → 패턴 갱신.
     낙선(lose)인 경우 기존 패턴 대비 원인 진단을 추가로 수행."""
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
-    sub_bytes = _resolve_pdf(submission_pdf, submission_pdf_ref, "제안서 PDF")
+    sub_bytes = await _resolve_pdf(submission_pdf, submission_pdf_ref)
     if not sub_bytes:
         raise HTTPException(400, "submission_pdf 또는 submission_pdf_ref 중 하나가 필요합니다.")
     _validate_pdf(sub_bytes, "제안서 PDF")
-    brief_bytes_single = _resolve_pdf(brief_pdf, brief_pdf_ref)
+    brief_bytes_single = await _resolve_pdf(brief_pdf, brief_pdf_ref)
     if brief_bytes_single:
         _validate_pdf(brief_bytes_single, "지침서 PDF")
 
