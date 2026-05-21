@@ -38,7 +38,7 @@ jobs:
             --execution-environment gen2 \
             --add-volume name=db,type=cloud-storage,bucket=kunwon-competition-db \
             --add-volume-mount volume=db,mount-path=/data \
-            --set-env-vars DB_PATH=/data,PYTHONUNBUFFERED=1 \
+            --update-env-vars DB_PATH=/data,PYTHONUNBUFFERED=1 \
             --remove-env-vars ANTHROPIC_API_KEY \
             --memory 2Gi \
             --cpu 2 \
