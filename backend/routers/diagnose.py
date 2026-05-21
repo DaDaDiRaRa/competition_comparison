@@ -52,6 +52,8 @@ async def run_diagnosis(
     brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
 ):
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 Anthropic API 키를 입력해주세요.")
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
 
@@ -183,6 +185,8 @@ async def run_diagnosis_vs_projects(
     brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
 ):
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 Anthropic API 키를 입력해주세요.")
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
 

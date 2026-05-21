@@ -288,6 +288,11 @@ export function crossCompare(items) {
 async function* streamSSE(url, formData) {
   const response = await fetch(url, { method: 'POST', body: formData ?? undefined })
   if (!response.ok) {
+    // 401: API 키 미설정 — 사용자 친화적 메시지
+    if (response.status === 401) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.detail || 'API 키가 설정되지 않았습니다. 설정 탭에서 Anthropic API 키를 입력해주세요.')
+    }
     const err = await response.text()
     throw new Error(`HTTP ${response.status}: ${err}`)
   }

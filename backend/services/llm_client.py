@@ -27,8 +27,12 @@ def call_messages(
     재시도: 502/503/529 상태코드 또는 네트워크 타임아웃 시 지수 백오프로 최대 3회 재시도.
     Prompt caching: content block에 cache_control 마킹 시 자동 적용 (5분 TTL, 90% 할인).
     """
+    api_key = settings.api_key
+    if not api_key:
+        raise ValueError("Anthropic API 키가 설정되지 않았습니다. 설정 탭에서 API 키를 입력해주세요.")
+
     headers = {
-        "x-api-key": settings.api_key,
+        "x-api-key": api_key,
         "anthropic-version": _API_VERSION,
         "content-type": "application/json",
     }

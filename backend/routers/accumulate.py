@@ -246,6 +246,8 @@ async def add_submission(
     submission_pdf_ref: str | None = Form(None),  # chunked upload file_ref
 ):
     """기존 프로젝트에 제안서 1개 추가. 분류→추출→저장만. 비교분석 없음."""
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 Anthropic API 키를 입력해주세요.")
     meta = load_project_meta(facility_type, competition_id)
     if not meta:
         raise HTTPException(404, "Project not found")
@@ -448,6 +450,8 @@ async def run_pipeline(
     submission_pdfs / submission_pdf_refs: 제안서 PDFs. 둘 중 하나.
     Streams SSE progress events.
     """
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 Anthropic API 키를 입력해주세요.")
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
     try:
@@ -625,6 +629,8 @@ async def run_single_pipeline(
 ):
     """지침서(선택) + 제안서 1개. 비교 없이 DB 저장 → 패턴 갱신.
     낙선(lose)인 경우 기존 패턴 대비 원인 진단을 추가로 수행."""
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 Anthropic API 키를 입력해주세요.")
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
     sub_bytes = await _resolve_pdf(submission_pdf, submission_pdf_ref)
