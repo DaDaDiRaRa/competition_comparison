@@ -101,8 +101,9 @@ export default function SettingsPanel() {
     try {
       await setApiKey(keyInput.trim())
       setKeyInput('')
-      setKeyMsg('✓ API 키가 갱신되었습니다 (세션 전용)')
+      setKeyMsg('✓ API 키가 적용되었습니다 (세션 전용)')
       refresh()
+      window.dispatchEvent(new Event('api-key-changed'))
       setTimeout(() => setKeyMsg(''), 3000)
     } catch (e) {
       setKeyMsg('✗ ' + (e.message || '실패'))
@@ -120,6 +121,18 @@ export default function SettingsPanel() {
   return (
     <div style={s.panel}>
       <div style={s.title}>앱 설정</div>
+
+      {/* API 키 미설정 시 최상단 강조 안내 */}
+      {!hasKey && (
+        <div style={{
+          background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8,
+          padding: '14px 16px', marginBottom: 20,
+          fontSize: 13, color: '#92400e', lineHeight: 1.6,
+        }}>
+          <strong>⚠️ API 키를 먼저 입력하세요</strong><br />
+          아래 <strong>Anthropic API Key</strong> 항목에 본인의 키를 입력하고 <strong>키 적용</strong> 버튼을 누르면 분석 기능을 사용할 수 있습니다.
+        </div>
+      )}
 
       <div style={s.group}>
         <label style={s.label}>

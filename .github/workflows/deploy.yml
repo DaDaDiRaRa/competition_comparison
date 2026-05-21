@@ -39,7 +39,6 @@ jobs:
             --add-volume name=db,type=cloud-storage,bucket=kunwon-competition-db \
             --add-volume-mount volume=db,mount-path=/data \
             --set-env-vars DB_PATH=/data,PYTHONUNBUFFERED=1 \
-            --set-secrets ANTHROPIC_API_KEY=anthropic-api-key:latest \
             --memory 2Gi \
             --cpu 2 \
             --timeout 3600 \
