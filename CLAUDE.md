@@ -2,31 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 잔여 개선 작업 (Pending Improvements)
-
-코드 리뷰 후 식별된 개선 사항. 우선순위 순서대로 진행할 것.
-
-| # | 항목 | 파일 | 권장모델 |
-|---|------|------|---------|
-| #4 | `llm_client.py`에 지수 백오프 재시도 추가 (502/timeout) | `backend/services/llm_client.py` | Sonnet |
-| #11 | `comparator.py` `_run_compare_sync` / `_run_diagnose_sync` — `parse_json_response` try/except 보호 | `backend/services/comparator.py` | Sonnet |
-| #12 | `requirements-server.txt` 의존성 `>=` → `==` 버전 핀 | `backend/requirements-server.txt` | Haiku |
-| #13 | `requirements-server.txt`에서 미사용 `anthropic` 제거, `httpx` 명시 추가 | `backend/requirements-server.txt` | Haiku |
-| #5 | `main.py` CORS: `allow_origins=["*"]` + `allow_credentials=True` 무효 조합 수정 | `backend/main.py` | Haiku |
-| #6 | `main.py` SPA 폴백 `_spa_fallback`: 해석 경로가 `_FRONTEND_DIST` 하위인지 가드 추가 | `backend/main.py` | Sonnet |
-| #8 | `routers/settings.py:15` `model_id_classify: Optional[int]` → `Optional[str]` 타입 버그 | `backend/routers/settings.py` | Haiku |
-| #9 | `comparator.py` 프롬프트 내 `상/중/하` 잔여 텍스트 → `A/B/C/D/E` 로 통일 | `backend/services/comparator.py` | Sonnet |
-| #15 | `routers/accumulate.py` 업로드 파일 크기/타입 검증 추가 (max ~50MB, PDF magic bytes) | `backend/routers/accumulate.py` | Sonnet |
-| #16 | `routers/accumulate.py:709` `cross_compare` — `json.loads` try/except로 400 처리 | `backend/routers/accumulate.py` | Haiku |
-| #10 | 리포지토리 정리: `merged_code.txt`, `merge_code.py`, 중복 `README.html` 제거 | 루트 | Sonnet |
-
-**완료된 것:**
-- ✅ #1 deploy.yml — 올바른 서비스/프로젝트로 수정, push 자동배포 복원
-- ✅ #3 Cloud Run `--max-instances=1` (GCS 동시쓰기 방지)
-- ✅ #2 서버 API 키 제거 → 사용자가 설정 탭에서 본인 키 직접 입력
-- ✅ ApiKeyGate 블로킹 오버레이 제거 → 상단 배너로 교체
-- ✅ SettingsPanel API 키 입력란 강조
-
 ## Project Overview
 
 Competition Analyzer is a full-stack application for analyzing architectural competition proposals. It uses Claude AI to extract and compare design information across multiple submissions.
