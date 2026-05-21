@@ -25,7 +25,6 @@ jobs:
           gcloud builds submit \
             --tag asia-northeast3-docker.pkg.dev/arch-diagnose/competition-analyzer/app \
             --project arch-diagnose \
-            --suppress-logs \
             .
 
       - name: Deploy to Cloud Run
