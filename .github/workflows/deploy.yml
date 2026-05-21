@@ -7,6 +7,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  IMAGE: asia-northeast3-docker.pkg.dev/arch-diagnose/competition-analyzer/app
 
 jobs:
   deploy:
@@ -20,17 +21,18 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
-      - name: Build and push image
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker asia-northeast3-docker.pkg.dev --quiet
+
+      - name: Build and push Docker image
         run: |
-          gcloud builds submit \
-            --tag asia-northeast3-docker.pkg.dev/arch-diagnose/competition-analyzer/app \
-            --project arch-diagnose \
-            .
+          docker build -t $IMAGE .
+          docker push $IMAGE
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy competition-analyzer \
-            --image asia-northeast3-docker.pkg.dev/arch-diagnose/competition-analyzer/app \
+            --image $IMAGE \
             --region asia-northeast3 \
             --project arch-diagnose \
             --execution-environment gen2 \
