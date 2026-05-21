@@ -1509,6 +1509,12 @@ def generate_submission_report(sub_doc: dict) -> str:
 {_CSS}
 </head>
 <body>
+<div id="dl-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1e3a8a;border-bottom:2px solid #3b82f6;padding:8px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
+  <span style="color:#ffffff;font-weight:700;font-size:13px;flex:1">개별 제안서 리포트 · {company}</span>
+  <button onclick="(function(){{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([document.documentElement.outerHTML],{{type:'text/html'}}));a.download=document.title+'.html';a.click()}})()" style="background:#ffffff;color:#1e3a8a;border:none;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">HTML 저장</button>
+  <button onclick="window.print()" style="background:transparent;color:#ffffff;border:1px solid #ffffff;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">PDF 저장</button>
+</div>
+<style>body{{padding-top:52px}}@media print{{#dl-toolbar{{display:none!important}}}}</style>
 <div class="wrap">
 {header}
 {sections}

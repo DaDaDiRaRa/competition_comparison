@@ -1346,6 +1346,12 @@ def generate_comparison_report(
 {_CSS}
 </head>
 <body>
+<div id="dl-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a2138;border-bottom:2px solid #d4af37;padding:8px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
+  <span style="color:#d4af37;font-weight:700;font-size:13px;flex:1">비교분석 리포트</span>
+  <button onclick="(function(){{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([document.documentElement.outerHTML],{{type:'text/html'}}));a.download=document.title+'.html';a.click()}})()" style="background:#d4af37;color:#1a2138;border:none;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">HTML 저장</button>
+  <button onclick="window.print()" style="background:transparent;color:#d4af37;border:1px solid #d4af37;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">PDF 저장</button>
+</div>
+<style>body{{padding-top:52px}}@media print{{#dl-toolbar{{display:none!important}}}}</style>
 <div class="page-wrap">
 {header}
 {dashboard_section}

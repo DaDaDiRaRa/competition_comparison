@@ -130,10 +130,9 @@ def get_submission_report(facility_type: str, competition_id: str, company: str)
     path = get_submission_report_path(facility_type, competition_id, company)
     if path is None or not path.exists():
         raise HTTPException(404, "Submission report not found")
-    return FileResponse(
-        path, media_type="text/html",
-        filename=f"{company}_report.html",
-    )
+    resp = FileResponse(path, media_type="text/html")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @router.get("/projects/{facility_type}/{competition_id}/submissions/{company}")
