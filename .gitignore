@@ -32,3 +32,5 @@ echo node_modules/
 echo venv/
 echo __pycache__/
 echo *.pyc
+
+.env
