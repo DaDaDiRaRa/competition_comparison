@@ -34,3 +34,4 @@ echo __pycache__/
 echo *.pyc
 
 .env
+echo env.yaml
