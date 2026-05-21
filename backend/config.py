@@ -16,7 +16,10 @@ def _resolve_settings_file() -> Path:
 
 SETTINGS_FILE = _resolve_settings_file()
 
-DEFAULT_DB_PATH = Path(r"M:\06_설계사업6본부\설계사업6본부 1소\01 개인폴더\16 김정현\KUNWON_COMPETITION_DB")
+DEFAULT_DB_PATH = Path(
+    os.environ.get("DB_PATH")
+    or r"M:\06_설계사업6본부\설계사업6본부 1소\01 개인폴더\16 김정현\KUNWON_COMPETITION_DB"
+)
 
 FACILITY_TYPES = {
     "public":         {"label_ko": "공공시설",       "group": "general"},

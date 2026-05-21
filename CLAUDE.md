@@ -13,7 +13,8 @@ Competition Analyzer is a full-stack application for analyzing architectural com
 - AI: Anthropic Claude (claude-sonnet-4-6) via Anthropic API
 - PDF Processing: PyMuPDF (fitz) — primary rasterizer in `services/utils.py`
 - Database: Custom JSON-based storage
-- 배포: PyInstaller(`--onedir`) + PyWebView 네이티브 윈도우 (Windows EdgeChromium WebView2)
+- 배포 (데스크톱): PyInstaller(`--onedir`) + PyWebView 네이티브 윈도우 (Windows EdgeChromium WebView2)
+- 배포 (웹서버): Docker + Google Cloud Run (gen2) + GCS 버킷 마운트 (`/data`)
 
 ## Architecture
 
@@ -87,7 +88,8 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
   - `axes_for(facility_type) → dict` — facility_type의 group에 맞는 axes 반환
   - `axes_keys_for(facility_type) → list` — axes 키 목록
   - `COMPARISON_AXES_META` / `COMPARISON_AXES` — legacy aliases (redev 그룹, 하위호환용)
-  - `DEFAULT_DB_PATH = Path.home() / "CompetitionAnalyzerDB"` — 미설정 시 홈 디렉터리 기본값
+  - `DEFAULT_DB_PATH` — 우선순위: `DB_PATH` 환경변수 → `M:\...KUNWON_COMPETITION_DB` (Windows 기본값)
+  - Cloud Run 배포 시 `DB_PATH=/data` 환경변수로 GCS 마운트 경로 지정
   - `settings.db_path` — `app_settings.json`의 `db_path` 값 우선, 없으면 `DEFAULT_DB_PATH`
   - `settings.has_db_path` — 사용자가 명시적으로 경로를 설정했는지 여부
   - `settings.set_db_path(path)` — 경로를 `app_settings.json`에 저장
