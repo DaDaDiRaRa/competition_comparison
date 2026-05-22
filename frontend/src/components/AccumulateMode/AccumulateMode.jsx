@@ -21,7 +21,7 @@ const s = {
   group: { marginBottom: 14 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-md)' },
   btn: {
-    background: '#15803d', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    background: 'var(--color-success)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '12px 28px', cursor: 'pointer', fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)',
     marginTop: 16, width: '100%',
   },
@@ -35,9 +35,9 @@ const s = {
   subHeader: { display: 'flex', gap: 'var(--gap-md)', alignItems: 'center', marginBottom: 10 },
   tag: {
     fontSize: 'var(--font-size-xs)', padding: '2px 8px', borderRadius: 20, fontWeight: 'var(--font-weight-semibold)',
-    background: '#15803d', color: 'var(--color-text-on-accent)',
+    background: 'var(--color-success)', color: 'var(--color-text-on-accent)',
   },
-  tagLose: { background: '#b91c1c' },
+  tagLose: { background: 'var(--color-danger)' },
 }
 
 function SubmissionInput({ idx, onChange, onRemove }) {
@@ -79,7 +79,7 @@ function SubmissionInput({ idx, onChange, onRemove }) {
       {file && <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-success)', marginTop: 4 }}>✓ {file.name}</div>}
       {(result === 'win' || result === 'contracted') && (
         <div style={{ ...s.tag, display: 'inline-block', marginTop: 8,
-          background: result === 'contracted' ? 'var(--color-accent)' : '#15803d' }}>
+          background: result === 'contracted' ? 'var(--color-accent)' : 'var(--color-success)' }}>
           {result === 'win' ? '당선작' : '수의계약'}
         </div>
       )}
@@ -153,7 +153,7 @@ export default function AccumulateMode() {
         <strong style={{ color: 'var(--color-text-body)' }}>한 공모에 참여한 여러 회사의 제안서</strong>를 한꺼번에 등록합니다.<br />
         PDF를 분석해 구조화된 데이터로 저장하며, <strong style={{ color: 'var(--color-accent)' }}>비교분석·리포트</strong>는
         저장 후 상단 목록의 "비교분석 실행" 버튼으로 별도 실행합니다.<br />
-        <span style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
           * 우리 회사 단독 등록은 상단 "내 프로젝트 등록" 탭을 이용하세요.
         </span>
       </div>
@@ -183,7 +183,7 @@ export default function AccumulateMode() {
         <div style={s.group}>
           <label style={s.label}>
             발주처
-            <span style={{ fontSize: 'var(--font-size-xs)', color: '#4a5568', marginLeft: 4 }}>(선택 사항)</span>
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: 4 }}>(선택 사항)</span>
           </label>
           <input style={s.input} value={form.client}
             onChange={e => setFormField('client', e.target.value)} />
@@ -193,7 +193,7 @@ export default function AccumulateMode() {
       <div style={s.group}>
         <label style={s.label}>
           대지위치
-          <span style={{ fontSize: 'var(--font-size-xs)', color: '#4a5568', marginLeft: 4 }}>(선택 사항)</span>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: 4 }}>(선택 사항)</span>
         </label>
         <input style={s.input} value={form.location}
           onChange={e => setFormField('location', e.target.value)}
@@ -203,7 +203,7 @@ export default function AccumulateMode() {
       <div style={s.section}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 12 }}>
           <div style={s.sectionTitle}>지침서 PDF</div>
-          <span style={{ fontSize: 'var(--font-size-xs)', color: '#4a5568' }}>(선택 사항)</span>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>(선택 사항)</span>
         </div>
         <DropZone label="지침서 PDF 드래그 또는 클릭 (없으면 건너뜀)" onFiles={setBriefFile} />
       </div>
@@ -241,7 +241,7 @@ export default function AccumulateMode() {
       {result && (
         <div style={{ marginTop: 24 }}>
           <div style={{
-            background: 'var(--color-success-bg)', border: '1px solid #15803d', borderRadius: 10,
+            background: 'var(--color-success-bg)', border: '1px solid var(--color-success)', borderRadius: 10,
             padding: '14px 18px', marginBottom: 20,
             display: 'flex', alignItems: 'center', gap: 14,
           }}>

@@ -38,7 +38,7 @@ export default function ProgressLog({ events }) {
       }}
     >
       {events.length === 0
-        ? <span style={{ color: '#4a5568' }}>분석 로그가 여기에 표시됩니다...</span>
+        ? <span style={{ color: 'var(--color-text-muted)' }}>분석 로그가 여기에 표시됩니다...</span>
         : events.map((ev, i) => (
           <div key={i} style={{ color: ev.type === 'error' ? 'var(--color-danger)' : ev.type === 'complete' ? 'var(--color-success)' : undefined, whiteSpace: 'pre-wrap' }}>
             {eventToText(ev)}

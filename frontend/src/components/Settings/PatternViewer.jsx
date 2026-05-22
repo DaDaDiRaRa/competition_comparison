@@ -31,7 +31,7 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
       ...Object.keys(loseDist).filter(k => !k.endsWith('_ratio')),
     ])
   )
-  if (!allKeys.length) return <div style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
+  if (!allKeys.length) return <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
 
   const maxVal = allKeys.reduce((m, k) => {
     return Math.max(m, winDist[k]?.mean || 0, loseDist[k]?.mean || 0)
@@ -45,7 +45,7 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
           당선
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-xs)', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#92400e', display: 'inline-block' }} />
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--color-amber-dark)', display: 'inline-block' }} />
           낙선
         </span>
       </div>
@@ -71,7 +71,7 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
               {Object.keys(loseDist).length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div style={{ flex: 1, background: 'var(--color-bg-surface-alt)', borderRadius: 2, height: 11, overflow: 'hidden' }}>
-                    <div style={{ width: `${(lm / maxVal) * 100}%`, height: '100%', background: '#92400e', borderRadius: 2 }} />
+                    <div style={{ width: `${(lm / maxVal) * 100}%`, height: '100%', background: 'var(--color-amber-dark)', borderRadius: 2 }} />
                   </div>
                   <span style={{ fontSize: 10, color: 'var(--color-text-faint)', minWidth: 42 }}>
                     {lm.toFixed(1)}{lStd != null ? `±${lStd.toFixed(1)}` : ''}
@@ -90,7 +90,7 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
   const fields = Object.keys(QUANT_LABELS).filter(
     k => winQuant[k]?.mean != null || loseQuant[k]?.mean != null
   )
-  if (!fields.length) return <div style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
+  if (!fields.length) return <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
 
   const hasLose = Object.keys(loseQuant).length > 0
 
@@ -101,7 +101,7 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
           <th style={{ textAlign: 'left', padding: '4px 8px' }}>지표</th>
           <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-accent)' }}>당선 평균</th>
           {hasLose && (
-            <th style={{ textAlign: 'right', padding: '4px 8px', color: '#92400e' }}>낙선 평균</th>
+            <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-amber-dark)' }}>낙선 평균</th>
           )}
         </tr>
       </thead>
@@ -114,7 +114,7 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
           return (
             <tr key={f} style={{ borderBottom: '1px solid var(--color-bg-surface-alt)' }}>
               <td style={{ padding: '5px 8px', color: 'var(--color-text-muted)' }}>
-                {meta.label} <span style={{ color: '#4a5568' }}>({meta.unit})</span>
+                {meta.label} <span style={{ color: 'var(--color-text-muted)' }}>({meta.unit})</span>
               </td>
               <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--color-text-body)', fontWeight: 'var(--font-weight-semibold)' }}>
                 {fmt(wm)}
@@ -134,7 +134,7 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
 
 function KeywordCloud({ keywords = {}, loseKeywords = {} }) {
   const entries = Object.entries(keywords).sort((a, b) => b[1] - a[1]).slice(0, 20)
-  if (!entries.length) return <div style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
+  if (!entries.length) return <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
 
   const hasLose = Object.keys(loseKeywords).length > 0
 
@@ -143,7 +143,7 @@ function KeywordCloud({ keywords = {}, loseKeywords = {} }) {
       {entries.map(([kw, freq]) => {
         const loseFreq = loseKeywords[kw] || 0
         const diff = freq - loseFreq
-        const bg = diff > 0.2 ? '#15803d' : diff < -0.2 ? 'var(--color-danger-bg)' : 'var(--color-bg-surface-alt)'
+        const bg = diff > 0.2 ? 'var(--color-success)' : diff < -0.2 ? 'var(--color-danger-bg)' : 'var(--color-bg-surface-alt)'
         const color = diff > 0.2 ? 'var(--color-success)' : diff < -0.2 ? 'var(--color-danger)' : 'var(--color-text-muted)'
         return (
           <span key={kw} title={hasLose ? `당선 ${(freq*100).toFixed(0)}% / 낙선 ${(loseFreq*100).toFixed(0)}%` : `${(freq*100).toFixed(0)}%`} style={{
@@ -167,7 +167,7 @@ function QualitativeInsights({ insights }) {
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-bold)', color, marginBottom: 8 }}>{title}</div>
       {items.length === 0
-        ? <div style={{ fontSize: 'var(--font-size-sm)', color: '#4a5568' }}>없음</div>
+        ? <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>없음</div>
         : items.map((item, i) => (
             <div key={i} style={{
               fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)', padding: '5px 10px', marginBottom: 4,
@@ -184,7 +184,7 @@ function QualitativeInsights({ insights }) {
     <div style={{ display: 'flex', gap: 'var(--gap-md)', flexWrap: 'wrap' }}>
       {col('당선 패턴', winner_patterns, 'var(--color-success)')}
       {col('낙선 패턴', loser_patterns, 'var(--color-danger)')}
-      {col('차별화 요소', key_differentiators, '#ea580c')}
+      {col('차별화 요소', key_differentiators, 'var(--color-grade-d)')}
     </div>
   )
 }
@@ -266,7 +266,7 @@ export default function PatternViewer() {
         <div style={{ display: 'flex', gap: 10 }}>
           {pattern ? (
             <>
-              <span style={{ background: 'var(--color-success-bg)', color: '#15803d', fontSize: 'var(--font-size-sm)', padding: '3px 10px', borderRadius: 20 }}>
+              <span style={{ background: 'var(--color-success-bg)', color: 'var(--color-success)', fontSize: 'var(--font-size-sm)', padding: '3px 10px', borderRadius: 20 }}>
                 당선 {pattern.win_count}개
               </span>
               {loseCount > 0 && (
@@ -278,7 +278,7 @@ export default function PatternViewer() {
           ) : loading ? (
             <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)' }}>로딩 중...</span>
           ) : (
-            <span style={{ fontSize: 'var(--font-size-sm)', color: '#92400e' }}>⚠ 패턴 없음 (당선 데이터 축적 필요)</span>
+            <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-amber-dark)' }}>⚠ 패턴 없음 (당선 데이터 축적 필요)</span>
           )}
         </div>
         <button

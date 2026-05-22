@@ -6,7 +6,7 @@ import PageDistChart from '../common/PageDistChart'
 import { GRADE_COLOR, GRADE_BG, toGrade } from '../../constants'
 
 const RESULT_OPTIONS = [
-  { value: 'win', label: '당선', color: '#0d9488', bg: 'var(--color-warning-bg)' },
+  { value: 'win', label: '당선', color: 'var(--color-teal)', bg: 'var(--color-warning-bg)' },
   { value: 'contracted', label: '수의계약', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
   { value: 'lose', label: '참여 (낙선)', color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]
@@ -16,7 +16,7 @@ const AXIS_KR = {
   program: '프로그램', facade: '파사드', technical: '기술', quantitative: '정량',
 }
 
-const COMPLIANCE_COLOR = { yes: 'var(--color-success)', partial: '#ea580c', no: 'var(--color-danger)', unclear: '#4a5568' }
+const COMPLIANCE_COLOR = { yes: 'var(--color-success)', partial: 'var(--color-grade-d)', no: 'var(--color-danger)', unclear: 'var(--color-text-muted)' }
 const COMPLIANCE_KR = { yes: '충족', partial: '부분', no: '미충족', unclear: '불명확' }
 
 const s = {
@@ -25,7 +25,7 @@ const s = {
   title: { fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', marginBottom: 6 },
   desc: { fontSize: 13, color: 'var(--color-text-faint)', lineHeight: 1.6, marginBottom: 20 },
   label: { fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 6, display: 'block' },
-  optLabel: { fontSize: 'var(--font-size-xs)', color: '#4a5568', marginLeft: 4 },
+  optLabel: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: 4 },
   input: {
     width: '100%', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
     borderRadius: 6, padding: '8px 12px', color: 'var(--color-text-body)', fontSize: 'var(--font-size-base)',
@@ -45,11 +45,11 @@ const s = {
     fontWeight: 'var(--font-weight-semibold)', textAlign: 'center', transition: 'all 0.15s',
     border: selected ? `2px solid ${opt.color}` : '2px solid var(--color-border)',
     background: selected ? opt.bg : 'var(--color-bg-surface)',
-    color: selected ? opt.color : '#4a5568',
+    color: selected ? opt.color : 'var(--color-text-muted)',
   }),
   btn: (active) => ({
-    background: active ? '#15803d' : 'var(--color-success-bg)',
-    color: active ? '#fff' : '#4a5568',
+    background: active ? 'var(--color-success)' : 'var(--color-success-bg)',
+    color: active ? '#fff' : 'var(--color-text-muted)',
     border: 'none', borderRadius: 8, padding: '13px 0', cursor: active ? 'pointer' : 'not-allowed',
     fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-bold)', width: '100%', marginTop: 8, transition: 'all 0.15s',
   }),
@@ -102,12 +102,12 @@ function DiagnosisPanel({ diagnosis }) {
                 {AXIS_KR[axis] || axis}
               </div>
               <div style={{ flex: 1 }}>
-                {grade ? <span style={s.gradePill(grade)}>{grade}</span> : <span style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>-</span>}
+                {grade ? <span style={s.gradePill(grade)}>{grade}</span> : <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>-</span>}
               </div>
               {compliance && (
                 <div style={{
-                  ...s.badge(COMPLIANCE_COLOR[compliance] || '#4a5568', 'var(--color-bg-surface)'),
-                  fontSize: 'var(--font-size-xs)', padding: '2px 7px', border: `1px solid ${COMPLIANCE_COLOR[compliance] || '#4a5568'}`,
+                  ...s.badge(COMPLIANCE_COLOR[compliance] || 'var(--color-text-muted)', 'var(--color-bg-surface)'),
+                  fontSize: 'var(--font-size-xs)', padding: '2px 7px', border: `1px solid ${COMPLIANCE_COLOR[compliance] || 'var(--color-text-muted)'}`,
                 }}>
                   {COMPLIANCE_KR[compliance] || compliance}
                 </div>
@@ -146,12 +146,12 @@ function DiagnosisPanel({ diagnosis }) {
       {/* 패턴 대비 누락 페이지 */}
       {diagnosis.pattern_deviation?.missing_page_types?.length > 0 && (
         <div style={{ ...s.card, marginTop: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 'var(--font-weight-semibold)', color: '#ea580c', marginBottom: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-grade-d)', marginBottom: 8 }}>
             당선작 대비 누락된 페이지 유형
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {diagnosis.pattern_deviation.missing_page_types.map((t, i) => (
-              <span key={i} style={s.badge('#ea580c', 'var(--color-warning-bg)')}>{t}</span>
+              <span key={i} style={s.badge('var(--color-grade-d)', 'var(--color-warning-bg)')}>{t}</span>
             ))}
           </div>
         </div>
@@ -219,7 +219,7 @@ export default function MyProjectMode() {
           <strong style={{ color: 'var(--color-text-body)' }}>우리 회사가 과거에 제출한 제안서</strong>를 하나씩 등록하는 탭입니다.<br />
           당선·수의계약은 <span style={{ color: 'var(--color-success)' }}>패턴 DB에 자동 반영</span>되어 이후 진단의 기준이 됩니다.<br />
           낙선은 <span style={{ color: 'var(--color-danger)' }}>기존 당선 패턴 대비 원인 분석</span>을 바로 제공합니다.<br />
-          <span style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>
+          <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
             * 경쟁사 제안서 없이 우리 것만 올리면 됩니다. 지침서(RFP)가 있으면 함께 올리면 더 정확합니다.
           </span>
         </div>

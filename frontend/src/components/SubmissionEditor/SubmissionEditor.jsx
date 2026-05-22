@@ -20,7 +20,7 @@ const MASS_TYPE_OPTIONS = [
 ]
 
 const RESULT_OPTIONS = [
-  { value: 'win',        label: '★ 당선',    color: '#0d9488', bg: 'var(--color-warning-bg)' },
+  { value: 'win',        label: '★ 당선',    color: 'var(--color-teal)', bg: 'var(--color-warning-bg)' },
   { value: 'contracted', label: '◆ 수의계약', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
   { value: 'lose',       label: '낙선',       color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]
@@ -75,12 +75,12 @@ const s = {
     display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center',
   },
   cancelBtn: {
-    background: 'transparent', border: '1px solid #4a5568', borderRadius: 8,
+    background: 'transparent', border: '1px solid var(--color-text-muted)', borderRadius: 8,
     color: 'var(--color-text-muted)', padding: '9px 20px', cursor: 'pointer', fontSize: 'var(--font-size-base)',
   },
   saveBtn: (dirty) => ({
-    background: dirty ? '#15803d' : 'var(--color-success-bg)',
-    border: 'none', borderRadius: 8, color: dirty ? '#fff' : '#4a5568',
+    background: dirty ? 'var(--color-success)' : 'var(--color-success-bg)',
+    border: 'none', borderRadius: 8, color: dirty ? '#fff' : 'var(--color-text-muted)',
     padding: '9px 24px', cursor: dirty ? 'pointer' : 'not-allowed',
     fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', transition: 'all 0.15s',
   }),
@@ -102,7 +102,7 @@ const s = {
   group: { marginBottom: 16 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-md)', marginBottom: 16 },
   sectionTitle: { fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', color: 'var(--color-accent)', marginBottom: 16 },
-  original: { fontSize: 'var(--font-size-xs)', color: '#4a5568', marginTop: 3 },
+  original: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 3 },
   tag: {
     display: 'inline-flex', alignItems: 'center', gap: 5,
     background: 'var(--color-bg-input-disabled)', border: '1px solid var(--color-border)', borderRadius: 20,
@@ -188,7 +188,7 @@ function MetaSection({ result, meta, onChange }) {
                 cursor: 'pointer', fontSize: 13, fontWeight: 'var(--font-weight-semibold)',
                 border: result === opt.value ? `2px solid ${opt.color}` : '2px solid var(--color-border)',
                 background: result === opt.value ? opt.bg : 'var(--color-bg-surface)',
-                color: result === opt.value ? opt.color : '#4a5568',
+                color: result === opt.value ? opt.color : 'var(--color-text-muted)',
               }}
             >
               {opt.label}
@@ -381,7 +381,7 @@ function CoverSection({ cover, onChange }) {
         </div>
       ))}
       {editableKeys.length === 0 && (
-        <div style={{ color: '#4a5568', fontSize: 13 }}>표지 데이터가 추출되지 않았습니다.</div>
+        <div style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>표지 데이터가 추출되지 않았습니다.</div>
       )}
     </div>
   )

@@ -49,7 +49,7 @@ function AxisCard({ axis, data, axisLabel }) {
 
 function GapAnalysisCard({ gap }) {
   if (!gap) return null
-  const alignColor = { high: 'var(--color-success)', partial: '#ea580c', low: 'var(--color-danger)' }[gap.alignment] || 'var(--color-text-faint)'
+  const alignColor = { high: 'var(--color-success)', partial: 'var(--color-grade-d)', low: 'var(--color-danger)' }[gap.alignment] || 'var(--color-text-faint)'
   const alignKr = { high: '일치도 높음', partial: '부분 일치', low: '낮은 일치', unknown: '—' }[gap.alignment] || '—'
   const match = gap.top1_matches_winner
   return (
@@ -64,7 +64,7 @@ function GapAnalysisCard({ gap }) {
         <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-bold)', color: alignColor }}>정렬 상태: {alignKr}</span>
         <span style={{
           fontSize: 'var(--font-size-xs)', padding: '2px 8px', borderRadius: 20, fontWeight: 'var(--font-weight-semibold)',
-          background: match ? '#15803d' : 'var(--color-danger-bg)',
+          background: match ? 'var(--color-success)' : 'var(--color-danger-bg)',
           color: match ? 'var(--color-success)' : 'var(--color-danger)',
         }}>
           {match ? '✓ AI 1위 = 실제 당선' : '⚠ AI 1위 ≠ 실제 당선'}
@@ -80,7 +80,7 @@ function GapAnalysisCard({ gap }) {
           paddingTop: 8, borderTop: '1px solid var(--color-bg-surface-alt)', marginTop: 6,
         }}>{gap.notes}</div>
       )}
-      <div style={{ fontSize: 10, color: '#4a5568', fontStyle: 'italic', marginTop: 6 }}>
+      <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: 6 }}>
         * 블라인드 채점 후 실제 결과와 비교한 사후 분석
       </div>
     </div>
@@ -103,7 +103,7 @@ export default function ComparisonResult({ data, facility_type = '' }) {
 
       {key_differentiators?.length > 0 && (
         <div style={{
-          background: '#1a2a1a', border: '1px solid #15803d', borderRadius: 8,
+          background: '#1a2a1a', border: '1px solid var(--color-success)', borderRadius: 8,
           padding: 12, marginBottom: 16, fontSize: 13, color: 'var(--color-success)',
         }}>
           <strong>핵심 차별화 요소:</strong> {key_differentiators.join(' · ')}
@@ -113,7 +113,7 @@ export default function ComparisonResult({ data, facility_type = '' }) {
       {ranking?.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 6 }}>
-            종합 순위 <span style={{ fontSize: 'var(--font-size-xs)', color: '#4a5568', fontWeight: 'var(--font-weight-regular)' }}>(블라인드 분석 기준)</span>
+            종합 순위 <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', fontWeight: 'var(--font-weight-regular)' }}>(블라인드 분석 기준)</span>
           </div>
           {ranking.map((company, i) => (
             <div key={company} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>

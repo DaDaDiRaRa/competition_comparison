@@ -22,7 +22,7 @@ const s = {
   group: { marginBottom: 14 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 },
   btn: {
-    background: '#7c3aed', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    background: 'var(--color-purple)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '12px 28px', cursor: 'pointer', fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)',
     marginTop: 16, width: '100%',
   },
@@ -34,7 +34,7 @@ const s = {
     marginTop: 8,
   },
   noPattern: {
-    background: 'var(--color-danger-bg)', border: '1px solid #b91c1c',
+    background: 'var(--color-danger-bg)', border: '1px solid var(--color-danger)',
     borderRadius: 8, padding: 12, fontSize: 13, color: 'var(--color-danger)', marginTop: 8,
   },
 }
@@ -164,7 +164,7 @@ export default function DiagnoseMode() {
                 flex: 1, padding: '9px 0', borderRadius: 6, fontSize: 13,
                 fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
                 border: refMode === opt.v ? '2px solid #a78bfa' : '2px solid var(--color-border)',
-                background: refMode === opt.v ? '#ede9fe' : 'var(--color-bg-surface)',
+                background: refMode === opt.v ? 'var(--color-purple-bg)' : 'var(--color-bg-surface)',
                 color: refMode === opt.v ? '#5b21b6' : 'var(--color-text-faint)',
               }}
             >
@@ -191,14 +191,14 @@ export default function DiagnoseMode() {
             borderRadius: 6, padding: 8,
           }}>
             {filteredProjects.length === 0 ? (
-              <div style={{ padding: 12, fontSize: 'var(--font-size-sm)', color: '#4a5568', textAlign: 'center' }}>
+              <div style={{ padding: 12, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', textAlign: 'center' }}>
                 해당 유형의 저장된 공모가 없습니다.
               </div>
             ) : filteredProjects.map(p => (
               <div key={p.competition_id} style={{ marginBottom: 6 }}>
                 <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', padding: '6px 8px', fontWeight: 'var(--font-weight-semibold)' }}>
                   {p.competition_name || p.competition_id}
-                  <span style={{ marginLeft: 6, fontSize: 'var(--font-size-xs)', color: '#4a5568', fontWeight: 'var(--font-weight-regular)' }}>
+                  <span style={{ marginLeft: 6, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', fontWeight: 'var(--font-weight-regular)' }}>
                     {p.year}
                   </span>
                 </div>
@@ -219,7 +219,7 @@ export default function DiagnoseMode() {
                     >
                       <div style={{
                         width: 14, height: 14, borderRadius: 3, flexShrink: 0,
-                        border: checked ? '2px solid var(--color-accent)' : '2px solid #4a5568',
+                        border: checked ? '2px solid var(--color-accent)' : '2px solid var(--color-text-muted)',
                         background: checked ? 'var(--color-accent)' : 'transparent',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 9, color: 'var(--color-bg-surface)', fontWeight: 'var(--font-weight-bold)',
@@ -227,7 +227,7 @@ export default function DiagnoseMode() {
                       <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)', flex: 1 }}>{sub.company}</span>
                       <span style={{
                         fontSize: 10, padding: '1px 6px', borderRadius: 10,
-                        color: sub.result === 'win' || sub.result === 'contracted' ? '#0d9488' : 'var(--color-text-faint)',
+                        color: sub.result === 'win' || sub.result === 'contracted' ? 'var(--color-teal)' : 'var(--color-text-faint)',
                         background: 'var(--color-bg-surface)',
                       }}>
                         {sub.result === 'win' ? '당선' : sub.result === 'contracted' ? '수의계약' : '낙선'}
@@ -245,7 +245,7 @@ export default function DiagnoseMode() {
         <div style={s.group}>
           <label style={s.label}>
             지침서 PDF
-            <span style={{ fontSize: 'var(--font-size-xs)', color: '#4a5568', marginLeft: 4 }}>(선택 사항)</span>
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: 4 }}>(선택 사항)</span>
           </label>
           <DropZone label="지침서 PDF (선택)" onFiles={setBriefFile} />
         </div>
@@ -277,7 +277,7 @@ export default function DiagnoseMode() {
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              display: 'inline-block', background: '#7c3aed', color: 'var(--color-text-on-accent)',
+              display: 'inline-block', background: 'var(--color-purple)', color: 'var(--color-text-on-accent)',
               borderRadius: 6, padding: '8px 20px', fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)',
               textDecoration: 'none',
             }}

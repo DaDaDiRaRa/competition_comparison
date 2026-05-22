@@ -1,9 +1,9 @@
 import { useMeta } from '../../hooks/useMeta'
 
 const COLORS = [
-  '#64748b','var(--color-success)','#ea580c','var(--color-danger)','#a78bfa',
+  '#64748b','var(--color-success)','var(--color-grade-d)','var(--color-danger)','#a78bfa',
   '#22d3ee','#fef08a','var(--color-danger-bg)','#bbf7d0','var(--color-accent-soft)',
-  '#ede9fe','#fed7aa','#fbcfe8','#bbf7d0','var(--color-text-body)',
+  'var(--color-purple-bg)','#fed7aa','#fbcfe8','#bbf7d0','var(--color-text-body)',
   'var(--color-info)','#ec4899',
 ]
 

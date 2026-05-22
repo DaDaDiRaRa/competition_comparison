@@ -31,7 +31,7 @@ export default function ApiKeyGate({ children }) {
         borderBottom: '1px solid #f59e0b',
         padding: '10px 20px',
         fontSize: 13,
-        color: '#92400e',
+        color: 'var(--color-amber-dark)',
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--gap-sm)',

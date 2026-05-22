@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 
 const s = {
   zone: {
-    borderWidth: 2, borderStyle: 'dashed', borderColor: '#4a5568',
+    borderWidth: 2, borderStyle: 'dashed', borderColor: 'var(--color-text-muted)',
     borderRadius: 8, padding: 24,
     textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
     background: 'var(--color-bg-surface)',

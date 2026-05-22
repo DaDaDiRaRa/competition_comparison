@@ -29,7 +29,7 @@ export const theme = {
     A: 'var(--color-success)',
     B: 'var(--color-info)',
     C: 'var(--color-warning)',
-    D: '#ea580c',
+    D: 'var(--color-grade-d)',
     E: 'var(--color-danger)',
   },
   gradeBg: {
@@ -41,5 +41,5 @@ export const theme = {
   },
 
   // 골드 (특별 강조)
-  gold: '#0d9488',
+  gold: 'var(--color-teal)',
 }

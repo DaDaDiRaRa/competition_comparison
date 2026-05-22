@@ -1,12 +1,12 @@
 export const COMPLIANCE_COLOR = {
-  yes: 'var(--color-success)', partial: '#ea580c', no: 'var(--color-danger)', unclear: 'var(--color-text-faint)',
+  yes: 'var(--color-success)', partial: 'var(--color-grade-d)', no: 'var(--color-danger)', unclear: 'var(--color-text-faint)',
 }
 
 export const GRADE_COLOR = {
   A: 'var(--color-success)',
   B: 'var(--color-info)',
   C: 'var(--color-warning)',
-  D: '#ea580c',
+  D: 'var(--color-grade-d)',
   E: 'var(--color-danger)',
 }
 

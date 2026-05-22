@@ -6,7 +6,7 @@ import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_OPTIONS = [
-  { value: 'win', label: '당선', color: '#0d9488', bg: 'var(--color-warning-bg)' },
+  { value: 'win', label: '당선', color: 'var(--color-teal)', bg: 'var(--color-warning-bg)' },
   { value: 'contracted', label: '수의계약', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
   { value: 'lose', label: '낙선', color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]
@@ -19,7 +19,7 @@ const s = {
     background: 'none', border: '1px solid var(--color-border)', borderRadius: 6,
     color: 'var(--color-text-muted)', padding: '4px 12px', cursor: 'pointer', fontSize: 'var(--font-size-sm)',
   },
-  empty: { color: '#4a5568', fontSize: 13, textAlign: 'center', padding: '20px 0' },
+  empty: { color: 'var(--color-text-muted)', fontSize: 13, textAlign: 'center', padding: '20px 0' },
   card: {
     background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 8,
     padding: '14px 16px', marginBottom: 10,
@@ -33,7 +33,7 @@ const s = {
   meta: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)' },
   actions: { display: 'flex', gap: 'var(--gap-sm)', marginTop: 10, flexWrap: 'wrap' },
   rerunBtn: {
-    background: '#15803d', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    background: 'var(--color-success)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   addBtn: {
@@ -41,13 +41,13 @@ const s = {
     padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   reportBtn: {
-    background: '#6d28d9', color: '#ede9fe', border: 'none', borderRadius: 6,
+    background: 'var(--color-purple)', color: 'var(--color-purple-bg)', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
     textDecoration: 'none', display: 'inline-block',
   },
   rerenderBtn: {
     background: 'transparent', color: 'var(--color-text-muted)',
-    border: '1px solid #4a5568', borderRadius: 6,
+    border: '1px solid var(--color-text-muted)', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   subReportBtn: {
@@ -56,13 +56,13 @@ const s = {
     textDecoration: 'none', display: 'inline-block',
   },
   editBtn: {
-    background: 'var(--color-border)', color: 'var(--color-text-muted)', border: '1px solid #4a5568', borderRadius: 6,
+    background: 'var(--color-border)', color: 'var(--color-text-muted)', border: '1px solid var(--color-text-muted)', borderRadius: 6,
     padding: '3px 9px', cursor: 'pointer', fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-semibold)',
     textDecoration: 'none', display: 'inline-block',
   },
   staleBanner: {
-    background: 'var(--color-warning-bg)', border: '1px solid #92400e', borderRadius: 6,
-    padding: '7px 12px', fontSize: 'var(--font-size-sm)', color: '#ea580c', marginTop: 8,
+    background: 'var(--color-warning-bg)', border: '1px solid var(--color-amber-dark)', borderRadius: 6,
+    padding: '7px 12px', fontSize: 'var(--font-size-sm)', color: 'var(--color-grade-d)', marginTop: 8,
     display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)',
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
@@ -85,12 +85,12 @@ const s = {
     fontWeight: 'var(--font-weight-semibold)', textAlign: 'center',
     border: selected ? `2px solid ${opt.color}` : '2px solid var(--color-border)',
     background: selected ? opt.bg : 'var(--color-bg-surface)',
-    color: selected ? opt.color : '#4a5568',
+    color: selected ? opt.color : 'var(--color-text-muted)',
   }),
   submitBtn: (active) => ({
     width: '100%', marginTop: 10, padding: '9px 0', borderRadius: 6,
     border: 'none', cursor: active ? 'pointer' : 'not-allowed', fontSize: 13,
-    fontWeight: 'var(--font-weight-bold)', background: active ? 'var(--color-accent)' : 'var(--color-bg-surface-alt)', color: active ? '#fff' : '#4a5568',
+    fontWeight: 'var(--font-weight-bold)', background: active ? 'var(--color-accent)' : 'var(--color-bg-surface-alt)', color: active ? '#fff' : 'var(--color-text-muted)',
   }),
   cancelBtn: {
     background: 'none', border: 'none', color: 'var(--color-text-faint)', cursor: 'pointer',
@@ -234,7 +234,7 @@ function ProjectCard({ project, onRerunDone }) {
   const subs = project.submissions || []
   const winCount = subs.filter(s => s.result === 'win' || s.result === 'contracted').length
   const RESULT_KR = { win: '★ 당선', contracted: '◆ 수의계약', lose: '낙선' }
-  const RESULT_COLOR = { win: '#0d9488', contracted: 'var(--color-success)', lose: 'var(--color-text-faint)' }
+  const RESULT_COLOR = { win: 'var(--color-teal)', contracted: 'var(--color-success)', lose: 'var(--color-text-faint)' }
 
   return (
     <div style={s.card}>

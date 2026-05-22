@@ -33,7 +33,7 @@ const s = {
     padding: '8px 16px', cursor: 'pointer', fontSize: 13, marginRight: 8,
   },
   btnDanger: {
-    background: '#b91c1c', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    background: 'var(--color-danger)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '8px 16px', cursor: 'pointer', fontSize: 13,
   },
   btnPrimary: {
@@ -44,7 +44,7 @@ const s = {
   hint: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)', marginTop: 4 },
   status: (active) => ({
     display: 'inline-block', fontSize: 'var(--font-size-sm)', padding: '2px 8px', borderRadius: 4,
-    background: active ? 'var(--color-success-bg)' : 'var(--color-danger-bg)', color: active ? '#15803d' : '#b91c1c',
+    background: active ? 'var(--color-success-bg)' : 'var(--color-danger-bg)', color: active ? 'var(--color-success)' : 'var(--color-danger)',
     marginLeft: 8,
   }),
 }
@@ -127,7 +127,7 @@ export default function SettingsPanel() {
         <div style={{
           background: 'var(--color-warning-bg)', border: '1px solid #f59e0b', borderRadius: 8,
           padding: '14px 16px', marginBottom: 20,
-          fontSize: 13, color: '#92400e', lineHeight: 1.6,
+          fontSize: 13, color: 'var(--color-amber-dark)', lineHeight: 1.6,
         }}>
           <strong>⚠️ API 키를 먼저 입력하세요</strong><br />
           아래 <strong>Anthropic API Key</strong> 항목에 본인의 키를 입력하고 <strong>키 적용</strong> 버튼을 누르면 분석 기능을 사용할 수 있습니다.

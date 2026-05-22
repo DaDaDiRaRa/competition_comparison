@@ -5,7 +5,7 @@ import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_COLOR = {
-  win: { color: '#0d9488', bg: 'var(--color-warning-bg)', label: '당선' },
+  win: { color: 'var(--color-teal)', bg: 'var(--color-warning-bg)', label: '당선' },
   contracted: { color: 'var(--color-success)', bg: 'var(--color-success-bg)', label: '수의계약' },
   lose: { color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)', label: '낙선' },
 }
@@ -35,7 +35,7 @@ const s = {
     background: 'var(--color-accent-hover)', color: 'var(--color-bg-surface)', fontWeight: 'var(--font-weight-semibold)',
   },
   chevron: (open) => ({
-    color: '#4a5568', fontSize: 'var(--font-size-sm)', transform: open ? 'rotate(180deg)' : 'none',
+    color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', transform: open ? 'rotate(180deg)' : 'none',
     transition: 'transform 0.15s',
   }),
   subList: { borderTop: '1px solid var(--color-border)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 },
@@ -48,7 +48,7 @@ const s = {
   }),
   checkbox: (checked) => ({
     width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-    border: checked ? '2px solid var(--color-accent)' : '2px solid #4a5568',
+    border: checked ? '2px solid var(--color-accent)' : '2px solid var(--color-text-muted)',
     background: checked ? 'var(--color-accent)' : 'transparent',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: 10, color: 'var(--color-bg-surface)', fontWeight: 'var(--font-weight-bold)',
@@ -59,7 +59,7 @@ const s = {
     color: RESULT_COLOR[result]?.color || 'var(--color-text-faint)',
     background: RESULT_COLOR[result]?.bg || 'var(--color-bg-surface)',
   }),
-  projectMeta: { fontSize: 'var(--font-size-xs)', color: '#4a5568' },
+  projectMeta: { fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' },
   selBar: {
     display: 'flex', alignItems: 'center', gap: 'var(--gap-md)',
     padding: '14px 20px', background: 'var(--color-bg-surface)',
@@ -76,13 +76,13 @@ const s = {
     cursor: 'pointer', fontSize: 'var(--font-size-xs)', padding: 0,
   },
   runBtn: (active) => ({
-    background: active ? '#15803d' : 'var(--color-success-bg)',
-    color: active ? '#fff' : '#4a5568',
+    background: active ? 'var(--color-success)' : 'var(--color-success-bg)',
+    color: active ? '#fff' : 'var(--color-text-muted)',
     border: 'none', borderRadius: 8, padding: '10px 24px',
     cursor: active ? 'pointer' : 'not-allowed',
     fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', transition: 'all 0.15s', whiteSpace: 'nowrap',
   }),
-  empty: { color: '#4a5568', fontSize: 13, textAlign: 'center', padding: '20px 0' },
+  empty: { color: 'var(--color-text-muted)', fontSize: 13, textAlign: 'center', padding: '20px 0' },
 }
 
 function SelectionBar({ selected, onRemove, onClear, onRun, running }) {
@@ -91,7 +91,7 @@ function SelectionBar({ selected, onRemove, onClear, onRun, running }) {
     <div style={s.selBar}>
       <div style={s.selCount}>
         선택된 제안서 <span style={{ color: selected.length >= 2 ? 'var(--color-success)' : 'var(--color-danger)' }}>{selected.length}</span>개
-        {selected.length < 2 && <span style={{ fontSize: 'var(--font-size-sm)', color: '#4a5568', fontWeight: 'var(--font-weight-regular)', marginLeft: 6 }}>(최소 2개 필요)</span>}
+        {selected.length < 2 && <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', fontWeight: 'var(--font-weight-regular)', marginLeft: 6 }}>(최소 2개 필요)</span>}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 3 }}>
         {selected.map(item => (
@@ -129,7 +129,7 @@ function ProjectCard({ project, selected, onToggle }) {
       {open && (
         <div style={s.subList}>
           {subs.length === 0
-            ? <div style={{ fontSize: 'var(--font-size-sm)', color: '#4a5568' }}>제안서 없음</div>
+            ? <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>제안서 없음</div>
             : subs.map(sub => {
                 const key = `${project.competition_id}__${sub.company}`
                 const checked = selected.some(s => s.competition_id === project.competition_id && s.company === sub.company)
@@ -256,7 +256,7 @@ export default function CrossCompareMode() {
         <div style={s.panel}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', flex: 1 }}>
-              저장된 교차비교 리포트 <span style={{ color: '#4a5568', fontWeight: 'var(--font-weight-regular)', fontSize: 'var(--font-size-sm)' }}>({pastReports.length})</span>
+              저장된 교차비교 리포트 <span style={{ color: 'var(--color-text-muted)', fontWeight: 'var(--font-weight-regular)', fontSize: 'var(--font-size-sm)' }}>({pastReports.length})</span>
             </div>
             <button
               onClick={loadPastReports}
@@ -286,7 +286,7 @@ export default function CrossCompareMode() {
                   <div style={{ fontSize: 13, color: 'var(--color-text-body)', fontWeight: 'var(--font-weight-medium)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {rep.labels.join('  vs  ')}
                   </div>
-                  <div style={{ fontSize: 'var(--font-size-xs)', color: '#4a5568', marginTop: 3 }}>
+                  <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginTop: 3 }}>
                     {rep.created_at}
                   </div>
                 </div>
@@ -307,7 +307,7 @@ export default function CrossCompareMode() {
                 target="_blank"
                 rel="noreferrer"
                 style={{
-                  background: '#6d28d9', color: '#ede9fe', borderRadius: 6,
+                  background: 'var(--color-purple)', color: 'var(--color-purple-bg)', borderRadius: 6,
                   padding: '6px 14px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
                   textDecoration: 'none',
                 }}

@@ -40,8 +40,8 @@ function QuantCompare({ subQuant = {}, winQuant = {}, loseQuant = {} }) {
       </div>
       <div style={{ display: 'flex', gap: 'var(--gap-md)', marginBottom: 10 }}>
         <LegendDot color="var(--color-accent)" label="당선 평균" />
-        {hasLose && <LegendDot color="#92400e" label="낙선 평균" />}
-        <LegendDot color="#7c3aed" label="내 제출물" />
+        {hasLose && <LegendDot color="var(--color-amber-dark)" label="낙선 평균" />}
+        <LegendDot color="var(--color-purple)" label="내 제출물" />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {fields.map(k => {
@@ -64,12 +64,12 @@ function QuantCompare({ subQuant = {}, winQuant = {}, loseQuant = {} }) {
             <div key={k}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
                 <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-                  {meta.label} <span style={{ color: '#4a5568' }}>({meta.unit})</span>
+                  {meta.label} <span style={{ color: 'var(--color-text-muted)' }}>({meta.unit})</span>
                 </span>
               </div>
               <BarRow pct={wPct} color="var(--color-accent)" value={fmt(wVal)} unit={meta.unit} />
               {hasLose && lVal != null && (
-                <BarRow pct={lPct} color="#92400e" value={fmt(lVal)} unit={meta.unit} />
+                <BarRow pct={lPct} color="var(--color-amber-dark)" value={fmt(lVal)} unit={meta.unit} />
               )}
               {sVal != null && (
                 <BarRow pct={sPct} color={sColor} value={fmt(sVal)} unit={meta.unit} isMine />
@@ -115,7 +115,7 @@ function BarRow({ pct, color, value, unit, isMine }) {
 
 const REQ_STATUS_COLOR = {
   yes: 'var(--color-success)',
-  partial: '#ea580c',
+  partial: 'var(--color-grade-d)',
   no: 'var(--color-danger)',
   unclear: 'var(--color-text-faint)',
 }
@@ -220,7 +220,7 @@ function AxisDiagCard({ axis, data, axisLabel }) {
           </div>
         )}
         {data.recommendations?.length > 0 && (
-          <div style={{ fontSize: 'var(--font-size-sm)', color: '#ea580c', marginBottom: 4 }}>
+          <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-grade-d)', marginBottom: 4 }}>
             → 보강: {data.recommendations.join(' / ')}
           </div>
         )}
@@ -238,16 +238,16 @@ function MissingPageTypes({ gaps }) {
   if (!gaps?.length) return null
   return (
     <div style={{
-      background: 'var(--color-warning-bg)', border: '1px solid #92400e', borderRadius: 8,
+      background: 'var(--color-warning-bg)', border: '1px solid var(--color-amber-dark)', borderRadius: 8,
       padding: 12, marginBottom: 12,
     }}>
-      <div style={{ fontSize: 13, color: '#ea580c', marginBottom: 6 }}>
+      <div style={{ fontSize: 13, color: 'var(--color-grade-d)', marginBottom: 6 }}>
         ⚠ 누락 페이지 유형 (당선작 대비)
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {gaps.map(t => (
           <span key={t} style={{
-            background: '#92400e', color: 'var(--color-warning-bg)', fontSize: 'var(--font-size-sm)',
+            background: 'var(--color-amber-dark)', color: 'var(--color-warning-bg)', fontSize: 'var(--font-size-sm)',
             padding: '2px 10px', borderRadius: 20,
           }}>{t}</span>
         ))}
@@ -335,10 +335,10 @@ export default function DiagnosisResult({ data, pattern }) {
           )}
           {data.pattern_deviation.quantitative_gaps && Object.keys(data.pattern_deviation.quantitative_gaps).length > 0 && (
             <div style={{
-              background: 'var(--color-warning-bg)', border: '1px solid #92400e', borderRadius: 8,
+              background: 'var(--color-warning-bg)', border: '1px solid var(--color-amber-dark)', borderRadius: 8,
               padding: 12, marginBottom: 12,
             }}>
-              <div style={{ fontSize: 13, color: '#ea580c', marginBottom: 8 }}>
+              <div style={{ fontSize: 13, color: 'var(--color-grade-d)', marginBottom: 8 }}>
                 ⚠ 정량 지표 편차 (당선·낙선 패턴 대비)
               </div>
               {Object.entries(data.pattern_deviation.quantitative_gaps).map(([k, v]) => (
