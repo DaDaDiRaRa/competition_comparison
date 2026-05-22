@@ -3,48 +3,48 @@ import { getSettings, updateSettings, setApiKey, clearApiKey, setDbPath } from '
 import PatternViewer from './PatternViewer'
 
 const s = {
-  panel: { background: '#ffffff', borderRadius: 12, padding: 24 },
-  title: { fontSize: 18, fontWeight: 600, marginBottom: 20, color: '#1f2937' },
+  panel: { background: 'var(--color-bg-surface)', borderRadius: 12, padding: 24 },
+  title: { fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 20, color: 'var(--color-text-body)' },
   group: { marginBottom: 16 },
-  label: { fontSize: 13, color: '#4b5563', marginBottom: 6, display: 'block' },
+  label: { fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 6, display: 'block' },
   input: {
-    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
-    borderRadius: 6, padding: '8px 12px', color: '#1f2937', fontSize: 14,
+    width: '100%', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
+    borderRadius: 6, padding: '8px 12px', color: 'var(--color-text-body)', fontSize: 'var(--font-size-base)',
     boxSizing: 'border-box',
   },
   inputReadonly: {
-    width: '100%', background: '#f3f4f6', border: '1px solid #e5e7eb',
-    borderRadius: 6, padding: '8px 12px', color: '#6b7280', fontSize: 13,
+    width: '100%', background: 'var(--color-bg-input-disabled)', border: '1px solid var(--color-border)',
+    borderRadius: 6, padding: '8px 12px', color: 'var(--color-text-faint)', fontSize: 13,
     boxSizing: 'border-box', fontFamily: 'monospace',
   },
   inputWrap: { position: 'relative' },
   inputWithToggle: {
-    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
-    borderRadius: 6, padding: '8px 44px 8px 12px', color: '#1f2937', fontSize: 14,
+    width: '100%', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
+    borderRadius: 6, padding: '8px 44px 8px 12px', color: 'var(--color-text-body)', fontSize: 'var(--font-size-base)',
     fontFamily: 'monospace', boxSizing: 'border-box',
   },
   toggle: {
     position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-    background: 'transparent', border: 'none', color: '#334155', cursor: 'pointer',
+    background: 'transparent', border: 'none', color: 'var(--color-accent)', cursor: 'pointer',
     fontSize: 16, padding: 6,
   },
   btn: {
-    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
+    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '8px 16px', cursor: 'pointer', fontSize: 13, marginRight: 8,
   },
   btnDanger: {
-    background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 6,
+    background: '#b91c1c', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '8px 16px', cursor: 'pointer', fontSize: 13,
   },
   btnPrimary: {
-    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
-    padding: '10px 20px', cursor: 'pointer', fontSize: 14, marginTop: 8,
+    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    padding: '10px 20px', cursor: 'pointer', fontSize: 'var(--font-size-base)', marginTop: 8,
   },
-  success: { color: '#16a34a', fontSize: 13, marginTop: 8 },
-  hint: { fontSize: 12, color: '#6b7280', marginTop: 4 },
+  success: { color: 'var(--color-success)', fontSize: 13, marginTop: 8 },
+  hint: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)', marginTop: 4 },
   status: (active) => ({
-    display: 'inline-block', fontSize: 12, padding: '2px 8px', borderRadius: 4,
-    background: active ? '#dcfce7' : '#fee2e2', color: active ? '#15803d' : '#b91c1c',
+    display: 'inline-block', fontSize: 'var(--font-size-sm)', padding: '2px 8px', borderRadius: 4,
+    background: active ? 'var(--color-success-bg)' : 'var(--color-danger-bg)', color: active ? '#15803d' : '#b91c1c',
     marginLeft: 8,
   }),
 }
@@ -116,7 +116,7 @@ export default function SettingsPanel() {
     refresh()
   }
 
-  if (loading) return <div style={{ color: '#4b5563' }}>로딩 중...</div>
+  if (loading) return <div style={{ color: 'var(--color-text-muted)' }}>로딩 중...</div>
 
   return (
     <div style={s.panel}>
@@ -125,7 +125,7 @@ export default function SettingsPanel() {
       {/* API 키 미설정 시 최상단 강조 안내 */}
       {!hasKey && (
         <div style={{
-          background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8,
+          background: 'var(--color-warning-bg)', border: '1px solid #f59e0b', borderRadius: 8,
           padding: '14px 16px', marginBottom: 20,
           fontSize: 13, color: '#92400e', lineHeight: 1.6,
         }}>

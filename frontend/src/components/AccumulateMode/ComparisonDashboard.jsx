@@ -23,9 +23,9 @@ const AXIS_LABEL = {
   quantitative: { label: '정량 데이터', icon: '≡' },
 }
 
-const WIN_COLOR = '#dc2626'
+const WIN_COLOR = 'var(--color-danger)'
 const PALETTE = [
-  '#dc2626', '#475569', '#0891b2', '#ca8a04', '#334155',
+  'var(--color-danger)', 'var(--color-accent-hover)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-accent)',
   '#7c3aed', '#db2777', '#0284c7',
 ]
 
@@ -37,8 +37,8 @@ function useCompanyColors(companies) {
 
 function CompanyFilterBar({ companies, colors, selected, onToggle, onExpandAll, allExpanded }) {
   return (
-    <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
-      <span style={{ fontSize: 11, color: '#666', marginRight: 4 }}>FILTER</span>
+    <div style={{ display: 'flex', gap: 'var(--gap-sm)', marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+      <span style={{ fontSize: 'var(--font-size-xs)', color: '#666', marginRight: 4 }}>FILTER</span>
       {companies.map(c => {
         const active = selected.length === 0 || selected.includes(c)
         const color = colors[c]
@@ -47,8 +47,8 @@ function CompanyFilterBar({ companies, colors, selected, onToggle, onExpandAll, 
             background: active ? `${color}20` : 'transparent',
             border: `1px solid ${active ? color : 'rgba(255,255,255,0.1)'}`,
             color: active ? color : '#555',
-            padding: '4px 14px', borderRadius: 2, fontSize: 12,
-            fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+            padding: '4px 14px', borderRadius: 2, fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', transition: 'all 0.15s',
             fontFamily: 'inherit',
           }}>
             {c}
@@ -58,7 +58,7 @@ function CompanyFilterBar({ companies, colors, selected, onToggle, onExpandAll, 
       <button onClick={onExpandAll} style={{
         background: 'transparent', border: '1px solid rgba(255,255,255,0.1)',
         color: '#666', padding: '4px 14px', borderRadius: 2,
-        fontSize: 12, cursor: 'pointer', marginLeft: 'auto', fontFamily: 'inherit',
+        fontSize: 'var(--font-size-sm)', cursor: 'pointer', marginLeft: 'auto', fontFamily: 'inherit',
       }}>
         {allExpanded ? '모두 접기' : '모두 펼치기'}
       </button>
@@ -90,7 +90,7 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
               background: 'rgba(0,0,0,0.3)', borderRadius: 2, padding: 16,
               borderTop: `3px solid ${color}`, minWidth: 0,
             }}>
-              <div style={{ fontSize: 11, color, fontWeight: 700, marginBottom: 6, letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 'var(--font-size-xs)', color, fontWeight: 'var(--font-weight-bold)', marginBottom: 6, letterSpacing: '0.05em' }}>
                 {company}
               </div>
               {toGrade(d) && (
@@ -98,35 +98,35 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
                   <span style={{
                     display: 'inline-block', padding: '3px 12px', borderRadius: 14,
                     background: GRADE_BG[toGrade(d)], color: GRADE_COLOR[toGrade(d)],
-                    fontWeight: 700, fontSize: 14, letterSpacing: 1,
+                    fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-size-base)', letterSpacing: 1,
                   }}>
                     {toGrade(d)}
                   </span>
                 </div>
               )}
               {d.notes && (
-                <div style={{ fontSize: 12, color: '#aaa', lineHeight: 1.7, marginBottom: 10 }}>
+                <div style={{ fontSize: 'var(--font-size-sm)', color: '#aaa', lineHeight: 1.7, marginBottom: 10 }}>
                   {d.notes}
                 </div>
               )}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--gap-xs)', marginBottom: 10 }}>
                 {keywords.slice(0, 6).map((kw, i) => (
                   <span key={i} style={{
                     fontSize: 10, padding: '2px 8px',
                     background: `${color}20`, color,
-                    borderRadius: 2, fontWeight: 500,
+                    borderRadius: 2, fontWeight: 'var(--font-weight-medium)',
                   }}>{kw}</span>
                 ))}
               </div>
               {d.strengths?.length > 0 && (
-                <div style={{ fontSize: 11, marginBottom: 4 }}>
-                  <span style={{ color: '#16a34a', fontWeight: 600 }}>▲ 강점 </span>
+                <div style={{ fontSize: 'var(--font-size-xs)', marginBottom: 4 }}>
+                  <span style={{ color: 'var(--color-success)', fontWeight: 'var(--font-weight-semibold)' }}>▲ 강점 </span>
                   <span style={{ color: '#999' }}>{d.strengths.join(' · ')}</span>
                 </div>
               )}
               {d.weaknesses?.length > 0 && (
-                <div style={{ fontSize: 11 }}>
-                  <span style={{ color: '#ea580c', fontWeight: 600 }}>▼ 약점 </span>
+                <div style={{ fontSize: 'var(--font-size-xs)' }}>
+                  <span style={{ color: '#ea580c', fontWeight: 'var(--font-weight-semibold)' }}>▼ 약점 </span>
                   <span style={{ color: '#999' }}>{d.weaknesses.join(' · ')}</span>
                 </div>
               )}
@@ -136,8 +136,8 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
                     fontSize: 10, padding: '2px 8px', borderRadius: 2,
                     background: d.brief_compliance === 'yes' ? '#15803d'
                       : d.brief_compliance === 'partial' ? '#92400e'
-                      : d.brief_compliance === 'no' ? '#b91c1c' : '#e5e7eb',
-                    color: '#fff', fontWeight: 600,
+                      : d.brief_compliance === 'no' ? '#b91c1c' : 'var(--color-border)',
+                    color: 'var(--color-text-on-accent)', fontWeight: 'var(--font-weight-semibold)',
                   }}>지침 {d.brief_compliance}</span>
                 </div>
               )}
@@ -158,14 +158,14 @@ function CategoryRow({ axisId, axisData, companies, colors, selected, expanded, 
       borderRadius: 2, marginBottom: 12, overflow: 'hidden', transition: 'border-color 0.2s',
     }}>
       <button onClick={() => onToggle(axisId)} style={{
-        width: '100%', background: 'none', border: 'none', color: '#e5e7eb',
+        width: '100%', background: 'none', border: 'none', color: 'var(--color-border)',
         padding: '16px 20px', display: 'flex', alignItems: 'center',
-        gap: 12, cursor: 'pointer', fontSize: 15, fontFamily: 'inherit', textAlign: 'left',
+        gap: 'var(--gap-md)', cursor: 'pointer', fontSize: 'var(--font-size-md)', fontFamily: 'inherit', textAlign: 'left',
       }}>
-        <span style={{ fontSize: 18, opacity: 0.6 }}>{icon}</span>
-        <span style={{ fontWeight: 600, letterSpacing: '0.02em' }}>{label}</span>
+        <span style={{ fontSize: 'var(--font-size-lg)', opacity: 0.6 }}>{icon}</span>
+        <span style={{ fontWeight: 'var(--font-weight-semibold)', letterSpacing: '0.02em' }}>{label}</span>
         <span style={{
-          marginLeft: 'auto', opacity: 0.4, fontSize: 12,
+          marginLeft: 'auto', opacity: 0.4, fontSize: 'var(--font-size-sm)',
           transform: expanded ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s',
         }}>▼</span>
       </button>
@@ -187,7 +187,7 @@ function RankingBlock({ ranking, companies, colors, submissionMeta }) {
       background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
       borderRadius: 2, padding: 20, marginBottom: 20,
     }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#aaa', letterSpacing: '0.1em', marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 'var(--font-weight-bold)', color: '#aaa', letterSpacing: '0.1em', marginBottom: 12 }}>
         종합 순위
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -199,10 +199,10 @@ function RankingBlock({ ranking, companies, colors, submissionMeta }) {
               background: `${color}15`, border: `1px solid ${color}`,
               borderRadius: 4, padding: '10px 16px', minWidth: 140,
             }}>
-              <div style={{ fontSize: 20, marginBottom: 4 }}>{medals[i] || `${i + 1}.`}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color }}>{company}</div>
+              <div style={{ fontSize: 'var(--font-size-xl)', marginBottom: 4 }}>{medals[i] || `${i + 1}.`}</div>
+              <div style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', color }}>{company}</div>
               {meta && (
-                <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
+                <div style={{ fontSize: 'var(--font-size-xs)', color: '#666', marginTop: 2 }}>
                   {meta.result === 'win' ? '✓ 당선' : '낙선'} · {meta.total_pages}p
                 </div>
               )}
@@ -247,14 +247,14 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
   return (
     <div style={{
       fontFamily: "'Pretendard', 'Noto Sans KR', -apple-system, sans-serif",
-      background: '#e5e7eb', color: '#e5e7eb',
+      background: 'var(--color-border)', color: 'var(--color-border)',
       borderRadius: 12, padding: '28px 24px', marginTop: 24,
     }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 11, color: '#666', letterSpacing: '0.15em', marginBottom: 4 }}>
+        <div style={{ fontSize: 'var(--font-size-xs)', color: '#666', letterSpacing: '0.15em', marginBottom: 4 }}>
           COMPETITION ANALYSIS · 비교 분석 대시보드
         </div>
-        <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: '#fff' }}>
+        <div style={{ fontSize: 'var(--font-size-xl)', fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--color-text-on-accent)' }}>
           경쟁사 제안서 비교 분석
         </div>
         <div style={{ fontSize: 13, color: '#666', marginTop: 6 }}>
@@ -271,9 +271,9 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
         <div style={{
           background: 'rgba(230,57,70,0.08)', border: '1px solid rgba(230,57,70,0.2)',
           borderRadius: 2, padding: '12px 16px', marginBottom: 20,
-          fontSize: 13, color: '#ca8a04',
+          fontSize: 13, color: 'var(--color-warning)',
         }}>
-          <strong style={{ color: '#dc2626' }}>핵심 차별화 요소: </strong>
+          <strong style={{ color: 'var(--color-danger)' }}>핵심 차별화 요소: </strong>
           {comparison.key_differentiators.join(' · ')}
         </div>
       )}
@@ -303,7 +303,7 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
       <div style={{
         marginTop: 24, paddingTop: 12,
         borderTop: '1px solid rgba(255,255,255,0.06)',
-        fontSize: 11, color: '#444',
+        fontSize: 'var(--font-size-xs)', color: '#444',
       }}>
         Claude Vision AI 분석 · 파이프라인 자동 생성
       </div>

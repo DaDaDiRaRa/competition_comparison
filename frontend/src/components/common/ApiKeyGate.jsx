@@ -27,14 +27,14 @@ export default function ApiKeyGate({ children }) {
   return (
     <>
       <div style={{
-        background: '#fef3c7',
+        background: 'var(--color-warning-bg)',
         borderBottom: '1px solid #f59e0b',
         padding: '10px 20px',
         fontSize: 13,
         color: '#92400e',
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 'var(--gap-sm)',
       }}>
         <span>⚠️</span>
         <span>

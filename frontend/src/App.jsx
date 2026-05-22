@@ -16,50 +16,50 @@ const TABS = [
 ]
 
 const s = {
-  app: { minHeight: '100vh', background: '#fafafa' },
+  app: { minHeight: '100vh', background: 'var(--color-bg-page)' },
   header: {
-    background: '#ffffff', borderBottom: '1px solid #e5e7eb',
+    background: 'var(--color-bg-surface)', borderBottom: '1px solid var(--color-border)',
     padding: '0 24px', display: 'flex', alignItems: 'center', gap: 24,
   },
-  logo: { fontSize: 15, fontWeight: 700, color: '#334155', padding: '16px 0', flexShrink: 0 },
-  nav: { display: 'flex', gap: 4, flex: 1 },
+  logo: { fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-bold)', color: 'var(--color-accent)', padding: '16px 0', flexShrink: 0 },
+  nav: { display: 'flex', gap: 'var(--gap-xs)', flex: 1 },
   tab: (active) => ({
-    padding: '16px 18px', cursor: 'pointer', fontSize: 14, fontWeight: active ? 600 : 400,
-    color: active ? '#334155' : '#6b7280',
+    padding: '16px 18px', cursor: 'pointer', fontSize: 'var(--font-size-base)', fontWeight: active ? 600 : 400,
+    color: active ? 'var(--color-accent)' : 'var(--color-text-faint)',
     borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-    borderBottom: active ? '2px solid #334155' : '2px solid transparent',
+    borderBottom: active ? '2px solid var(--color-accent)' : '2px solid transparent',
     background: 'none', transition: 'all 0.15s',
     display: 'flex', alignItems: 'center', gap: 6,
   }),
   helpBtn: {
     marginLeft: 'auto', padding: '8px 14px', cursor: 'pointer', fontSize: 13,
-    fontWeight: 500, color: '#6b7280', border: '1px solid #e5e7eb',
-    borderRadius: 6, background: '#f9fafb', flexShrink: 0,
+    fontWeight: 'var(--font-weight-medium)', color: 'var(--color-text-faint)', border: '1px solid var(--color-border)',
+    borderRadius: 6, background: 'var(--color-bg-surface-alt)', flexShrink: 0,
     display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.15s',
   },
   content: { maxWidth: 1100, margin: '0 auto', padding: 24 },
   badge: {
-    fontSize: 10, background: '#334155', color: '#fff',
+    fontSize: 10, background: 'var(--color-accent)', color: 'var(--color-text-on-accent)',
     padding: '1px 6px', borderRadius: 10, marginLeft: 4,
   },
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+    position: 'fixed', inset: 0, background: 'var(--color-overlay)',
     zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
     padding: '40px 20px',
   },
   modal: {
-    background: '#fff', borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+    background: 'var(--color-bg-surface)', borderRadius: 10, boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
     width: '100%', maxWidth: 960, height: '85vh',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   modalHeader: {
-    padding: '14px 20px', borderBottom: '1px solid #e5e7eb',
+    padding: '14px 20px', borderBottom: '1px solid var(--color-border)',
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     flexShrink: 0,
   },
-  modalTitle: { fontSize: 15, fontWeight: 600, color: '#334155' },
+  modalTitle: { fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)' },
   closeBtn: {
-    cursor: 'pointer', fontSize: 20, color: '#9ca3af', background: 'none',
+    cursor: 'pointer', fontSize: 'var(--font-size-xl)', color: 'var(--color-text-subtle)', background: 'none',
     border: 'none', lineHeight: 1, padding: '2px 6px', borderRadius: 4,
   },
 }

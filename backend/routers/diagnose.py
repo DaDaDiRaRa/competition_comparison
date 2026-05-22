@@ -8,20 +8,6 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def _user_error_msg(e: Exception) -> str:
-    msg = str(e)
-    if "502" in msg or "Bad Gateway" in msg:
-        return "AI 서버 일시 오류입니다. 잠시 후 다시 시도해주세요."
-    if "API" in msg or "api_key" in msg or "authentication" in msg.lower():
-        return "API 키 오류입니다. 설정 탭에서 API 키를 확인해주세요."
-    if "PDF" in msg or "fitz" in msg or "rasterize" in msg.lower():
-        return "PDF 처리 중 오류가 발생했습니다. 파일이 손상되지 않았는지 확인해주세요."
-    if "timeout" in msg.lower():
-        return "처리 시간이 초과됐습니다. PDF 페이지 수를 줄이거나 다시 시도해주세요."
-    if "memory" in msg.lower() or "MemoryError" in msg:
-        return "메모리 부족 오류입니다. PDF 파일 크기를 줄여서 다시 시도해주세요."
-    return f"처리 중 오류가 발생했습니다. 문제가 반복되면 관리자에게 문의해주세요. (상세: {msg[:120]})"
-
 from datetime import datetime
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -38,7 +24,7 @@ from services.data_extractor import extract_pdf, merge_extracted_data, extract_b
 from services.comparator import diagnose_submission
 from services.diagnosis_report_generator import generate_diagnosis_report
 from services.pattern_builder import build_pattern_from_submissions
-from services.utils import sse
+from services.utils import sse, user_error_msg as _user_error_msg
 
 router = APIRouter()
 

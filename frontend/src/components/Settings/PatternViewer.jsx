@@ -15,12 +15,12 @@ const QUANT_LABELS = {
 
 const s = {
   sec: {
-    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 10,
+    background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 10,
     padding: 16, marginBottom: 14,
   },
   secTitle: {
-    fontSize: 13, fontWeight: 700, color: '#334155', marginBottom: 12,
-    paddingBottom: 6, borderBottom: '1px solid #e5e7eb',
+    fontSize: 13, fontWeight: 'var(--font-weight-bold)', color: 'var(--color-accent)', marginBottom: 12,
+    paddingBottom: 6, borderBottom: '1px solid var(--color-border)',
   },
 }
 
@@ -31,7 +31,7 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
       ...Object.keys(loseDist).filter(k => !k.endsWith('_ratio')),
     ])
   )
-  if (!allKeys.length) return <div style={{ color: '#4a5568', fontSize: 12 }}>데이터 없음</div>
+  if (!allKeys.length) return <div style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
 
   const maxVal = allKeys.reduce((m, k) => {
     return Math.max(m, winDist[k]?.mean || 0, loseDist[k]?.mean || 0)
@@ -39,12 +39,12 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#4b5563' }}>
-          <span style={{ width: 10, height: 10, borderRadius: 2, background: '#334155', display: 'inline-block' }} />
+      <div style={{ display: 'flex', gap: 'var(--gap-md)', marginBottom: 4 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-xs)', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+          <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--color-accent)', display: 'inline-block' }} />
           당선
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#4b5563' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-xs)', fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
           <span style={{ width: 10, height: 10, borderRadius: 2, background: '#92400e', display: 'inline-block' }} />
           낙선
         </span>
@@ -55,25 +55,25 @@ function PageDistBars({ winDist = {}, loseDist = {}, pageTypeLabel }) {
         const wStd = winDist[k]?.std
         const lStd = loseDist[k]?.std
         return (
-          <div key={k} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: '#4b5563', textAlign: 'right' }}>
+          <div key={k} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: 'var(--gap-sm)', alignItems: 'center' }}>
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', textAlign: 'right' }}>
               {pageTypeLabel(k)}
             </span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ flex: 1, background: '#f9fafb', borderRadius: 2, height: 11, overflow: 'hidden' }}>
-                  <div style={{ width: `${(wm / maxVal) * 100}%`, height: '100%', background: '#334155', borderRadius: 2 }} />
+                <div style={{ flex: 1, background: 'var(--color-bg-surface-alt)', borderRadius: 2, height: 11, overflow: 'hidden' }}>
+                  <div style={{ width: `${(wm / maxVal) * 100}%`, height: '100%', background: 'var(--color-accent)', borderRadius: 2 }} />
                 </div>
-                <span style={{ fontSize: 10, color: '#6b7280', minWidth: 42 }}>
+                <span style={{ fontSize: 10, color: 'var(--color-text-faint)', minWidth: 42 }}>
                   {wm.toFixed(1)}{wStd != null ? `±${wStd.toFixed(1)}` : ''}
                 </span>
               </div>
               {Object.keys(loseDist).length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ flex: 1, background: '#f9fafb', borderRadius: 2, height: 11, overflow: 'hidden' }}>
+                  <div style={{ flex: 1, background: 'var(--color-bg-surface-alt)', borderRadius: 2, height: 11, overflow: 'hidden' }}>
                     <div style={{ width: `${(lm / maxVal) * 100}%`, height: '100%', background: '#92400e', borderRadius: 2 }} />
                   </div>
-                  <span style={{ fontSize: 10, color: '#6b7280', minWidth: 42 }}>
+                  <span style={{ fontSize: 10, color: 'var(--color-text-faint)', minWidth: 42 }}>
                     {lm.toFixed(1)}{lStd != null ? `±${lStd.toFixed(1)}` : ''}
                   </span>
                 </div>
@@ -90,16 +90,16 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
   const fields = Object.keys(QUANT_LABELS).filter(
     k => winQuant[k]?.mean != null || loseQuant[k]?.mean != null
   )
-  if (!fields.length) return <div style={{ color: '#4a5568', fontSize: 12 }}>데이터 없음</div>
+  if (!fields.length) return <div style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
 
   const hasLose = Object.keys(loseQuant).length > 0
 
   return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
       <thead>
-        <tr style={{ color: '#6b7280', borderBottom: '1px solid #e5e7eb' }}>
+        <tr style={{ color: 'var(--color-text-faint)', borderBottom: '1px solid var(--color-border)' }}>
           <th style={{ textAlign: 'left', padding: '4px 8px' }}>지표</th>
-          <th style={{ textAlign: 'right', padding: '4px 8px', color: '#334155' }}>당선 평균</th>
+          <th style={{ textAlign: 'right', padding: '4px 8px', color: 'var(--color-accent)' }}>당선 평균</th>
           {hasLose && (
             <th style={{ textAlign: 'right', padding: '4px 8px', color: '#92400e' }}>낙선 평균</th>
           )}
@@ -112,15 +112,15 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
           const lm = loseQuant[f]?.mean
           const fmt = v => v == null ? '—' : Number.isInteger(v) ? v.toLocaleString() : v.toFixed(1)
           return (
-            <tr key={f} style={{ borderBottom: '1px solid #f9fafb' }}>
-              <td style={{ padding: '5px 8px', color: '#4b5563' }}>
+            <tr key={f} style={{ borderBottom: '1px solid var(--color-bg-surface-alt)' }}>
+              <td style={{ padding: '5px 8px', color: 'var(--color-text-muted)' }}>
                 {meta.label} <span style={{ color: '#4a5568' }}>({meta.unit})</span>
               </td>
-              <td style={{ padding: '5px 8px', textAlign: 'right', color: '#1f2937', fontWeight: 600 }}>
+              <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--color-text-body)', fontWeight: 'var(--font-weight-semibold)' }}>
                 {fmt(wm)}
               </td>
               {hasLose && (
-                <td style={{ padding: '5px 8px', textAlign: 'right', color: '#1f2937' }}>
+                <td style={{ padding: '5px 8px', textAlign: 'right', color: 'var(--color-text-body)' }}>
                   {fmt(lm)}
                 </td>
               )}
@@ -134,7 +134,7 @@ function QuantTable({ winQuant = {}, loseQuant = {} }) {
 
 function KeywordCloud({ keywords = {}, loseKeywords = {} }) {
   const entries = Object.entries(keywords).sort((a, b) => b[1] - a[1]).slice(0, 20)
-  if (!entries.length) return <div style={{ color: '#4a5568', fontSize: 12 }}>데이터 없음</div>
+  if (!entries.length) return <div style={{ color: '#4a5568', fontSize: 'var(--font-size-sm)' }}>데이터 없음</div>
 
   const hasLose = Object.keys(loseKeywords).length > 0
 
@@ -143,11 +143,11 @@ function KeywordCloud({ keywords = {}, loseKeywords = {} }) {
       {entries.map(([kw, freq]) => {
         const loseFreq = loseKeywords[kw] || 0
         const diff = freq - loseFreq
-        const bg = diff > 0.2 ? '#15803d' : diff < -0.2 ? '#fee2e2' : '#f9fafb'
-        const color = diff > 0.2 ? '#16a34a' : diff < -0.2 ? '#dc2626' : '#4b5563'
+        const bg = diff > 0.2 ? '#15803d' : diff < -0.2 ? 'var(--color-danger-bg)' : 'var(--color-bg-surface-alt)'
+        const color = diff > 0.2 ? 'var(--color-success)' : diff < -0.2 ? 'var(--color-danger)' : 'var(--color-text-muted)'
         return (
           <span key={kw} title={hasLose ? `당선 ${(freq*100).toFixed(0)}% / 낙선 ${(loseFreq*100).toFixed(0)}%` : `${(freq*100).toFixed(0)}%`} style={{
-            background: bg, color, fontSize: 12,
+            background: bg, color, fontSize: 'var(--font-size-sm)',
             padding: '3px 10px', borderRadius: 20,
             border: `1px solid ${color}33`,
           }}>
@@ -165,13 +165,13 @@ function QualitativeInsights({ insights }) {
 
   const col = (title, items, color) => (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color, marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-bold)', color, marginBottom: 8 }}>{title}</div>
       {items.length === 0
-        ? <div style={{ fontSize: 12, color: '#4a5568' }}>없음</div>
+        ? <div style={{ fontSize: 'var(--font-size-sm)', color: '#4a5568' }}>없음</div>
         : items.map((item, i) => (
             <div key={i} style={{
-              fontSize: 12, color: '#1f2937', padding: '5px 10px', marginBottom: 4,
-              background: '#ffffff', borderRadius: 4, borderLeft: `3px solid ${color}`,
+              fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)', padding: '5px 10px', marginBottom: 4,
+              background: 'var(--color-bg-surface)', borderRadius: 4, borderLeft: `3px solid ${color}`,
             }}>
               {item}
             </div>
@@ -181,9 +181,9 @@ function QualitativeInsights({ insights }) {
   )
 
   return (
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-      {col('당선 패턴', winner_patterns, '#16a34a')}
-      {col('낙선 패턴', loser_patterns, '#dc2626')}
+    <div style={{ display: 'flex', gap: 'var(--gap-md)', flexWrap: 'wrap' }}>
+      {col('당선 패턴', winner_patterns, 'var(--color-success)')}
+      {col('낙선 패턴', loser_patterns, 'var(--color-danger)')}
       {col('차별화 요소', key_differentiators, '#ea580c')}
     </div>
   )
@@ -238,7 +238,7 @@ export default function PatternViewer() {
 
   return (
     <div style={{ marginTop: 28 }}>
-      <div style={{ fontSize: 16, fontWeight: 700, color: '#1f2937', marginBottom: 16, borderBottom: '1px solid #e5e7eb', paddingBottom: 10 }}>
+      <div style={{ fontSize: 16, fontWeight: 'var(--font-weight-bold)', color: 'var(--color-text-body)', marginBottom: 16, borderBottom: '1px solid var(--color-border)', paddingBottom: 10 }}>
         패턴 뷰어
       </div>
 
@@ -249,11 +249,11 @@ export default function PatternViewer() {
             key={ft.key}
             onClick={() => setSelectedFt(ft.key)}
             style={{
-              padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+              padding: '5px 12px', borderRadius: 20, fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
               cursor: 'pointer',
-              border: selectedFt === ft.key ? '2px solid #334155' : '2px solid #e5e7eb',
-              background: selectedFt === ft.key ? '#f9fafb' : '#ffffff',
-              color: selectedFt === ft.key ? '#334155' : '#6b7280',
+              border: selectedFt === ft.key ? '2px solid var(--color-accent)' : '2px solid var(--color-border)',
+              background: selectedFt === ft.key ? 'var(--color-bg-surface-alt)' : 'var(--color-bg-surface)',
+              color: selectedFt === ft.key ? 'var(--color-accent)' : 'var(--color-text-faint)',
             }}
           >
             {ft.label_ko}
@@ -266,34 +266,34 @@ export default function PatternViewer() {
         <div style={{ display: 'flex', gap: 10 }}>
           {pattern ? (
             <>
-              <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>
+              <span style={{ background: 'var(--color-success-bg)', color: '#15803d', fontSize: 'var(--font-size-sm)', padding: '3px 10px', borderRadius: 20 }}>
                 당선 {pattern.win_count}개
               </span>
               {loseCount > 0 && (
-                <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>
+                <span style={{ background: 'var(--color-danger-bg)', color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)', padding: '3px 10px', borderRadius: 20 }}>
                   낙선 {loseCount}개
                 </span>
               )}
             </>
           ) : loading ? (
-            <span style={{ fontSize: 12, color: '#6b7280' }}>로딩 중...</span>
+            <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)' }}>로딩 중...</span>
           ) : (
-            <span style={{ fontSize: 12, color: '#92400e' }}>⚠ 패턴 없음 (당선 데이터 축적 필요)</span>
+            <span style={{ fontSize: 'var(--font-size-sm)', color: '#92400e' }}>⚠ 패턴 없음 (당선 데이터 축적 필요)</span>
           )}
         </div>
         <button
           onClick={rebuild}
           disabled={rebuilding}
           style={{
-            background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
-            padding: '5px 14px', fontSize: 12, cursor: rebuilding ? 'not-allowed' : 'pointer',
+            background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+            padding: '5px 14px', fontSize: 'var(--font-size-sm)', cursor: rebuilding ? 'not-allowed' : 'pointer',
             opacity: rebuilding ? 0.6 : 1,
           }}
         >
           {rebuilding ? '재구축 중...' : '패턴 재구축'}
         </button>
       </div>
-      {rebuildMsg && <div style={{ fontSize: 12, color: '#16a34a', marginBottom: 10 }}>{rebuildMsg}</div>}
+      {rebuildMsg && <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-success)', marginBottom: 10 }}>{rebuildMsg}</div>}
 
       {pattern && (
         <>
@@ -321,7 +321,7 @@ export default function PatternViewer() {
               <div style={s.secTitle}>
                 컨셉 키워드 빈도
                 {loseCount > 0 && (
-                  <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 400, marginLeft: 8 }}>
+                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-faint)', fontWeight: 'var(--font-weight-regular)', marginLeft: 8 }}>
                     (녹색 = 당선 우세, 적색 = 낙선 우세)
                   </span>
                 )}

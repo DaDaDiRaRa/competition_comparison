@@ -215,15 +215,99 @@ def has_embedded_text(pdf_path: Path, page_index: int, min_chars: int = 50) -> b
         return False
 
 
+# ── 사용자 오류 메시지 ────────────────────────────────────────────────────────
+def user_error_msg(e: Exception) -> str:
+    """예외를 사용자가 이해할 수 있는 한국어 메시지로 변환."""
+    msg = str(e)
+    ml = msg.lower()
+
+    # API / 인증
+    if "401" in msg or "api_key" in ml or "authentication" in ml or "invalid x-api-key" in ml:
+        return "API 키가 올바르지 않습니다. 설정 탭에서 API 키를 다시 확인해주세요."
+    if "api 키가 설정되지 않" in msg:
+        return "API 키가 입력되지 않았습니다. 설정 탭에서 API 키를 입력해주세요."
+
+    # 서버/네트워크
+    if "502" in msg or "bad gateway" in ml:
+        return "AI 서버에 일시적으로 접속할 수 없습니다. 잠시 후 다시 시도해주세요."
+    if "503" in msg or "service unavailable" in ml:
+        return "AI 서버가 점검 중입니다. 잠시 후 다시 시도해주세요."
+    if "429" in msg or "rate limit" in ml or "too many requests" in ml:
+        return "요청이 너무 많습니다. 잠시 기다렸다가 다시 시도해주세요."
+    if "timeout" in ml or "timed out" in ml:
+        return "처리 시간이 초과됐습니다. PDF 페이지 수가 많으면 나눠서 업로드해보세요."
+    if "connection" in ml and ("refused" in ml or "reset" in ml or "error" in ml):
+        return "서버에 연결할 수 없습니다. 인터넷 연결을 확인하고 다시 시도해주세요."
+
+    # 파일 / PDF
+    if "pdf" in ml or "fitz" in ml or "rasterize" in ml:
+        return "PDF 파일을 읽는 중 오류가 발생했습니다. 파일이 손상되지 않았는지 확인해주세요."
+    if "not found" in ml or "no such file" in ml:
+        return "파일을 찾을 수 없습니다. 업로드가 완료됐는지 확인해주세요."
+    if "파일 크기" in msg or "too large" in ml:
+        return "파일 크기가 허용 한도를 초과했습니다. 더 작은 파일로 나눠서 업로드해주세요."
+
+    # AI 응답 파싱
+    if "json 파싱 실패" in ml or "json parseerror" in ml or "jsondecode" in ml:
+        return "AI 응답을 해석하는 중 오류가 발생했습니다. 다시 시도하면 대부분 해결됩니다."
+    if "블라인드 채점" in msg or "리빌 분석" in msg or "진단 json" in msg:
+        return "AI가 분석 결과를 올바른 형식으로 반환하지 않았습니다. 다시 시도해주세요."
+
+    # 메모리
+    if "memory" in ml or "memoryerror" in ml:
+        return "메모리가 부족합니다. PDF 파일 크기를 줄이거나 다른 파일을 닫고 다시 시도해주세요."
+
+    # 기타 ValueError (우리가 직접 raise한 것 — 이미 한국어일 가능성 높음)
+    if isinstance(e, ValueError) and any(c > '' for c in msg[:30]):
+        return msg  # 이미 한국어 메시지면 그대로 반환
+
+    # 최후 fallback — 기술적 코드 노출 없이
+    return "예상치 못한 오류가 발생했습니다. 문제가 반복되면 화면을 새로고침하거나 관리자에게 문의해주세요."
+
+
 # ── JSON 파싱 ─────────────────────────────────────────────────────────────────
 def parse_json_response(text: str) -> dict:
-    """Claude 응답에서 JSON 추출. ```json 펜스 자동 제거."""
+    """Claude 응답에서 JSON 추출.
+
+    복구 전략 (순서대로 시도):
+    1. ```json / ``` 펜스 제거 후 직접 파싱
+    2. 산문에 묻힌 JSON 블록 추출 (첫 { ~ 마지막 }, 또는 첫 [ ~ 마지막 ])
+    3. trailing comma 제거 후 재파싱
+    """
+    import re as _re
+
     text = text.strip()
+
+    # 1. 코드 펜스 제거
     for delim in ("```json", "```"):
         if delim in text:
             text = text.split(delim)[1].split("```")[0].strip()
             break
-    return json.loads(text)
+
+    # 2. 직접 파싱
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. 산문에 묻힌 JSON 블록 추출 + trailing comma 복구
+    for open_ch, close_ch in (('{', '}'), ('[', ']')):
+        si = text.find(open_ch)
+        ei = text.rfind(close_ch)
+        if si != -1 and ei > si:
+            candidate = text[si:ei + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                fixed = _re.sub(r',(\s*[}\]])', r'\1', candidate)
+                try:
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    pass
+
+    raise json.JSONDecodeError(
+        f"JSON 파싱 실패 (복구 불가). 원문 앞 300자: {text[:300]}", text, 0
+    )
 
 
 # ── 이미지 크기 안전 인코딩 ───────────────────────────────────────────────────

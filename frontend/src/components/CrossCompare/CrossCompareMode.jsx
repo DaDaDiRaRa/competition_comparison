@@ -5,82 +5,82 @@ import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_COLOR = {
-  win: { color: '#0d9488', bg: '#fef3c7', label: '당선' },
-  contracted: { color: '#16a34a', bg: '#dcfce7', label: '수의계약' },
-  lose: { color: '#6b7280', bg: '#ffffff', label: '낙선' },
+  win: { color: '#0d9488', bg: 'var(--color-warning-bg)', label: '당선' },
+  contracted: { color: 'var(--color-success)', bg: 'var(--color-success-bg)', label: '수의계약' },
+  lose: { color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)', label: '낙선' },
 }
 
 const s = {
   wrap: { display: 'flex', flexDirection: 'column', gap: 16 },
-  panel: { background: '#ffffff', borderRadius: 12, padding: 24 },
-  title: { fontSize: 18, fontWeight: 600, color: '#1f2937', marginBottom: 6 },
-  desc: { fontSize: 13, color: '#6b7280', lineHeight: 1.6, marginBottom: 20 },
+  panel: { background: 'var(--color-bg-surface)', borderRadius: 12, padding: 24 },
+  title: { fontSize: 'var(--font-size-lg)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', marginBottom: 6 },
+  desc: { fontSize: 13, color: 'var(--color-text-faint)', lineHeight: 1.6, marginBottom: 20 },
   typeTab: (active) => ({
-    padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+    padding: '5px 14px', borderRadius: 20, fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
     cursor: 'pointer', border: 'none',
-    background: active ? '#334155' : '#e5e7eb',
-    color: active ? '#ffffff' : '#4b5563',
+    background: active ? 'var(--color-accent)' : 'var(--color-border)',
+    color: active ? 'var(--color-bg-surface)' : 'var(--color-text-muted)',
   }),
   card: {
-    background: '#ffffff', border: '1px solid #e5e7eb',
+    background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
     borderRadius: 8, marginBottom: 8,
   },
   cardHeader: {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '12px 14px', cursor: 'pointer', userSelect: 'none',
   },
-  cardName: { fontWeight: 600, color: '#1f2937', fontSize: 14, flex: 1 },
+  cardName: { fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', fontSize: 'var(--font-size-base)', flex: 1 },
   badge: {
-    fontSize: 11, padding: '2px 8px', borderRadius: 20,
-    background: '#475569', color: '#ffffff', fontWeight: 600,
+    fontSize: 'var(--font-size-xs)', padding: '2px 8px', borderRadius: 20,
+    background: 'var(--color-accent-hover)', color: 'var(--color-bg-surface)', fontWeight: 'var(--font-weight-semibold)',
   },
   chevron: (open) => ({
-    color: '#4a5568', fontSize: 12, transform: open ? 'rotate(180deg)' : 'none',
+    color: '#4a5568', fontSize: 'var(--font-size-sm)', transform: open ? 'rotate(180deg)' : 'none',
     transition: 'transform 0.15s',
   }),
-  subList: { borderTop: '1px solid #e5e7eb', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 },
+  subList: { borderTop: '1px solid var(--color-border)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 },
   subRow: (checked) => ({
     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
     borderRadius: 6, cursor: 'pointer',
-    background: checked ? '#f9fafb' : 'transparent',
-    border: checked ? '1px solid #334155' : '1px solid transparent',
+    background: checked ? 'var(--color-bg-surface-alt)' : 'transparent',
+    border: checked ? '1px solid var(--color-accent)' : '1px solid transparent',
     transition: 'all 0.1s',
   }),
   checkbox: (checked) => ({
     width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-    border: checked ? '2px solid #334155' : '2px solid #4a5568',
-    background: checked ? '#334155' : 'transparent',
+    border: checked ? '2px solid var(--color-accent)' : '2px solid #4a5568',
+    background: checked ? 'var(--color-accent)' : 'transparent',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 10, color: '#ffffff', fontWeight: 700,
+    fontSize: 10, color: 'var(--color-bg-surface)', fontWeight: 'var(--font-weight-bold)',
   }),
-  subName: { fontSize: 13, color: '#1f2937', flex: 1 },
+  subName: { fontSize: 13, color: 'var(--color-text-body)', flex: 1 },
   resultTag: (result) => ({
-    fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600,
-    color: RESULT_COLOR[result]?.color || '#6b7280',
-    background: RESULT_COLOR[result]?.bg || '#ffffff',
+    fontSize: 'var(--font-size-xs)', padding: '2px 8px', borderRadius: 20, fontWeight: 'var(--font-weight-semibold)',
+    color: RESULT_COLOR[result]?.color || 'var(--color-text-faint)',
+    background: RESULT_COLOR[result]?.bg || 'var(--color-bg-surface)',
   }),
-  projectMeta: { fontSize: 11, color: '#4a5568' },
+  projectMeta: { fontSize: 'var(--font-size-xs)', color: '#4a5568' },
   selBar: {
-    display: 'flex', alignItems: 'center', gap: 12,
-    padding: '14px 20px', background: '#ffffff',
-    border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 4,
+    display: 'flex', alignItems: 'center', gap: 'var(--gap-md)',
+    padding: '14px 20px', background: 'var(--color-bg-surface)',
+    border: '1px solid var(--color-border)', borderRadius: 10, marginBottom: 4,
   },
-  selCount: { fontSize: 14, fontWeight: 600, color: '#334155', flex: 1 },
+  selCount: { fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)', flex: 1 },
   selChip: {
-    fontSize: 11, padding: '3px 10px', borderRadius: 20,
-    background: '#f9fafb', color: '#4b5563', border: '1px solid #e5e7eb',
+    fontSize: 'var(--font-size-xs)', padding: '3px 10px', borderRadius: 20,
+    background: 'var(--color-bg-surface-alt)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)',
     display: 'flex', alignItems: 'center', gap: 5,
   },
   clearBtn: {
-    background: 'none', border: 'none', color: '#dc2626',
-    cursor: 'pointer', fontSize: 11, padding: 0,
+    background: 'none', border: 'none', color: 'var(--color-danger)',
+    cursor: 'pointer', fontSize: 'var(--font-size-xs)', padding: 0,
   },
   runBtn: (active) => ({
-    background: active ? '#15803d' : '#dcfce7',
+    background: active ? '#15803d' : 'var(--color-success-bg)',
     color: active ? '#fff' : '#4a5568',
     border: 'none', borderRadius: 8, padding: '10px 24px',
     cursor: active ? 'pointer' : 'not-allowed',
-    fontSize: 14, fontWeight: 700, transition: 'all 0.15s', whiteSpace: 'nowrap',
+    fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', transition: 'all 0.15s', whiteSpace: 'nowrap',
   }),
   empty: { color: '#4a5568', fontSize: 13, textAlign: 'center', padding: '20px 0' },
 }
@@ -90,13 +90,13 @@ function SelectionBar({ selected, onRemove, onClear, onRun, running }) {
   return (
     <div style={s.selBar}>
       <div style={s.selCount}>
-        선택된 제안서 <span style={{ color: selected.length >= 2 ? '#16a34a' : '#dc2626' }}>{selected.length}</span>개
-        {selected.length < 2 && <span style={{ fontSize: 12, color: '#4a5568', fontWeight: 400, marginLeft: 6 }}>(최소 2개 필요)</span>}
+        선택된 제안서 <span style={{ color: selected.length >= 2 ? 'var(--color-success)' : 'var(--color-danger)' }}>{selected.length}</span>개
+        {selected.length < 2 && <span style={{ fontSize: 'var(--font-size-sm)', color: '#4a5568', fontWeight: 'var(--font-weight-regular)', marginLeft: 6 }}>(최소 2개 필요)</span>}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', flex: 3 }}>
         {selected.map(item => (
           <div key={`${item.competition_id}__${item.company}`} style={s.selChip}>
-            <span style={{ color: '#6b7280' }}>{item.competition_name}</span>
+            <span style={{ color: 'var(--color-text-faint)' }}>{item.competition_name}</span>
             <span>·</span>
             <span>{item.company}</span>
             <button style={s.clearBtn} onClick={() => onRemove(item)}>✕</button>
@@ -104,7 +104,7 @@ function SelectionBar({ selected, onRemove, onClear, onRun, running }) {
         ))}
       </div>
       {selected.length > 0 && (
-        <button style={{ ...s.clearBtn, fontSize: 12, color: '#6b7280' }} onClick={onClear}>전체 해제</button>
+        <button style={{ ...s.clearBtn, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)' }} onClick={onClear}>전체 해제</button>
       )}
       <button style={s.runBtn(canRun)} onClick={canRun ? onRun : undefined} disabled={!canRun}>
         {running ? '분석 중...' : '비교분석 실행'}
@@ -129,7 +129,7 @@ function ProjectCard({ project, selected, onToggle }) {
       {open && (
         <div style={s.subList}>
           {subs.length === 0
-            ? <div style={{ fontSize: 12, color: '#4a5568' }}>제안서 없음</div>
+            ? <div style={{ fontSize: 'var(--font-size-sm)', color: '#4a5568' }}>제안서 없음</div>
             : subs.map(sub => {
                 const key = `${project.competition_id}__${sub.company}`
                 const checked = selected.some(s => s.competition_id === project.competition_id && s.company === sub.company)
@@ -247,7 +247,7 @@ export default function CrossCompareMode() {
 
       {events.length > 0 && (
         <div style={s.panel}>
-          <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 8 }}>진행 로그</div>
+          <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 8 }}>진행 로그</div>
           <ProgressLog events={events} />
         </div>
       )}
@@ -255,14 +255,14 @@ export default function CrossCompareMode() {
       {pastReports.length > 0 && (
         <div style={s.panel}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#1f2937', flex: 1 }}>
-              저장된 교차비교 리포트 <span style={{ color: '#4a5568', fontWeight: 400, fontSize: 12 }}>({pastReports.length})</span>
+            <div style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', flex: 1 }}>
+              저장된 교차비교 리포트 <span style={{ color: '#4a5568', fontWeight: 'var(--font-weight-regular)', fontSize: 'var(--font-size-sm)' }}>({pastReports.length})</span>
             </div>
             <button
               onClick={loadPastReports}
               style={{
-                background: 'none', border: '1px solid #e5e7eb', borderRadius: 6,
-                color: '#4b5563', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
+                background: 'none', border: '1px solid var(--color-border)', borderRadius: 6,
+                color: 'var(--color-text-muted)', padding: '4px 12px', cursor: 'pointer', fontSize: 'var(--font-size-sm)',
               }}
             >새로고침</button>
           </div>
@@ -274,23 +274,23 @@ export default function CrossCompareMode() {
                 target="_blank"
                 rel="noreferrer"
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 14px', background: '#ffffff',
-                  border: '1px solid #e5e7eb', borderRadius: 6,
+                  display: 'flex', alignItems: 'center', gap: 'var(--gap-md)',
+                  padding: '10px 14px', background: 'var(--color-bg-surface)',
+                  border: '1px solid var(--color-border)', borderRadius: 6,
                   textDecoration: 'none', transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#475569'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#e5e7eb'}
+                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-accent-hover)'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, color: '#1f2937', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 13, color: 'var(--color-text-body)', fontWeight: 'var(--font-weight-medium)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {rep.labels.join('  vs  ')}
                   </div>
-                  <div style={{ fontSize: 11, color: '#4a5568', marginTop: 3 }}>
+                  <div style={{ fontSize: 'var(--font-size-xs)', color: '#4a5568', marginTop: 3 }}>
                     {rep.created_at}
                   </div>
                 </div>
-                <div style={{ fontSize: 11, color: '#334155' }}>열기 →</div>
+                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)' }}>열기 →</div>
               </a>
             ))}
           </div>
@@ -299,8 +299,8 @@ export default function CrossCompareMode() {
 
       {result?.comparison && (
         <div style={s.panel}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#334155', flex: 1 }}>비교분석 결과</div>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 'var(--gap-md)' }}>
+            <div style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)', flex: 1 }}>비교분석 결과</div>
             {result.report_filename && (
               <a
                 href={getCrossCompareReportUrl(result.report_filename)}
@@ -308,7 +308,7 @@ export default function CrossCompareMode() {
                 rel="noreferrer"
                 style={{
                   background: '#6d28d9', color: '#ede9fe', borderRadius: 6,
-                  padding: '6px 14px', fontSize: 12, fontWeight: 600,
+                  padding: '6px 14px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
                   textDecoration: 'none',
                 }}
               >

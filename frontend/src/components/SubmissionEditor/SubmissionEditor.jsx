@@ -20,9 +20,9 @@ const MASS_TYPE_OPTIONS = [
 ]
 
 const RESULT_OPTIONS = [
-  { value: 'win',        label: '★ 당선',    color: '#0d9488', bg: '#fef3c7' },
-  { value: 'contracted', label: '◆ 수의계약', color: '#16a34a', bg: '#dcfce7' },
-  { value: 'lose',       label: '낙선',       color: '#6b7280', bg: '#ffffff' },
+  { value: 'win',        label: '★ 당선',    color: '#0d9488', bg: 'var(--color-warning-bg)' },
+  { value: 'contracted', label: '◆ 수의계약', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
+  { value: 'lose',       label: '낙선',       color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]
 
 const SECTIONS = [
@@ -43,89 +43,89 @@ const s = {
     zIndex: 1000, padding: 20,
   },
   modal: {
-    background: '#ffffff', borderRadius: 14, width: '90%', maxWidth: 920,
+    background: 'var(--color-bg-surface)', borderRadius: 14, width: '90%', maxWidth: 920,
     maxHeight: '90vh', display: 'flex', flexDirection: 'column',
-    border: '1px solid #e5e7eb', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    border: '1px solid var(--color-border)', boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
   },
   header: {
-    padding: '18px 24px', borderBottom: '1px solid #e5e7eb',
-    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '18px 24px', borderBottom: '1px solid var(--color-border)',
+    display: 'flex', alignItems: 'center', gap: 'var(--gap-md)',
   },
-  title: { fontSize: 16, fontWeight: 700, color: '#1f2937', flex: 1 },
+  title: { fontSize: 16, fontWeight: 'var(--font-weight-bold)', color: 'var(--color-text-body)', flex: 1 },
   closeBtn: {
-    background: 'none', border: 'none', color: '#6b7280',
-    fontSize: 20, cursor: 'pointer', lineHeight: 1,
+    background: 'none', border: 'none', color: 'var(--color-text-faint)',
+    fontSize: 'var(--font-size-xl)', cursor: 'pointer', lineHeight: 1,
   },
   body: { display: 'flex', flex: 1, overflow: 'hidden' },
   sidebar: {
-    width: 160, borderRight: '1px solid #e5e7eb',
+    width: 160, borderRight: '1px solid var(--color-border)',
     padding: '12px 8px', overflowY: 'auto', flexShrink: 0,
   },
   sideBtn: (active) => ({
     display: 'block', width: '100%', textAlign: 'left',
     padding: '9px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-    fontSize: 12, fontWeight: active ? 700 : 400,
-    background: active ? '#475569' : 'transparent',
-    color: active ? '#ffffff' : '#6b7280',
+    fontSize: 'var(--font-size-sm)', fontWeight: active ? 700 : 400,
+    background: active ? 'var(--color-accent-hover)' : 'transparent',
+    color: active ? 'var(--color-bg-surface)' : 'var(--color-text-faint)',
     marginBottom: 2,
   }),
   content: { flex: 1, overflowY: 'auto', padding: 24 },
   footer: {
-    padding: '14px 24px', borderTop: '1px solid #e5e7eb',
+    padding: '14px 24px', borderTop: '1px solid var(--color-border)',
     display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center',
   },
   cancelBtn: {
     background: 'transparent', border: '1px solid #4a5568', borderRadius: 8,
-    color: '#4b5563', padding: '9px 20px', cursor: 'pointer', fontSize: 14,
+    color: 'var(--color-text-muted)', padding: '9px 20px', cursor: 'pointer', fontSize: 'var(--font-size-base)',
   },
   saveBtn: (dirty) => ({
-    background: dirty ? '#15803d' : '#dcfce7',
+    background: dirty ? '#15803d' : 'var(--color-success-bg)',
     border: 'none', borderRadius: 8, color: dirty ? '#fff' : '#4a5568',
     padding: '9px 24px', cursor: dirty ? 'pointer' : 'not-allowed',
-    fontSize: 14, fontWeight: 700, transition: 'all 0.15s',
+    fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', transition: 'all 0.15s',
   }),
-  label: { fontSize: 12, color: '#4b5563', marginBottom: 5, display: 'block' },
+  label: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 5, display: 'block' },
   input: {
-    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 6,
-    padding: '8px 10px', color: '#1f2937', fontSize: 13, width: '100%',
+    background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 6,
+    padding: '8px 10px', color: 'var(--color-text-body)', fontSize: 13, width: '100%',
     boxSizing: 'border-box',
   },
   select: {
-    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 6,
-    padding: '8px 10px', color: '#1f2937', fontSize: 13, width: '100%',
+    background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 6,
+    padding: '8px 10px', color: 'var(--color-text-body)', fontSize: 13, width: '100%',
   },
   textarea: {
-    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 6,
-    padding: '8px 10px', color: '#1f2937', fontSize: 12, width: '100%',
+    background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 6,
+    padding: '8px 10px', color: 'var(--color-text-body)', fontSize: 'var(--font-size-sm)', width: '100%',
     minHeight: 120, resize: 'vertical', boxSizing: 'border-box', fontFamily: 'monospace',
   },
   group: { marginBottom: 16 },
-  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 },
-  original: { fontSize: 11, color: '#4a5568', marginTop: 3 },
+  grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--gap-md)', marginBottom: 16 },
+  sectionTitle: { fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', color: 'var(--color-accent)', marginBottom: 16 },
+  original: { fontSize: 'var(--font-size-xs)', color: '#4a5568', marginTop: 3 },
   tag: {
     display: 'inline-flex', alignItems: 'center', gap: 5,
-    background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 20,
-    padding: '3px 10px', fontSize: 12, color: '#1f2937', margin: '3px 3px 3px 0',
+    background: 'var(--color-bg-input-disabled)', border: '1px solid var(--color-border)', borderRadius: 20,
+    padding: '3px 10px', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)', margin: '3px 3px 3px 0',
   },
   tagRemove: {
-    background: 'none', border: 'none', color: '#6b7280',
-    cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+    background: 'none', border: 'none', color: 'var(--color-text-faint)',
+    cursor: 'pointer', fontSize: 'var(--font-size-base)', lineHeight: 1, padding: 0,
   },
   rowCard: {
-    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8,
+    background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 8,
     padding: '12px 14px', marginBottom: 8,
   },
   addBtn: {
-    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
-    padding: '6px 14px', cursor: 'pointer', fontSize: 12, marginTop: 8,
+    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', marginTop: 8,
   },
   removeBtn: {
-    background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer',
-    fontSize: 12, marginLeft: 'auto',
+    background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer',
+    fontSize: 'var(--font-size-sm)', marginLeft: 'auto',
   },
   toast: (type) => ({
-    fontSize: 13, color: type === 'ok' ? '#16a34a' : '#dc2626',
+    fontSize: 13, color: type === 'ok' ? 'var(--color-success)' : 'var(--color-danger)',
     flex: 1,
   }),
 }
@@ -178,16 +178,16 @@ function MetaSection({ result, meta, onChange }) {
       <div style={s.sectionTitle}>메타 정보</div>
       <div style={s.group}>
         <label style={s.label}>결과</label>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 'var(--gap-sm)' }}>
           {RESULT_OPTIONS.map(opt => (
             <div
               key={opt.value}
               onClick={() => onChange('result', opt.value)}
               style={{
                 flex: 1, padding: '9px 0', textAlign: 'center', borderRadius: 8,
-                cursor: 'pointer', fontSize: 13, fontWeight: 600,
-                border: result === opt.value ? `2px solid ${opt.color}` : '2px solid #e5e7eb',
-                background: result === opt.value ? opt.bg : '#ffffff',
+                cursor: 'pointer', fontSize: 13, fontWeight: 'var(--font-weight-semibold)',
+                border: result === opt.value ? `2px solid ${opt.color}` : '2px solid var(--color-border)',
+                background: result === opt.value ? opt.bg : 'var(--color-bg-surface)',
                 color: result === opt.value ? opt.color : '#4a5568',
               }}
             >
@@ -297,7 +297,7 @@ function FloorSection({ floorPlan, onChange }) {
       {rows.map((row, i) => (
         <div key={i} style={s.rowCard}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: '#4b5563', fontWeight: 600 }}>층 {i + 1}</span>
+            <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', fontWeight: 'var(--font-weight-semibold)' }}>층 {i + 1}</span>
             <button style={s.removeBtn} onClick={() => removeRow(i)}>× 삭제</button>
           </div>
           <div style={s.grid2}>
@@ -340,7 +340,7 @@ function AreaSection({ areaTable, onChange }) {
     <div>
       <div style={s.sectionTitle}>면적표</div>
       {rows.map((row, i) => (
-        <div key={i} style={{ ...s.rowCard, display: 'grid', gridTemplateColumns: '2fr 1fr 2fr auto', gap: 8, alignItems: 'end' }}>
+        <div key={i} style={{ ...s.rowCard, display: 'grid', gridTemplateColumns: '2fr 1fr 2fr auto', gap: 'var(--gap-sm)', alignItems: 'end' }}>
           <div>
             {i === 0 && <label style={s.label}>항목명</label>}
             <input style={s.input} value={row.name || row.area_name || ''}
@@ -413,16 +413,16 @@ function AdvancedSection({ extracted, onChange, onErrorChange }) {
   return (
     <div>
       <div style={s.sectionTitle}>고급 편집</div>
-      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 10, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)', marginBottom: 10, lineHeight: 1.6 }}>
         위 섹션에서 다루지 않는 추출 필드를 직접 편집합니다.<br />
         정량·컨셉·평면·면적표·표지는 상단 섹션에서 편집하세요.
       </div>
       <textarea
-        style={{ ...s.textarea, minHeight: 300, borderColor: error ? '#dc2626' : '#e5e7eb' }}
+        style={{ ...s.textarea, minHeight: 300, borderColor: error ? 'var(--color-danger)' : 'var(--color-border)' }}
         value={text}
         onChange={e => handleChange(e.target.value)}
       />
-      {error && <div style={{ fontSize: 12, color: '#dc2626', marginTop: 4 }}>{error}</div>}
+      {error && <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)', marginTop: 4 }}>{error}</div>}
     </div>
   )
 }
@@ -519,7 +519,7 @@ export default function SubmissionEditor({ project, company, onClose, onSaved })
   if (loading) return (
     <div style={s.overlay}>
       <div style={{ ...s.modal, alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
-        <div style={{ color: '#4b5563', fontSize: 14 }}>데이터 불러오는 중...</div>
+        <div style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-base)' }}>데이터 불러오는 중...</div>
       </div>
     </div>
   )
@@ -534,9 +534,9 @@ export default function SubmissionEditor({ project, company, onClose, onSaved })
 
         <div style={s.body}>
           {loadError ? (
-            <div style={{ padding: 40, color: '#dc2626', fontSize: 14, lineHeight: 1.7 }}>
+            <div style={{ padding: 40, color: 'var(--color-danger)', fontSize: 'var(--font-size-base)', lineHeight: 1.7 }}>
               ⚠ 제안서 데이터를 불러올 수 없습니다.<br />
-              <span style={{ fontSize: 12, color: '#4b5563' }}>
+              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
                 새로고침 후 다시 시도하거나 관리자에게 문의하세요.
               </span>
             </div>

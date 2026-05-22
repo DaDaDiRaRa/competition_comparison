@@ -1,0 +1,179 @@
+/* ============================================================
+   KUNWON Design Tokens v1.1
+   건원건축 통합 디자인 시스템 (라이트 전용)
+   ============================================================ */
+
+/* ──────────────────────────────────────────────────────────
+   1. 브랜드 색상 (CI 고정값 — 변경 금지)
+────────────────────────────────────────────────────────── */
+:root {
+  --brand-red:   #e60012;   /* 건원 RED   — 열정과 협력 */
+  --brand-gray:  #a9a9aa;   /* 건원 GRAY  — 조화와 효율 */
+  --brand-black: #001623;   /* 건원 BLACK — 신뢰와 혁신 */
+}
+
+/* ──────────────────────────────────────────────────────────
+   2. 색상
+────────────────────────────────────────────────────────── */
+:root {
+  /* 배경 */
+  --color-bg-page:           #f5f5f5;
+  --color-bg-surface:        #ffffff;
+  --color-bg-surface-alt:    #f9fafb;
+  --color-bg-input:          #ffffff;
+  --color-bg-input-disabled: #f3f4f6;
+
+  /* 테두리 */
+  --color-border:             #e2e2e2;
+  --color-border-strong:      #cccccc;
+
+  /* 텍스트 */
+  --color-text-primary:   #001623;
+  --color-text-body:      #1f2937;
+  --color-text-muted:     #4b5563;
+  --color-text-faint:     #6b7280;
+  --color-text-subtle:    #9ca3af;
+  --color-text-on-accent: #ffffff;
+
+  /* 액센트 (건원 RED) */
+  --color-accent:         #e60012;
+  --color-accent-hover:   #c8000f;
+  --color-accent-soft:    #fff0f0;
+  --color-accent-border:  #fca5a5;
+
+  /* 시그널 — 성공 */
+  --color-success:        #16a34a;
+  --color-success-bg:     #dcfce7;
+  --color-success-border: #86efac;
+
+  /* 시그널 — 경고 */
+  --color-warning:        #ca8a04;
+  --color-warning-bg:     #fef9c3;
+  --color-warning-border: #fde047;
+
+  /* 시그널 — 오류 */
+  --color-danger:         #dc2626;
+  --color-danger-bg:      #fee2e2;
+  --color-danger-border:  #fca5a5;
+
+  /* 시그널 — 정보 */
+  --color-info:           #0891b2;
+  --color-info-bg:        #cffafe;
+  --color-info-border:    #67e8f9;
+
+  /* 모달 오버레이 */
+  --color-overlay: rgba(0, 22, 35, 0.45);
+}
+
+/* ──────────────────────────────────────────────────────────
+   3. 타이포그래피
+────────────────────────────────────────────────────────── */
+:root {
+  /* 폰트 패밀리 */
+  --font-primary: 'Pretendard', 'Apple SD Gothic Neo', -apple-system,
+                  BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+
+  /* 크기 */
+  --font-size-xs:   11px;   /* 배지·태그·각주 */
+  --font-size-sm:   12px;   /* 캡션·힌트·라벨 */
+  --font-size-base: 14px;   /* 본문 */
+  --font-size-md:   15px;   /* 섹션 제목 */
+  --font-size-lg:   18px;   /* 카드 제목 */
+  --font-size-xl:   20px;   /* 페이지 제목 */
+  --font-size-2xl:  24px;   /* 대형 수치 */
+
+  /* 굵기 */
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  /* 행간 */
+  --line-height-tight:  1.3;
+  --line-height-normal: 1.5;
+  --line-height-loose:  1.7;
+}
+
+/* ──────────────────────────────────────────────────────────
+   4. 레이아웃
+────────────────────────────────────────────────────────── */
+:root {
+  /* 컨테이너 */
+  --layout-max-width:  1100px;
+  --layout-content-px: 24px;
+  --layout-content-py: 32px;
+
+  /* 헤더 */
+  --header-height: 56px;
+  --header-px:     24px;
+
+  /* 사이드 패널 */
+  --panel-width-sm: 280px;
+  --panel-width-md: 320px;
+  --panel-width-lg: 580px;
+
+  /* 모달 */
+  --modal-max-width: 960px;
+  --modal-height:    85vh;
+  --modal-radius:    12px;
+
+  /* 카드 */
+  --card-padding:    20px;
+  --card-padding-sm: 14px;
+  --card-radius:     10px;
+  --card-radius-sm:  6px;
+
+  /* 간격 */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 20px;
+  --gap-xl: 32px;
+
+  /* 입력 필드 */
+  --input-height: 36px;
+  --input-radius: 6px;
+  --input-px:     12px;
+  --input-border: 1px solid var(--color-border);
+
+  /* 배지 */
+  --badge-radius: 20px;
+  --badge-px:     8px;
+  --badge-py:     3px;
+}
+
+/* ──────────────────────────────────────────────────────────
+   5. 버튼
+────────────────────────────────────────────────────────── */
+:root {
+  --btn-radius:      6px;
+  --btn-px-sm:       12px;
+  --btn-py-sm:       6px;
+  --btn-px-md:       20px;
+  --btn-py-md:       10px;
+  --btn-px-lg:       28px;
+  --btn-py-lg:       12px;
+  --btn-font-size:   14px;
+  --btn-font-weight: 600;
+  --btn-transition:  background 0.15s ease, color 0.15s ease,
+                     border-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* ──────────────────────────────────────────────────────────
+   6. 그림자
+────────────────────────────────────────────────────────── */
+:root {
+  --shadow-sm: 0 1px 3px rgba(0, 22, 35, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 22, 35, 0.10);
+  --shadow-lg: 0 8px 24px rgba(0, 22, 35, 0.14);
+}
+
+/* ──────────────────────────────────────────────────────────
+   7. 트랜지션
+────────────────────────────────────────────────────────── */
+:root {
+  --transition-fast: 0.12s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.35s ease;
+}

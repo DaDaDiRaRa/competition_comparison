@@ -1,21 +1,21 @@
 export const COMPLIANCE_COLOR = {
-  yes: '#16a34a', partial: '#ea580c', no: '#dc2626', unclear: '#6b7280',
+  yes: 'var(--color-success)', partial: '#ea580c', no: 'var(--color-danger)', unclear: 'var(--color-text-faint)',
 }
 
 export const GRADE_COLOR = {
-  A: '#16a34a',
-  B: '#0891b2',
-  C: '#ca8a04',
+  A: 'var(--color-success)',
+  B: 'var(--color-info)',
+  C: 'var(--color-warning)',
   D: '#ea580c',
-  E: '#dc2626',
+  E: 'var(--color-danger)',
 }
 
 export const GRADE_BG = {
-  A: '#dcfce7',
-  B: '#cffafe',
-  C: '#fef3c7',
+  A: 'var(--color-success-bg)',
+  B: 'var(--color-info-bg)',
+  C: 'var(--color-warning-bg)',
   D: '#fed7aa',
-  E: '#fee2e2',
+  E: 'var(--color-danger-bg)',
 }
 
 const _LEGACY = { '상': 'B', '중': 'C', '하': 'D' }

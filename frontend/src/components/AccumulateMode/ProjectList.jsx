@@ -6,95 +6,95 @@ import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_OPTIONS = [
-  { value: 'win', label: '당선', color: '#0d9488', bg: '#fef3c7' },
-  { value: 'contracted', label: '수의계약', color: '#16a34a', bg: '#dcfce7' },
-  { value: 'lose', label: '낙선', color: '#6b7280', bg: '#ffffff' },
+  { value: 'win', label: '당선', color: '#0d9488', bg: 'var(--color-warning-bg)' },
+  { value: 'contracted', label: '수의계약', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
+  { value: 'lose', label: '낙선', color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]
 
 const s = {
-  panel: { background: '#ffffff', borderRadius: 12, padding: 24, marginBottom: 16 },
+  panel: { background: 'var(--color-bg-surface)', borderRadius: 12, padding: 24, marginBottom: 16 },
   header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  title: { fontSize: 16, fontWeight: 600, color: '#334155' },
+  title: { fontSize: 16, fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)' },
   refreshBtn: {
-    background: 'none', border: '1px solid #e5e7eb', borderRadius: 6,
-    color: '#4b5563', padding: '4px 12px', cursor: 'pointer', fontSize: 12,
+    background: 'none', border: '1px solid var(--color-border)', borderRadius: 6,
+    color: 'var(--color-text-muted)', padding: '4px 12px', cursor: 'pointer', fontSize: 'var(--font-size-sm)',
   },
   empty: { color: '#4a5568', fontSize: 13, textAlign: 'center', padding: '20px 0' },
   card: {
-    background: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 8,
+    background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 8,
     padding: '14px 16px', marginBottom: 10,
   },
   cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 },
-  cardName: { fontWeight: 600, color: '#1f2937', fontSize: 14 },
+  cardName: { fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', fontSize: 'var(--font-size-base)' },
   badge: {
-    fontSize: 11, padding: '2px 8px', borderRadius: 20,
-    background: '#475569', color: '#ffffff', fontWeight: 600,
+    fontSize: 'var(--font-size-xs)', padding: '2px 8px', borderRadius: 20,
+    background: 'var(--color-accent-hover)', color: 'var(--color-bg-surface)', fontWeight: 'var(--font-weight-semibold)',
   },
-  meta: { fontSize: 12, color: '#6b7280' },
-  actions: { display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  meta: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)' },
+  actions: { display: 'flex', gap: 'var(--gap-sm)', marginTop: 10, flexWrap: 'wrap' },
   rerunBtn: {
-    background: '#15803d', color: '#fff', border: 'none', borderRadius: 6,
-    padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+    background: '#15803d', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   addBtn: {
-    background: '#334155', color: '#fff', border: 'none', borderRadius: 6,
-    padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   reportBtn: {
     background: '#6d28d9', color: '#ede9fe', border: 'none', borderRadius: 6,
-    padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
     textDecoration: 'none', display: 'inline-block',
   },
   rerenderBtn: {
-    background: 'transparent', color: '#4b5563',
+    background: 'transparent', color: 'var(--color-text-muted)',
     border: '1px solid #4a5568', borderRadius: 6,
-    padding: '6px 14px', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   subReportBtn: {
-    background: '#334155', color: '#ffffff', border: '1px solid #475569', borderRadius: 6,
-    padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+    background: 'var(--color-accent)', color: 'var(--color-bg-surface)', border: '1px solid var(--color-accent-hover)', borderRadius: 6,
+    padding: '4px 10px', cursor: 'pointer', fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-semibold)',
     textDecoration: 'none', display: 'inline-block',
   },
   editBtn: {
-    background: '#e5e7eb', color: '#4b5563', border: '1px solid #4a5568', borderRadius: 6,
-    padding: '3px 9px', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+    background: 'var(--color-border)', color: 'var(--color-text-muted)', border: '1px solid #4a5568', borderRadius: 6,
+    padding: '3px 9px', cursor: 'pointer', fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-semibold)',
     textDecoration: 'none', display: 'inline-block',
   },
   staleBanner: {
-    background: '#fef3c7', border: '1px solid #92400e', borderRadius: 6,
-    padding: '7px 12px', fontSize: 12, color: '#ea580c', marginTop: 8,
-    display: 'flex', alignItems: 'center', gap: 8,
+    background: 'var(--color-warning-bg)', border: '1px solid #92400e', borderRadius: 6,
+    padding: '7px 12px', fontSize: 'var(--font-size-sm)', color: '#ea580c', marginTop: 8,
+    display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)',
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
   logWrap: { marginTop: 10 },
   addForm: {
-    marginTop: 12, padding: 14, background: '#d1d5db',
-    border: '1px solid #e5e7eb', borderRadius: 8,
+    marginTop: 12, padding: 14, background: 'var(--color-border-strong)',
+    border: '1px solid var(--color-border)', borderRadius: 8,
   },
-  addFormTitle: { fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 10 },
+  addFormTitle: { fontSize: 13, fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)', marginBottom: 10 },
   row: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 },
-  label: { fontSize: 12, color: '#4b5563', marginBottom: 4, display: 'block' },
+  label: { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 4, display: 'block' },
   input: {
-    width: '100%', background: '#ffffff', border: '1px solid #e5e7eb',
-    borderRadius: 6, padding: '7px 10px', color: '#1f2937', fontSize: 13,
+    width: '100%', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
+    borderRadius: 6, padding: '7px 10px', color: 'var(--color-text-body)', fontSize: 13,
     boxSizing: 'border-box',
   },
   resultPicker: { display: 'flex', gap: 6 },
   resultBtn: (opt, selected) => ({
-    flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer', fontSize: 12,
-    fontWeight: 600, textAlign: 'center',
-    border: selected ? `2px solid ${opt.color}` : '2px solid #e5e7eb',
-    background: selected ? opt.bg : '#ffffff',
+    flex: 1, padding: '6px 0', borderRadius: 6, cursor: 'pointer', fontSize: 'var(--font-size-sm)',
+    fontWeight: 'var(--font-weight-semibold)', textAlign: 'center',
+    border: selected ? `2px solid ${opt.color}` : '2px solid var(--color-border)',
+    background: selected ? opt.bg : 'var(--color-bg-surface)',
     color: selected ? opt.color : '#4a5568',
   }),
   submitBtn: (active) => ({
     width: '100%', marginTop: 10, padding: '9px 0', borderRadius: 6,
     border: 'none', cursor: active ? 'pointer' : 'not-allowed', fontSize: 13,
-    fontWeight: 700, background: active ? '#334155' : '#f9fafb', color: active ? '#fff' : '#4a5568',
+    fontWeight: 'var(--font-weight-bold)', background: active ? 'var(--color-accent)' : 'var(--color-bg-surface-alt)', color: active ? '#fff' : '#4a5568',
   }),
   cancelBtn: {
-    background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer',
-    fontSize: 12, marginLeft: 'auto',
+    background: 'none', border: 'none', color: 'var(--color-text-faint)', cursor: 'pointer',
+    fontSize: 'var(--font-size-sm)', marginLeft: 'auto',
   },
 }
 
@@ -157,7 +157,7 @@ function AddSubmissionForm({ project, onDone, onCancel }) {
             </div>
           </div>
           <DropZone label="제안서 PDF 드래그 또는 클릭" onFiles={setFile} />
-          {file && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 4 }}>✓ {file.name}</div>}
+          {file && <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-success)', marginTop: 4 }}>✓ {file.name}</div>}
           <button style={s.submitBtn(canSubmit)} onClick={canSubmit ? handleSubmit : undefined}>
             {running ? '처리 중...' : '추출 시작'}
           </button>
@@ -171,7 +171,7 @@ function AddSubmissionForm({ project, onDone, onCancel }) {
       )}
 
       {done && (
-        <div style={{ marginTop: 8, fontSize: 12, color: '#16a34a' }}>
+        <div style={{ marginTop: 8, fontSize: 'var(--font-size-sm)', color: 'var(--color-success)' }}>
           ✓ {company} 제안서 저장 완료. 비교분석 재실행 버튼으로 분석을 갱신하세요.
         </div>
       )}
@@ -234,7 +234,7 @@ function ProjectCard({ project, onRerunDone }) {
   const subs = project.submissions || []
   const winCount = subs.filter(s => s.result === 'win' || s.result === 'contracted').length
   const RESULT_KR = { win: '★ 당선', contracted: '◆ 수의계약', lose: '낙선' }
-  const RESULT_COLOR = { win: '#0d9488', contracted: '#16a34a', lose: '#6b7280' }
+  const RESULT_COLOR = { win: '#0d9488', contracted: 'var(--color-success)', lose: 'var(--color-text-faint)' }
 
   return (
     <div style={s.card}>
@@ -252,11 +252,11 @@ function ProjectCard({ project, onRerunDone }) {
       {subs.length > 0 && (
         <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {subs.map(sub => (
-            <div key={sub.company} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 12, color: RESULT_COLOR[sub.result] || '#4b5563' }}>
+            <div key={sub.company} style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-xs)' }}>
+              <span style={{ fontSize: 'var(--font-size-sm)', color: RESULT_COLOR[sub.result] || 'var(--color-text-muted)' }}>
                 {RESULT_KR[sub.result] || sub.result}
               </span>
-              <span style={{ fontSize: 12, color: '#1f2937' }}>{sub.company}</span>
+              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)' }}>{sub.company}</span>
               {sub.has_sub_report && (
                 <a
                   href={getSubmissionReportUrl(project.facility_type, project.competition_id, sub.company)}
@@ -283,7 +283,7 @@ function ProjectCard({ project, onRerunDone }) {
         <div style={s.staleBanner}>
           ⚠ 추출 데이터가 수정됐습니다. 비교 리포트 반영을 위해 "비교분석 실행"을 눌러주세요.
           <button
-            style={{ ...s.rerunBtn, padding: '4px 10px', fontSize: 11, marginLeft: 'auto' }}
+            style={{ ...s.rerunBtn, padding: '4px 10px', fontSize: 'var(--font-size-xs)', marginLeft: 'auto' }}
             onClick={running ? undefined : handleRerun}
           >
             비교분석 실행
@@ -328,8 +328,8 @@ function ProjectCard({ project, onRerunDone }) {
         )}
       </div>
       {rerenderMsg && (
-        <div style={{ marginTop: 8, fontSize: 12,
-                      color: rerenderMsg.startsWith('✓') ? '#16a34a' : '#dc2626' }}>
+        <div style={{ marginTop: 8, fontSize: 'var(--font-size-sm)',
+                      color: rerenderMsg.startsWith('✓') ? 'var(--color-success)' : 'var(--color-danger)' }}>
           {rerenderMsg}
         </div>
       )}
@@ -396,7 +396,7 @@ export default function ProjectList() {
         : projects.length === 0
           ? (
             <div style={{ padding: '24px 0' }}>
-              <div style={{ fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text-faint)', textAlign: 'center', marginBottom: 20 }}>
                 아직 등록된 프로젝트가 없습니다.
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -406,7 +406,7 @@ export default function ProjectList() {
                   { step: '3', icon: '🔍', title: '제안서 진단 탭', desc: '새로 작성 중인 제안서를 올리면, 과거 당선 패턴과 비교해 잘된 점·부족한 점·개선 방향을 알려줍니다.' },
                 ].map(({ step, icon, title, desc }) => (
                   <div key={step} style={{
-                    background: '#d1d5db', border: '1px solid #e5e7eb',
+                    background: 'var(--color-border-strong)', border: '1px solid var(--color-border)',
                     borderRadius: 8, padding: '14px 16px',
                     display: 'flex', gap: 14, alignItems: 'flex-start',
                   }}>
@@ -415,15 +415,15 @@ export default function ProjectList() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>{icon}</div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                      <div style={{ fontSize: 13, fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)', marginBottom: 4 }}>
                         <span style={{
                           display: 'inline-block', width: 18, height: 18, borderRadius: '50%',
-                          background: '#334155', color: '#fff', fontSize: 10, fontWeight: 700,
+                          background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', fontSize: 10, fontWeight: 'var(--font-weight-bold)',
                           textAlign: 'center', lineHeight: '18px', marginRight: 6,
                         }}>{step}</span>
                         {title}
                       </div>
-                      <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6 }}>{desc}</div>
+                      <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-faint)', lineHeight: 1.6 }}>{desc}</div>
                     </div>
                   </div>
                 ))}
@@ -438,10 +438,10 @@ export default function ProjectList() {
                     key={ft}
                     onClick={() => setSelectedType(ft)}
                     style={{
-                      padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                      padding: '5px 14px', borderRadius: 20, fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
                       cursor: 'pointer', border: 'none',
-                      background: ft === activeType ? '#334155' : '#e5e7eb',
-                      color: ft === activeType ? '#ffffff' : '#4b5563',
+                      background: ft === activeType ? 'var(--color-accent)' : 'var(--color-border)',
+                      color: ft === activeType ? 'var(--color-bg-surface)' : 'var(--color-text-muted)',
                     }}
                   >
                     {facilityLabel(ft)}
