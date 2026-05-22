@@ -6,7 +6,7 @@ import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_OPTIONS = [
-  { value: 'win', label: '당선', color: 'var(--color-teal)', bg: 'var(--color-warning-bg)' },
+  { value: 'win', label: '당선', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
   { value: 'contracted', label: '수의계약', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
   { value: 'lose', label: '낙선', color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]
@@ -41,7 +41,7 @@ const s = {
     padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   reportBtn: {
-    background: 'var(--color-purple)', color: 'var(--color-purple-bg)', border: 'none', borderRadius: 6,
+    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
     textDecoration: 'none', display: 'inline-block',
   },
@@ -234,7 +234,7 @@ function ProjectCard({ project, onRerunDone }) {
   const subs = project.submissions || []
   const winCount = subs.filter(s => s.result === 'win' || s.result === 'contracted').length
   const RESULT_KR = { win: '★ 당선', contracted: '◆ 수의계약', lose: '낙선' }
-  const RESULT_COLOR = { win: 'var(--color-teal)', contracted: 'var(--color-success)', lose: 'var(--color-text-faint)' }
+  const RESULT_COLOR = { win: 'var(--color-success)', contracted: 'var(--color-info)', lose: 'var(--color-text-faint)' }
 
   return (
     <div style={s.card}>

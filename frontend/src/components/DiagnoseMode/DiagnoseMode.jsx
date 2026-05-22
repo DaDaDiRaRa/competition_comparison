@@ -22,7 +22,7 @@ const s = {
   group: { marginBottom: 14 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 },
   btn: {
-    background: 'var(--color-purple)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
+    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6,
     padding: '12px 28px', cursor: 'pointer', fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)',
     marginTop: 16, width: '100%',
   },
@@ -163,9 +163,9 @@ export default function DiagnoseMode() {
               style={{
                 flex: 1, padding: '9px 0', borderRadius: 6, fontSize: 13,
                 fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
-                border: refMode === opt.v ? '2px solid #a78bfa' : '2px solid var(--color-border)',
-                background: refMode === opt.v ? 'var(--color-purple-bg)' : 'var(--color-bg-surface)',
-                color: refMode === opt.v ? '#5b21b6' : 'var(--color-text-faint)',
+                border: refMode === opt.v ? '2px solid var(--color-accent)' : '2px solid var(--color-border)',
+                background: refMode === opt.v ? 'var(--color-accent-soft)' : 'var(--color-bg-surface)',
+                color: refMode === opt.v ? 'var(--color-accent)' : 'var(--color-text-faint)',
               }}
             >
               {opt.label}
@@ -227,7 +227,7 @@ export default function DiagnoseMode() {
                       <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)', flex: 1 }}>{sub.company}</span>
                       <span style={{
                         fontSize: 10, padding: '1px 6px', borderRadius: 10,
-                        color: sub.result === 'win' || sub.result === 'contracted' ? 'var(--color-teal)' : 'var(--color-text-faint)',
+                        color: sub.result === 'win' || sub.result === 'contracted' ? 'var(--color-success)' : 'var(--color-text-faint)',
                         background: 'var(--color-bg-surface)',
                       }}>
                         {sub.result === 'win' ? '당선' : sub.result === 'contracted' ? '수의계약' : '낙선'}
@@ -277,7 +277,7 @@ export default function DiagnoseMode() {
             target="_blank"
             rel="noopener noreferrer"
             style={{
-              display: 'inline-block', background: 'var(--color-purple)', color: 'var(--color-text-on-accent)',
+              display: 'inline-block', background: 'var(--color-accent)', color: 'var(--color-text-on-accent)',
               borderRadius: 6, padding: '8px 20px', fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)',
               textDecoration: 'none',
             }}

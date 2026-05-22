@@ -41,7 +41,7 @@ function QuantCompare({ subQuant = {}, winQuant = {}, loseQuant = {} }) {
       <div style={{ display: 'flex', gap: 'var(--gap-md)', marginBottom: 10 }}>
         <LegendDot color="var(--color-accent)" label="당선 평균" />
         {hasLose && <LegendDot color="var(--color-amber-dark)" label="낙선 평균" />}
-        <LegendDot color="var(--color-purple)" label="내 제출물" />
+        <LegendDot color="var(--color-info)" label="내 제출물" />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {fields.map(k => {
@@ -58,7 +58,7 @@ function QuantCompare({ subQuant = {}, winQuant = {}, loseQuant = {} }) {
           // 내 제출물이 당선보다 낮으면 주의 색
           const sColor = (wVal != null && sVal != null && sVal < wVal * 0.85)
             ? 'var(--color-danger)' : (wVal != null && sVal != null && sVal >= wVal * 0.95)
-            ? 'var(--color-success)' : '#a78bfa'
+            ? 'var(--color-success)' : 'var(--color-info)'
 
           return (
             <div key={k}>

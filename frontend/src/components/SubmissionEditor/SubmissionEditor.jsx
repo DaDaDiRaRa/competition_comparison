@@ -20,7 +20,7 @@ const MASS_TYPE_OPTIONS = [
 ]
 
 const RESULT_OPTIONS = [
-  { value: 'win',        label: '★ 당선',    color: 'var(--color-teal)', bg: 'var(--color-warning-bg)' },
+  { value: 'win',        label: '★ 당선',    color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
   { value: 'contracted', label: '◆ 수의계약', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
   { value: 'lose',       label: '낙선',       color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]

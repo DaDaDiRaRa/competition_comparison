@@ -41,5 +41,5 @@ export const theme = {
   },
 
   // 골드 (특별 강조)
-  gold: 'var(--color-teal)',
+  gold: 'var(--color-warning)',
 }

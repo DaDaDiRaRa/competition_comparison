@@ -5,7 +5,7 @@ import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 import { useMeta } from '../../hooks/useMeta'
 
 const RESULT_COLOR = {
-  win: { color: 'var(--color-teal)', bg: 'var(--color-warning-bg)', label: '당선' },
+  win: { color: 'var(--color-success)', bg: 'var(--color-success-bg)', label: '당선' },
   contracted: { color: 'var(--color-success)', bg: 'var(--color-success-bg)', label: '수의계약' },
   lose: { color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)', label: '낙선' },
 }
@@ -307,7 +307,7 @@ export default function CrossCompareMode() {
                 target="_blank"
                 rel="noreferrer"
                 style={{
-                  background: 'var(--color-purple)', color: 'var(--color-purple-bg)', borderRadius: 6,
+                  background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', borderRadius: 6,
                   padding: '6px 14px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
                   textDecoration: 'none',
                 }}
