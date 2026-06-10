@@ -76,6 +76,8 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
 - `services/diagnosis_report_generator.py` - 진단 결과 HTML 리포트 생성 (LLM 호출 없음). `generate_diagnosis_report(diagnosis: dict) -> str`. 섹션: 종합점수 링 → 페이지 구성 바 → 패턴 편차 경고 → 지침서 충족도 → 요구사항 매핑 → 평가축별 상세 → 보강 포인트
 - `services/pattern_builder.py` - Builds patterns from winner data + qualitative LLM summary; `build_pattern()` now also collects `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords) for loser anti-pattern comparison
 - `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser
+  - `user_error_msg(e: Exception) → str` — 예외를 사용자 친화적 한국어 메시지로 변환. 401/502/429/timeout/PDF/JSON 패턴 매핑. `accumulate.py` / `diagnose.py`에서 공통 사용.
+  - `parse_json_response(text)` — 3단계 복구: ① 펜스 제거 → ② 직접 파싱 → ③ `{...}` 또는 `[...]` 추출 + 후행 쉼표 제거. LLM이 마크다운 코드블록이나 산문을 섞어도 JSON 추출 가능.
 - `services/pdf_rasterizer.py` - Legacy fallback rasterizer (not used by default)
 
 **Configuration:**
@@ -136,10 +138,11 @@ Located in `competition-analyzer/frontend/`, the app has five main tabs:
 **Styling:**
 
 - Inline styles (no CSS framework)
-- **화이트 테마 + 네이비 액센트** (기본). 메인 BG `#fafafa`, 패널 `#ffffff`, 액센트 `#1e3a8a`, 텍스트 `#1f2937`, 테두리 `#e5e7eb`
-- 색 토큰 단일 명세: `frontend/src/theme.js` (참고용 문서). 단, 각 컴포넌트는 인라인 hex로 박혀 있어 토큰을 import하지는 않음
+- **화이트 테마 + 건원 RED 액센트** (`#e60012`). 모든 색·타이포·간격·반경은 `frontend/src/kunwon-tokens.css` CSS 변수로 관리.
+- 컴포넌트는 인라인 스타일에서 `var(--token)` 형태로 직접 사용. `main.jsx`에서 전역 import → 별도 JS import 불필요.
+- `frontend/src/theme.js` — 색 토큰 참고용 JS 명세 (컴포넌트가 import하지는 않음). 색 변경 시 같이 갱신.
 - Components use consistent style object pattern
-- 일괄 색 교체: `tools/change_theme.py <preset>` (navy/charcoal/forest/burgundy/indigo/blackgold) 또는 `custom --accent ... --hover ... --highlight ...`
+- 하드코딩 감사: `tools/audit_tokens.py` 실행 → `DESIGN_AUDIT.md` 생성 (파일·줄 번호·교체 토큰 목록)
 
 ## Common Development Tasks
 
@@ -253,7 +256,8 @@ Test with curl or Postman by uploading files to:
 - **LLM 호출:** 모든 Claude 호출은 `services/llm_client.py::call_messages()`. 502 오류는 Anthropic 서버 일시 장애 — 재시도.
 - **Prompt Caching:** compare(2-pass) / diagnose 호출 시 `system` 배열 + 정적 content 블록 + 동적 content 블록 각각에 `cache_control: {"type": "ephemeral"}` 부여. 5분 TTL, 캐시 히트 시 입력 토큰 90% 할인 / 캐시 쓰기 1.25× 비용. Sonnet은 1024 토큰 이상 블록만 캐시 가능. `rerun-compare`로 재실행 시 큰 비용 절감.
 - **2-pass Blind-Reveal 의도:** Pass 1에서 LLM이 결과 라벨(`win`/`lose`)을 모르게 채점 → 앵커링·할로 효과 제거. Pass 2에서 실제 결과를 공개하고 사후 분석 → 블라인드 1위와 실제 당선이 다를 때 `gap_analysis.alignment != "high"`로 경고 가능. 완벽한 익명화는 불가능 (PDF 내 로고·텍스트 등 식별 정보 잔존)지만 명시적 결과 라벨 제거가 가장 강한 시그널 차단.
-- **Grading (5-level A/B/C/D/E):** 점수는 0.0-10.0 숫자가 아닌 `grade: "A"|"B"|"C"|"D"|"E"` 문자열. `overall_grade`도 동일. 이유: 임원 검토 시 무의미한 정밀도 논쟁 차단 + 환각 검증 부담 감소. A=최우수(#68d391), B=우수(#4fd1c5), C=보통(#f6c46a), D=미흡(#f6ad55), E=불량(#fc8181).
+- **Grading (5-level A/B/C/D/E):** 점수는 0.0-10.0 숫자가 아닌 `grade: "A"|"B"|"C"|"D"|"E"` 문자열. `overall_grade`도 동일. 이유: 임원 검토 시 무의미한 정밀도 논쟁 차단 + 환각 검증 부담 감소.
+  - **등급 색상 (라이트 테마):** A=`var(--color-success)` `#16a34a` / B=`var(--color-info)` `#0891b2` / C=`var(--color-warning)` `#ca8a04` / D=`var(--color-grade-d)` `#ea580c` / E=`var(--color-danger)` `#dc2626`. 배경(`GRADE_BG`)은 같은 hue 옅은 톤.
   - 구 데이터 자동 변환: `score`(0-10) → ≥8.5=A, ≥7=B, ≥5=C, ≥3=D, else=E. 구 `grade`("상"→B, "중"→C, "하"→D). 새 비교 실행하면 LLM이 직접 A-E 출력.
   - 백엔드 헬퍼: `report_generator.py::_to_grade()` + `_grade_badge()`, `diagnosis_report_generator.py::_to_grade()` + `_grade_color()`
   - 프론트 헬퍼: `constants/index.js`의 `GRADE_COLOR`, `GRADE_BG`, `toGrade(d)` (구 score 호환)
@@ -273,15 +277,25 @@ Test with curl or Postman by uploading files to:
 - **PyInstaller spec:** `backend/competition_analyzer.spec`. `collect_all('webview')`, `collect_all('clr_loader')`, `collect_all('pythonnet')` 필수 — pywebview는 .NET 어셈블리(`System`, `System.Windows`, `System.Drawing`)를 동적 로드하므로 정적 분석으로 못 잡힘. PaddleOCR 등 무거운 의존성은 `excludes`. 산출물: `backend/dist/CompetitionAnalyzer/CompetitionAnalyzer.exe` (~14MB) + `_internal/` (~120MB). `console=False` (windowed 빌드) — CMD 창 미표시.
 - **로깅 (windowed 빌드):** `console=False`이면 stdout/stderr가 어디에도 표시되지 않음. `launcher.py::_setup_logging()`이 `RotatingFileHandler`로 `~/.competition-analyzer/app.log`(2MB×3 백업)에 기록. 치명적 오류는 `_show_error_dialog()`로 Win32 MessageBox 표시 (`ctypes.windll.user32.MessageBoxW`). uvicorn 자체 로그는 console 없으면 사라지지만 launcher 핵심 이벤트는 모두 파일에 남음. 디버깅 시 이 파일을 먼저 확인.
 - **빌드 스크립트:** 저장소 루트의 `build.ps1` — npm install → vite build → PyInstaller 일괄 실행. PowerShell의 `$ErrorActionPreference = "Stop"`이 PyInstaller stderr(INFO 로그)를 에러로 오인할 수 있어 일부 환경에서 실패 표시될 수 있으나, 실제 산출물은 정상 생성됨. 직접 `.\venv\Scripts\python.exe -m PyInstaller competition_analyzer.spec --noconfirm` 실행하면 우회.
-- **테마/색상 시스템:** 화이트 테마 + 네이비 액센트가 기본. 색상이 정의된 위치 4곳:
-  1. `frontend/src/theme.js` — 색 토큰 명세 (참고용)
-  2. `frontend/src/constants/index.js` — `GRADE_COLOR`, `GRADE_BG`, `COMPLIANCE_COLOR`
-  3. `backend/services/report_generator.py` — `_CSS`의 `:root` CSS 변수 26개 (비교 리포트)
-  4. 각 `.jsx` 컴포넌트 인라인 스타일 + `submission_report_generator.py`/`diagnosis_report_generator.py` 인라인 hex
-  - **일괄 교체 도구:** `tools/change_theme.py`. 프리셋: `navy`(현재), `charcoal`, `forest`, `burgundy`, `indigo`, `blackgold`. 또는 `custom --accent ... --hover ... --highlight ...`. 실행 후 `npm run build` + PyInstaller 재빌드 필요.
-  - **현재 액센트 계열 색상:** accent `#1e3a8a` / hover `#1e40af` / light `#3b82f6` / soft `#dbeafe`. 강조 골드: `#b8860b` / soft `rgba(184,134,11,0.10)` / strong `rgba(184,134,11,0.30)`.
-  - **등급 색상 (5-level, 화이트 BG용):** A `#16a34a` / B `#0891b2` / C `#ca8a04` / D `#ea580c` / E `#dc2626`. 배경(`GRADE_BG`)은 같은 hue의 옅은 톤 (`#dcfce7`, `#cffafe`, `#fef3c7`, `#fed7aa`, `#fee2e2`).
-  - 색 변경 시 `theme.js`도 같이 갱신해 단일 명세 유지.
+- **테마/색상 시스템:** 화이트 테마 + **건원 RED 액센트** (`#e60012`). 색상 정의 위치:
+  1. `frontend/src/kunwon-tokens.css` — **단일 소스 CSS 변수** (모든 프론트 컴포넌트가 `var(--token)` 참조). `main.jsx`에서 전역 import.
+  2. `frontend/src/theme.js` — 색 토큰 명세 (참고용 문서)
+  3. `frontend/src/constants/index.js` — `GRADE_COLOR`, `GRADE_BG`, `COMPLIANCE_COLOR` (CSS var 참조)
+  4. `backend/services/report_generator.py` — `_CSS`의 `:root` CSS 변수 26개 (비교 리포트 HTML — 독립 문서이므로 별도 관리)
+  5. `submission_report_generator.py` / `diagnosis_report_generator.py` — 리포트 HTML 인라인 hex (독립 문서)
+  - **프론트 컴포넌트 색상 규칙:** 인라인 스타일에서 hex 직접 사용 금지. `style={{ color: 'var(--color-accent)' }}` 패턴 사용. 신규 색 필요 시 `kunwon-tokens.css`에 추가 후 참조.
+  - **현재 브랜드 토큰 (주요):**
+    - 액센트: `--color-accent: #e60012` (건원 RED) / hover `--color-accent-hover: #c0000f` / soft `--color-accent-soft: rgba(230,0,18,0.08)` / border `--color-accent-border: rgba(230,0,18,0.25)`
+    - 배경: `--color-bg-page: #f8f9fa` / `--color-bg-surface: #ffffff` / `--color-bg-surface-alt: #f1f3f5`
+    - 텍스트: `--color-text-body: #212529` / muted `#6c757d` / faint `#adb5bd` / subtle `#868e96`
+    - 상태: `--color-success: #16a34a` (당선·win) / `--color-info: #0891b2` (계약·contracted) / `--color-warning: #ca8a04` / `--color-danger: #dc2626`
+  - **등급 색상 (5-level, 화이트 BG용):**
+    - A `var(--color-success)` `#16a34a` / B `var(--color-info)` `#0891b2` / C `var(--color-warning)` `#ca8a04` / D `var(--color-grade-d)` `#ea580c` / E `var(--color-danger)` `#dc2626`
+    - 배경(`GRADE_BG`): `#dcfce7` / `#cffafe` / `#fef3c7` / `#fed7aa` / `#fee2e2`
+  - **결과 뱃지 색상:** `win` → `--color-success`, `contracted` → `--color-info`, `lose` → `--color-text-faint`
+  - **차트 팔레트 예외:** `ComparisonDashboard`의 `PALETTE` 배열, `PageDistChart`의 당선/낙선 구분 바는 데이터 다양성을 위해 `--color-purple`(`#7c3aed`) 등 차트 전용 색 허용.
+  - 색 변경 시 `kunwon-tokens.css` 수정 → `theme.js`도 동기화해 단일 명세 유지. 토큰 추가 시 `CLAUDE.md` 현재 브랜드 토큰 목록도 갱신.
+  - 감사 도구: `tools/audit_tokens.py` — 프론트 파일 전체에서 인라인 hex 스캔 → `DESIGN_AUDIT.md` 생성.
 - **ProjectList Filtering:** 데이터 존재하는 시설 유형만 탭 노출. 첫 번째 유형 자동 선택.
 - **New Machine Setup:** `git clone` → `pip install -r requirements.txt` + `npm install` → 백엔드 실행 → 브라우저에서 설정 탭에서 DB 경로 입력 + API 키 입력. DB 경로 미입력 시 `~/CompetitionAnalyzerDB` 자동 사용.
 - **PaddleOCR (선택):** 이미지 기반 PDF(텍스트 없는) OCR 필요 시만 `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision으로 동작하므로 불필요.

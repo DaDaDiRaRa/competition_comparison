@@ -27,14 +27,10 @@ dist/
 Thumbs.db
 
 
+# 보안 — 절대 커밋 금지
 key.json
 *-sa-key.json
 gcp-sa-key.json
-echo node_modules/
-echo venv/
-echo __pycache__/
-echo *.pyc
-
 .env
-echo env.yaml
 env.yaml
+service.yaml
