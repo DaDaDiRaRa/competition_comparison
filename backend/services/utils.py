@@ -222,6 +222,8 @@ def user_error_msg(e: Exception) -> str:
     ml = msg.lower()
 
     # API / 인증
+    if "illegal header" in ml or "localprotocol" in ml:
+        return "API 키 형식이 잘못됐습니다. 설정 탭에서 API 키를 다시 입력해주세요 (따옴표·공백 없이 sk-ant-... 형식으로)."
     if "401" in msg or "api_key" in ml or "authentication" in ml or "invalid x-api-key" in ml:
         return "API 키가 올바르지 않습니다. 설정 탭에서 API 키를 다시 확인해주세요."
     if "api 키가 설정되지 않" in msg:

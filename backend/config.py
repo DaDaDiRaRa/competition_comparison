@@ -250,17 +250,22 @@ class AppSettings:
 
     @property
     def api_key(self) -> str:
-        # 메모리 우선, 없으면 환경변수
-        return self._memory_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        # 메모리 우선, 없으면 환경변수. 양쪽 모두 정제 적용.
+        raw = self._memory_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        return self._sanitize_api_key(raw)
 
-    def set_api_key(self, key: str):
-        """세션 메모리에만 저장. 디스크에 쓰지 않음."""
+    @staticmethod
+    def _sanitize_api_key(key: str) -> str:
+        """셸 복붙 아티팩트 제거: echo -n "sk-ant-..." → sk-ant-..."""
         key = (key or "").strip()
-        # 셸 복붙 아티팩트 제거: echo -n "sk-ant-..." → sk-ant-...
         if key.startswith("-n "):
             key = key[3:].strip()
         key = key.strip('"').strip("'")
-        self._memory_api_key = key
+        return key
+
+    def set_api_key(self, key: str):
+        """세션 메모리에만 저장. 디스크에 쓰지 않음."""
+        self._memory_api_key = self._sanitize_api_key(key)
 
     def clear_api_key(self):
         self._memory_api_key = ""

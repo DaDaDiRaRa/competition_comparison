@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -8,11 +9,22 @@ from pathlib import Path
 from config import settings, FACILITY_TYPES
 
 
+def _sync_write(path: Path, content: str):
+    """파일 쓰기 후 fsync — GCSFUSE write-back 캐시를 GCS까지 강제 플러시."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def _atomic_write(path: Path, data: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())  # GCSFUSE write-back 캐시를 GCS까지 강제 플러시
     tmp.replace(path)
 
 
@@ -301,8 +313,7 @@ def get_losing_submissions(facility_type: str) -> list[dict]:
 
 def save_report(facility_type: str, competition_id: str, html: str):
     comp_dir = get_competition_dir(facility_type, competition_id)
-    path = comp_dir / "_report.html"
-    path.write_text(html, encoding="utf-8")
+    _sync_write(comp_dir / "_report.html", html)
 
 
 def get_report_path(facility_type: str, competition_id: str) -> Path:
@@ -317,7 +328,7 @@ def save_submission_report(facility_type: str, competition_id: str, company: str
         data = _read_json(f)
         if data.get("company") == company:
             report_path = f.with_name(f.stem + "_report.html")
-            report_path.write_text(html, encoding="utf-8")
+            _sync_write(report_path, html)
             _mark_sub_report(facility_type, competition_id, company)
             return True
     return False
@@ -349,7 +360,7 @@ def save_cross_compare_report(filename: str, html: str) -> Path:
     cross_dir = settings.db_path / "_cross_reports"
     cross_dir.mkdir(parents=True, exist_ok=True)
     path = cross_dir / filename
-    path.write_text(html, encoding="utf-8")
+    _sync_write(path, html)
     return path
 
 
@@ -388,7 +399,7 @@ def save_diagnosis_report(filename: str, html: str) -> Path:
     diag_dir = settings.db_path / "_diagnosis_reports"
     diag_dir.mkdir(parents=True, exist_ok=True)
     path = diag_dir / filename
-    path.write_text(html, encoding="utf-8")
+    _sync_write(path, html)
     return path
 
 
