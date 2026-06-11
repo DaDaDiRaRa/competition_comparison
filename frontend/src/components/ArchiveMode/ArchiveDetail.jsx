@@ -130,21 +130,22 @@ const s = {
     color: 'var(--color-text-body)',
     marginBottom: 8,
   },
-  gradeGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(2, 1fr)',
-    gap: 6,
-  },
-  axisRow: {
+  axisList: { display: 'flex', flexDirection: 'column', gap: 4 },
+  axisRow: (expanded) => ({
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    gap: 8, padding: '4px 8px',
-    background: 'var(--color-bg-surface)',
-    borderRadius: 4,
+    gap: 8, padding: '6px 8px',
+    background: expanded ? 'var(--color-bg-surface-alt)' : 'var(--color-bg-surface)',
+    borderRadius: expanded ? '4px 4px 0 0' : 4,
     fontSize: 'var(--font-size-xs)',
-  },
+    cursor: 'pointer',
+    userSelect: 'none',
+    border: `1px solid ${expanded ? 'var(--color-accent-border)' : 'var(--color-border)'}`,
+    transition: 'background 0.15s',
+  }),
   axisName: {
     color: 'var(--color-text-muted)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+    flex: 1,
   },
   gradeBadge: (grade) => ({
     minWidth: 22,
@@ -158,6 +159,31 @@ const s = {
     letterSpacing: 0.5,
     flexShrink: 0,
   }),
+  chevron: (expanded) => ({
+    fontSize: 9, color: 'var(--color-text-faint)',
+    marginLeft: 4, flexShrink: 0,
+    transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+    transition: 'transform 0.15s',
+  }),
+  axisDetail: {
+    background: 'var(--color-bg-surface-alt)',
+    border: '1px solid var(--color-accent-border)',
+    borderTop: 'none',
+    borderRadius: '0 0 4px 4px',
+    padding: '8px 10px',
+    fontSize: 'var(--font-size-xs)',
+    lineHeight: 1.6,
+  },
+  detailGroup: { marginBottom: 6 },
+  detailLabel: (color) => ({
+    fontSize: 10, fontWeight: 'var(--font-weight-bold)',
+    color, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2,
+  }),
+  detailItem: { color: 'var(--color-text-body)', paddingLeft: 8 },
+  detailNotes: {
+    color: 'var(--color-text-muted)', fontStyle: 'italic',
+    paddingLeft: 8,
+  },
 }
 
 function renderItem(item, i) {
@@ -176,6 +202,62 @@ function Section({ title, items }) {
       {items?.length > 0
         ? <ul style={s.list}>{items.map(renderItem)}</ul>
         : <div style={s.empty}>—</div>}
+    </div>
+  )
+}
+
+function AxisAccordion({ axisKey, axisData, label }) {
+  const [open, setOpen] = useState(false)
+  const grade = toGrade(axisData)
+  const strengths = axisData?.strengths || []
+  const weaknesses = axisData?.weaknesses || []
+  const notes = axisData?.notes
+  const brief = axisData?.brief_compliance
+  const hasDetail = strengths.length > 0 || weaknesses.length > 0 || notes || brief
+
+  return (
+    <div>
+      <div
+        style={s.axisRow(open)}
+        onClick={() => hasDetail && setOpen(p => !p)}
+        title={hasDetail ? '클릭하여 상세 보기' : undefined}
+      >
+        <span style={s.axisName} title={label}>{label}</span>
+        <span style={s.gradeBadge(grade)}>{grade || '—'}</span>
+        {hasDetail && <span style={s.chevron(open)}>▼</span>}
+      </div>
+      {open && hasDetail && (
+        <div style={s.axisDetail}>
+          {strengths.length > 0 && (
+            <div style={s.detailGroup}>
+              <div style={s.detailLabel('var(--color-success)')}>강점</div>
+              {strengths.map((t, i) => (
+                <div key={i} style={s.detailItem}>· {typeof t === 'string' ? t : JSON.stringify(t)}</div>
+              ))}
+            </div>
+          )}
+          {weaknesses.length > 0 && (
+            <div style={s.detailGroup}>
+              <div style={s.detailLabel('var(--color-danger)')}>약점</div>
+              {weaknesses.map((t, i) => (
+                <div key={i} style={s.detailItem}>· {typeof t === 'string' ? t : JSON.stringify(t)}</div>
+              ))}
+            </div>
+          )}
+          {brief && (
+            <div style={s.detailGroup}>
+              <div style={s.detailLabel('var(--color-info)')}>지침 충족</div>
+              <div style={s.detailItem}>{brief}</div>
+            </div>
+          )}
+          {notes && (
+            <div style={s.detailGroup}>
+              <div style={s.detailLabel('var(--color-text-muted)')}>노트</div>
+              <div style={s.detailNotes}>{notes}</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -270,19 +352,15 @@ export default function ArchiveDetail({ data, onClose }) {
             {Object.entries(submissions).map(([company, axes]) => (
               <div key={company} style={s.subBlock}>
                 <div style={s.subName}>{company}</div>
-                <div style={s.gradeGrid}>
-                  {Object.entries(axes || {}).map(([axisKey, axisData]) => {
-                    const grade = toGrade(axisData)
-                    const label = facilityType
-                      ? axisLabel(facilityType, axisKey)
-                      : axisKey
-                    return (
-                      <div key={axisKey} style={s.axisRow}>
-                        <span style={s.axisName} title={label}>{label}</span>
-                        <span style={s.gradeBadge(grade)}>{grade || '—'}</span>
-                      </div>
-                    )
-                  })}
+                <div style={s.axisList}>
+                  {Object.entries(axes || {}).map(([axisKey, axisData]) => (
+                    <AxisAccordion
+                      key={axisKey}
+                      axisKey={axisKey}
+                      axisData={axisData}
+                      label={facilityType ? axisLabel(facilityType, axisKey) : axisKey}
+                    />
+                  ))}
                 </div>
               </div>
             ))}
