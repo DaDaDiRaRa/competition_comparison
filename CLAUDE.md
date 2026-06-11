@@ -444,3 +444,6 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 - **`rerun-compare` 완료 후 인덱스 갱신:** `routers/accumulate.py`의 `rerun-compare` 엔드포인트 완료 시점에 `rebuild_index()` 호출 1줄 추가 (최소 침습)
 - **GCS 읽기 전용 접근:** 아카이브 검색은 `/data` 파일을 읽기만 함. 쓰기 없으므로 `_atomic_write` 불필요
 - **인덱스 크기:** 현재 ~5개 공모, 향후 수십 개 수준. in-memory SQLite로 충분
+- **SQLite threading:** FastAPI sync 라우트는 threadpool에서 실행되므로 startup 스레드에서 생성된 in-memory 커넥션이 cross-thread 에러(500)를 유발. `sqlite3.connect(":memory:", check_same_thread=False)` 필수
+- **자연어 검색 폴백:** `search_natural()`에서 Claude API 호출 실패(API 키 미설정 등) 시 `search_keyword(q)`로 자동 폴백 — 단순 키워드 검색은 API 키 없이도 동작. 전체 자연어 문장은 폴백으로 결과 없을 수 있음
+- **한국어 FTS 동의어:** `FACILITY_SYNONYMS` dict로 시설유형 FTS 컬럼에 영어 키 + 한국어 레이블 + 구어체 동의어 함께 저장 (예: "public" 컬럼 = "public 공공시설 시청 구청 관공서 ..."). `search_natural()` 프롬프트에 `_FACILITY_HINT` 블록 포함 — 쿼리에서 시설 카테고리 언급 시 정식 한국어 레이블도 키워드에 포함하도록 지시
