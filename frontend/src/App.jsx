@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import AccumulateMode from './components/AccumulateMode/AccumulateMode'
+import ArchiveMode from './components/ArchiveMode/ArchiveMode'
 import CrossCompareMode from './components/CrossCompare/CrossCompareMode'
 import DiagnoseMode from './components/DiagnoseMode/DiagnoseMode'
 import MyProjectMode from './components/MyProjectMode/MyProjectMode'
@@ -13,6 +14,7 @@ const TABS = [
   { id: 'crosscompare', label: '교차 비교', icon: '⚖' },
   { id: 'diagnose', label: '제안서 진단', icon: '🔍' },
   { id: 'settings', label: '설정', icon: '⚙' },
+  { id: 'archive', label: '아카이브 검색', icon: '🔎' },
 ]
 
 const s = {
@@ -129,6 +131,7 @@ export default function App() {
         {activeTab === 'crosscompare' && <CrossCompareMode />}
         {activeTab === 'diagnose' && <DiagnoseMode />}
         {activeTab === 'settings' && <SettingsPanel />}
+        {activeTab === 'archive' && <ArchiveMode />}
       </main>
     </div>
     </ApiKeyGate>

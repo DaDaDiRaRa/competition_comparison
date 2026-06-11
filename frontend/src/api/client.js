@@ -234,6 +234,45 @@ export async function listDiagnosisReports() {
   return r.json()
 }
 
+// ── Archive search ──────────────────────────────────────────────────────────
+
+export async function listArchive(facilityType = null) {
+  const url = facilityType
+    ? `${BASE}/archive/list?facility_type=${encodeURIComponent(facilityType)}`
+    : `${BASE}/archive/list`
+  const r = await fetch(url)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
+
+export async function searchArchive(query, facilityType = null, resultFilter = 'all') {
+  const r = await fetch(`${BASE}/archive/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query: query || '',
+      facility_type: facilityType,
+      result_filter: resultFilter,
+    }),
+  })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `검색 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
+export async function getArchiveDetail(facilityType, competitionId) {
+  const r = await fetch(
+    `${BASE}/archive/${encodeURIComponent(facilityType)}/${encodeURIComponent(competitionId)}`
+  )
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `상세 조회 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
 /**
  * Run single-submission pipeline (내 프로젝트 등록).
  * formData: competition_name, facility_type, year, client, location,

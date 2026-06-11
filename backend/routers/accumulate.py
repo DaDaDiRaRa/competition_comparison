@@ -64,6 +64,7 @@ from services.pattern_builder import build_pattern
 from services.report_generator import generate_comparison_report
 from services.submission_report_generator import generate_submission_report
 from services.utils import sse, user_error_msg as _user_error_msg
+from services.archive_search import rebuild_index as _rebuild_archive_index
 
 router = APIRouter()
 
@@ -352,6 +353,9 @@ async def rerun_compare(facility_type: str, competition_id: str):
                 save_submission_report(facility_type, competition_id, s["company"], sub_report_html)
 
             yield sse({"type": "done", "step": "report", "_timestamp": ts})
+
+            try: _rebuild_archive_index()
+            except Exception as e: logger.warning("archive 인덱스 갱신 실패: %s", e)
 
             yield sse({
                 "type": "complete",

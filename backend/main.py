@@ -7,7 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from routers import accumulate, diagnose, settings, patterns, upload
+from routers import accumulate, diagnose, settings, patterns, upload, archive
+from services.archive_search import build_index as build_archive_index
 from services.db_manager import init_db
 from version import __version__
 
@@ -18,6 +19,11 @@ async def lifespan(app: FastAPI):
         init_db()
     except Exception as e:
         print(f"[WARNING] DB 초기화 실패 ({e}) — 설정 탭에서 DB 경로를 확인하세요.")
+    try:
+        n = build_archive_index()
+        print(f"[INFO] 아카이브 인덱싱 완료 — {n}개 공모")
+    except Exception as e:
+        print(f"[WARNING] 아카이브 인덱싱 실패 ({e}) — /api/archive 검색 결과가 비어있을 수 있습니다.")
     yield
 
 
@@ -36,6 +42,7 @@ app.include_router(diagnose.router, prefix="/api/diagnose", tags=["diagnose"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(patterns.router, prefix="/api/patterns", tags=["patterns"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
+app.include_router(archive.router, prefix="/api/archive", tags=["archive"])
 
 
 @app.get("/api/health")

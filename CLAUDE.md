@@ -54,6 +54,8 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
 **Core Services:**
 
 - `services/db_manager.py` - JSON-based database for projects, patterns, and reports
+  - `_atomic_write(path, data)` — JSON을 `.tmp`에 쓰고 `fsync` 후 rename. GCSFUSE write-back 캐시를 GCS까지 강제 플러시 (fsync 없으면 rename 시점에 GCS에 원본이 없어 데이터 유실)
+  - `_sync_write(path, content)` — HTML 등 텍스트 파일용. `flush + fsync`로 GCSFUSE 플러시
   - `save_submission_report / get_submission_report_path` — 개별 제출물 HTML 리포트
   - `save_diagnosis_report(filename, html) → Path` — `{db_path}/_diagnosis_reports/` 저장
   - `get_diagnosis_report_path(filename) → Path | None`
@@ -76,7 +78,7 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
 - `services/diagnosis_report_generator.py` - 진단 결과 HTML 리포트 생성 (LLM 호출 없음). `generate_diagnosis_report(diagnosis: dict) -> str`. 섹션: 종합점수 링 → 페이지 구성 바 → 패턴 편차 경고 → 지침서 충족도 → 요구사항 매핑 → 평가축별 상세 → 보강 포인트
 - `services/pattern_builder.py` - Builds patterns from winner data + qualitative LLM summary; `build_pattern()` now also collects `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords) for loser anti-pattern comparison
 - `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser
-  - `user_error_msg(e: Exception) → str` — 예외를 사용자 친화적 한국어 메시지로 변환. 401/502/429/timeout/PDF/JSON 패턴 매핑. `accumulate.py` / `diagnose.py`에서 공통 사용.
+  - `user_error_msg(e: Exception) → str` — 예외를 사용자 친화적 한국어 메시지로 변환. `LocalProtocolError`/illegal header(API 키 형식 불량) → 401/502/429/timeout/PDF/JSON 패턴 매핑 순. `accumulate.py` / `diagnose.py`에서 공통 사용.
   - `parse_json_response(text)` — 3단계 복구: ① 펜스 제거 → ② 직접 파싱 → ③ `{...}` 또는 `[...]` 추출 + 후행 쉼표 제거. LLM이 마크다운 코드블록이나 산문을 섞어도 JSON 추출 가능.
 - `services/pdf_rasterizer.py` - Legacy fallback rasterizer (not used by default)
 
@@ -95,6 +97,8 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
   - `settings.db_path` — `app_settings.json`의 `db_path` 값 우선, 없으면 `DEFAULT_DB_PATH`
   - `settings.has_db_path` — 사용자가 명시적으로 경로를 설정했는지 여부
   - `settings.set_db_path(path)` — 경로를 `app_settings.json`에 저장
+  - `settings.api_key` — 메모리 우선, 없으면 `ANTHROPIC_API_KEY` 환경변수. **양쪽 모두 `_sanitize_api_key()` 적용** — `echo -n "key"` 셸 아티팩트(`-n`접두사, `\r\n`, 따옴표) 자동 제거
+  - `settings.set_api_key(key)` — 세션 메모리에만 저장. 디스크 기록 안 함
 - `app_settings.json` - User-configurable settings (created at runtime)
 
 ### Frontend (React + Vite)
@@ -235,12 +239,14 @@ Test with curl or Postman by uploading files to:
 
 - `db_path`는 설정 탭 UI 또는 `POST /api/settings/db-path`로 변경. 미설정 시 `~/CompetitionAnalyzerDB` 자동 사용.
 - `anthropic_api_key`는 메모리에만 보관 — `app_settings.json`에 저장되지 않음(서버 재시작 시 초기화).
-- **Environment fallback:** `ANTHROPIC_API_KEY` env var
+- **Environment fallback:** `ANTHROPIC_API_KEY` env var. `echo -n "key"` 형태로 설정된 경우 `-n`접두사·`\r\n`·따옴표를 `_sanitize_api_key()`가 자동 제거.
 
 ## Important Notes
 
 - **Pipeline 분리:** 데이터 축적(`/api/accumulate/run`)은 PDF → JSON 추출까지만 수행. 비교분석/패턴/리포트는 저장된 프로젝트의 "비교분석 실행" 버튼(`rerun-compare`)에서만 실행.
 - **Database Location:** 각 competition: `{db_path}/{facility_type}/{competition_id}/` — `_meta.json`, `_brief.json`, `_comparison.json`, `_report.html`, `submissions/*.json`, `submissions/*_report.html`. 진단 리포트: `{db_path}/_diagnosis_reports/*.html`. 교차비교 리포트: `{db_path}/_cross_reports/*.html`.
+- **GCSFUSE 쓰기 보장:** Cloud Run gen2 + GCS 버킷 마운트(GCSFUSE)에서 write-back 캐시로 인해 `rename()` 시점에 GCS에 원본이 없으면 데이터 유실. 모든 파일 쓰기는 `f.flush(); os.fsync(f.fileno())` 후 rename(`_atomic_write`) 또는 `_sync_write` 사용 — 새 파일 저장 함수 추가 시 반드시 fsync 포함.
+- **보안 — 커밋 금지 파일:** `service.yaml`은 `.gitignore`에 등록. Cloud Run 서비스 YAML은 API 키 등 시크릿이 평문으로 포함될 수 있으므로 절대 커밋하지 않음. 수정 필요 시 로컬에서만 편집 후 `gcloud run services replace service.yaml` 실행.
 - **FACILITY_TYPES 구조:** `{key: {"label_ko": str, "group": "redev"|"general"}}`. `group`으로 어느 axes 세트를 쓸지 결정. `facility_label(key)`, `axes_for(key)` 헬퍼 사용. 단순 `FACILITY_TYPES[key]`는 dict를 반환하므로 문자열로 쓰면 안 됨.
 - **Comparison Axes — 두 그룹:**
   - `"redev"` 그룹 (재건축/대안설계): `business_viability`, `member_benefit`, `product_competitiveness`, `site_planning`, `community`, `design_brand`, `constructability`, `firm_capability`
@@ -310,3 +316,131 @@ Test with curl or Postman by uploading files to:
 - **comparison.json 스키마:** `{submissions: {company: {axis: {grade, strengths, weaknesses, brief_compliance, notes}}}, ranking, blind_ranking, key_differentiators, winner_strengths, loser_weaknesses, gap_analysis: {blind_top1, actual_winners, top1_matches_winner, alignment, notes}}`. `ranking`은 호환성을 위해 `blind_ranking`과 동일 값 유지. `grade`는 "A"|"B"|"C"|"D"|"E"|null.
 - **diagnosis.json 스키마:** `{axes: {axis: {grade, strengths, weaknesses, recommendations, evidence}}, overall_grade, brief_compliance, requirement_mapping, pattern_deviation, strengths, weaknesses, recommendations}`. `overall_grade`도 "A"|"B"|"C"|"D"|"E".
 - **Project Number:** 폴더명 = `{project_number}_{slugified_competition_name}`. 구 데이터(`year` 필드만 있는 폴더)는 폴백 처리.
+
+---
+
+## Archive Mode (신규 기능)
+
+### 개요
+
+Competition Analyzer에 **ArchiveMode 탭**을 추가한다. 기존 분석 파이프라인은 건드리지 않고, 새 탭과 새 백엔드 엔드포인트만 추가한다.
+
+**목적:** 분석하고 버려지던 `_comparison.json` + `_patterns.json`을 검색 가능한 팀 공유 자산으로 전환. 새 공모 시작 시 자연어로 과거 사례를 찾아 참고할 수 있게 한다.
+
+**PPT 03번 구현방향 1·2번에 해당:**
+1. 프로젝트 정보 입력 체계 → 기존 `_meta.json` + `_comparison.json` 재사용
+2. 자연어 검색 기능 → FTS5 + Claude API 레이어
+
+---
+
+### 데이터 소스
+
+아카이브는 GCS(`/data`)에 이미 저장된 파일을 읽는다. 새로 저장하는 파일은 없다.
+
+```
+/data/{facility_type}/{competition_id}/
+  _meta.json          ← 프로젝트명, 시설유형, 위치, 연도
+  _comparison.json    ← 비교분석 결과 (submissions, ranking, gap_analysis)
+  _patterns_{facility_type}.json ← 시설유형별 당선/낙선 패턴 통계
+```
+
+**검색 대상 필드:**
+- `competition_id` — 프로젝트 번호 + 이름
+- `facility_type` — 시설유형 (residential/public/medical 등)
+- `gap_analysis.alignment` — 블라인드 분석 정합도
+- `ranking` — 당선 회사
+- `qualitative_insights.winner_patterns` — 당선 패턴 키워드
+- `qualitative_insights.key_differentiators` — 핵심 차별화 요소
+- `concept_keywords` — 설계 개념 키워드
+
+---
+
+### 백엔드 추가 사항
+
+**신규 파일:**
+```
+backend/routers/archive.py       ← 검색 엔드포인트
+backend/services/archive_search.py ← 검색 로직 (FTS + Claude API)
+```
+
+**엔드포인트:**
+```
+GET  /api/archive/list           ← 전체 아카이브 목록 (facility_type 필터 선택)
+POST /api/archive/search         ← 자연어 검색
+     body: { query: str, facility_type?: str, result_filter?: "win"|"lose"|"all" }
+GET  /api/archive/{facility_type}/{competition_id}  ← 개별 공모 상세
+```
+
+**검색 로직 (`archive_search.py`):**
+1. `/data` 경로에서 `_comparison.json` + `_meta.json` 파일 목록 수집
+2. SQLite in-memory DB + FTS5로 인덱싱 (앱 시작 시 1회, 이후 `/data` 변경 감지 시 갱신)
+3. Claude API로 자연어 쿼리 → 검색 키워드 + facility_type 추출
+4. FTS5로 매칭 → 결과 카드 반환
+
+**주의:**
+- `_atomic_write` / `_sync_write` 패턴 — 아카이브는 읽기 전용이므로 쓰기 없음
+- SQLite는 디스크 저장 없이 in-memory 사용 (GCS에 별도 파일 생성 안 함)
+- Claude API 호출은 `services/llm_client.py::call_messages()` 사용
+
+---
+
+### 프론트엔드 추가 사항
+
+**신규 파일:**
+```
+frontend/src/components/ArchiveMode/
+  ArchiveMode.jsx      ← 메인 탭 컴포넌트 (검색창 + 결과 목록)
+  ArchiveCard.jsx      ← 개별 공모 카드
+  ArchiveDetail.jsx    ← 카드 클릭 시 상세 (comparison.json 전체 표시)
+```
+
+**UI 방향:**
+- 기존 화이트 테마 + 건원 RED 액센트 유지 (`kunwon-tokens.css` 준수)
+- 검색창 상단 고정, 결과 카드 그리드 (시설유형 뱃지, 당선사, alignment 색상 표시)
+- 카드 클릭 → 슬라이드오버 패널로 `ArchiveDetail` 표시 (별도 라우트 없음)
+- `useMeta()` 훅으로 facility_type 한국어 레이블 표시
+
+**탭 추가 위치 (`App.jsx`):**
+기존 5개 탭 뒤에 추가:
+```jsx
+{ key: 'archive', label: '아카이브 검색' }
+```
+
+**카드 표시 필드:**
+- `competition_id` (프로젝트명)
+- `facility_type` (시설유형 — `facilityLabel()`)
+- `ranking[0]` (1위 회사)
+- `gap_analysis.alignment` (색상 뱃지: high=green, partial=orange, low=red)
+- `key_differentiators` (최대 3개 태그)
+
+---
+
+### 인덱싱 전략
+
+GCS 마운트(`/data`)에서 직접 파일을 읽어 in-memory SQLite FTS5로 인덱싱.
+앱 시작 시 `lifespan()`에서 `archive_search.py::build_index()` 1회 실행.
+파일 추가 시 (`rerun-compare` 완료 후) `rebuild_index()` 호출로 갱신.
+
+```python
+# archive_search.py 핵심 구조
+def build_index(db_path: str) -> sqlite3.Connection:
+    """
+    /data 하위 _comparison.json 전체 스캔 → in-memory FTS5 인덱싱
+    """
+
+def search(conn, query: str, facility_type: str = None) -> list[dict]:
+    """
+    1. llm_client으로 query → keywords 추출
+    2. FTS5 MATCH로 검색
+    3. 결과 카드 반환
+    """
+```
+
+---
+
+### 주의사항
+
+- **기존 파이프라인 변경 금지:** `accumulate.py`, `comparator.py`, `db_manager.py` 수정 없음
+- **`rerun-compare` 완료 후 인덱스 갱신:** `routers/accumulate.py`의 `rerun-compare` 엔드포인트 완료 시점에 `rebuild_index()` 호출 1줄 추가 (최소 침습)
+- **GCS 읽기 전용 접근:** 아카이브 검색은 `/data` 파일을 읽기만 함. 쓰기 없으므로 `_atomic_write` 불필요
+- **인덱스 크기:** 현재 ~5개 공모, 향후 수십 개 수준. in-memory SQLite로 충분
