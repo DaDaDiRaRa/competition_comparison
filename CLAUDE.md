@@ -399,6 +399,7 @@ frontend/src/components/ArchiveMode/
 - 검색창 상단 고정, 결과 카드 그리드 (시설유형 뱃지, 당선사, alignment 색상 표시)
 - 카드 클릭 → 슬라이드오버 패널로 `ArchiveDetail` 표시 (별도 라우트 없음)
 - `useMeta()` 훅으로 facility_type 한국어 레이블 표시
+- **평가축 아코디언:** `ArchiveDetail`의 제출사별 평가 섹션은 세로 리스트로 표시. 각 행(축 라벨 + 등급 뱃지) 클릭 시 인라인 아코디언 펼침 → 강점(초록)/약점(빨강)/지침 충족(파랑)/노트(회색 이탤릭) 순으로 표시. `axisData`에 `strengths|weaknesses|notes|brief_compliance` 중 하나라도 있어야 `▼` 표시 + 클릭 가능. 내부 `AxisAccordion` 컴포넌트로 개별 행 상태 관리 (펼침 상태는 행마다 독립)
 
 **탭 추가 위치 (`App.jsx`):**
 기존 5개 탭 뒤에 추가:
