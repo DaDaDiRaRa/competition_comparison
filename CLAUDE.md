@@ -448,7 +448,7 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 - **SQLite threading:** FastAPI sync 라우트는 threadpool에서 실행되므로 startup 스레드에서 생성된 in-memory 커넥션이 cross-thread 에러(500)를 유발. `sqlite3.connect(":memory:", check_same_thread=False)` 필수
 - **자연어 검색 폴백:** `search_natural()`에서 Claude API 호출 실패(API 키 미설정 등) 시 `search_keyword(q)`로 자동 폴백 — 단순 키워드 검색은 API 키 없이도 동작. 전체 자연어 문장은 폴백으로 결과 없을 수 있음
 - **한국어 FTS 동의어:** `FACILITY_SYNONYMS` dict로 시설유형 FTS 컬럼에 영어 키 + 한국어 레이블 + 구어체 동의어 함께 저장 (예: "public" 컬럼 = "public 공공시설 시청 구청 관공서 ..."). `search_natural()` 프롬프트에 `_FACILITY_HINT` 블록 포함 — 쿼리에서 시설 카테고리 언급 시 정식 한국어 레이블도 키워드에 포함하도록 지시
-- **평가축 rubric 구조 (config.py):** 각 axis는 `description`(1줄) + `signals`(PDF에서 볼 신호 4~5개) + `rubric`(A~E 등급 정의 문장)을 가짐. `FACILITY_AXIS_OVERRIDES[facility_type][axis_key]`로 시설유형별 `signals_extra` + `rubric_hint` 추가. `axis_rubric_for(facility_type, axis_key)` 헬퍼가 base + override 머지. `myproject_analyzer._build_axis_rubric_block()`이 이를 프롬프트에 직렬화하여 LLM이 직접 매칭 가능한 룰북 제공. 현재 시드: 의료(program/technical) · 주거(site/program) · 공공(public_value/brief) · 교육(program) · 교통(program). 다른 시설유형은 base rubric만 사용 — 점진적 확장.
+- **평가축 rubric 구조 (config.py):** 각 axis는 `description`(1줄) + `signals`(PDF에서 볼 신호 4~5개) + `rubric`(A~E 등급 정의 문장)을 가짐. `FACILITY_AXIS_OVERRIDES[facility_type][axis_key]`로 시설유형별 `signals_extra` + `rubric_hint` 추가. `axis_rubric_for(facility_type, axis_key)` 헬퍼가 base + override 머지. `build_axis_rubric_block(facility_type, axes_keys=None)`은 LLM 프롬프트용 룰북 직렬화 공유 헬퍼 (config.py 정의, `myproject_analyzer` + `comparator` 양쪽 사용). 전 14개 시설유형 override 시드 완료(시설당 평균 2축). `grade_justification` 필드로 LLM이 등급 부여 근거(신호 X/Y 충족) 1줄 자기검증을 강제 — MyProject deep_analyze · 경쟁공모 블라인드 채점 · 진단 모두 동일 형식 출력.
 
 ---
 
@@ -500,27 +500,30 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 
 **아카이브 검색 연동:** `build_archive_index()`가 `_myprojects/` 하위도 스캔하도록 확장. FTS5 컬럼에 `narrative`, `search_keywords`, `concept_text`, `memo` 추가 → 자연어 질의 시 풍부하게 매칭.
 
-### 3. 평가축 rubric 확장 (signals + A-E 정의 시스템)
+### 3. 평가축 rubric 시스템 (signals + A-E 정의)
 
-**배경:** `config.py`의 `axis_rubric_for()` + `FACILITY_AXIS_OVERRIDES`로 시설유형별 평가 룰북 구조를 구축했고 `myproject_analyzer.py`가 이를 프롬프트에 주입함. 현재 시드된 시설유형은 5개(의료/주거/공공/교육/교통)만이고, `comparator.py`(경쟁공모 비교)는 아직 base rubric만 사용. 다음 단계는 이 시스템을 전 영역으로 확장.
+**3-A · 3-B · 3-C 완료 (2026-06-12):**
 
-**할 일:**
+- **3-A 완료** — `config.py`에 `build_axis_rubric_block(facility_type, axes_keys=None)` 공유 헬퍼 추가. `comparator.py`의 `_make_blind_static()` + `_make_diagnose_static()`도 이 헬퍼로 rubric block 주입. MyProject deep_analyze · 경쟁공모 블라인드 채점 · 새 제안서 진단 모두 동일 룰북으로 등급 부여 → 교차 일관성 확보. 정적 prefix는 facility_type별 ~2000 tokens로 증가했지만 `cache_control: ephemeral` 마킹으로 첫 호출만 비용 발생, 이후 90% 캐시 할인.
 
-- **A. `comparator.py`에 rubric 주입** — `_make_blind_static()` / `_make_diagnose_static()` 프롬프트의 `AXIS_DEFINITIONS` 블록을 `_build_axis_rubric_block()` 호출로 교체. 경쟁공모 블라인드 채점도 동일 룰북으로 등급 부여 → 같은 PDF가 MyProject·경쟁공모 어디서 분석되든 등급 일관성 보장. 토큰 캐시(`cache_control`) 활용 — facility_type별 rubric block을 정적 prefix에 포함시켜 90% 캐시 할인 유지.
+- **3-B 완료** — 전체 14개 시설유형에 `FACILITY_AXIS_OVERRIDES` 시드. 시설유형별 평균 2축, 총 30+ override 엔트리. 주요 보강:
+  - **상업** program/site (MD믹스·체류시간·보행 유입), **문화** public/form/program (운영 시나리오·랜드마크성·백스테이지 분리)
+  - **숙박** program/site (객실 다양성·뷰·F&B 동선), **업무** program/brief (전용률·NLA·층고)
+  - **산업** technical/program (하중·전력·zone 분리), **복합** program/site (간섭 차단·share 동선)
+  - **마스터플랜** site/public/concept (축선·네트워크·single big idea)
+  - **재건축** business/member 정량 임계값 (자산가치 1.5×+, 남향 80%+), **대안설계** business/design (기존안 대비 정량)
+  - 기존 시드: 의료/주거/공공/교육/교통
 
-- **B. 나머지 9개 시설유형 `FACILITY_AXIS_OVERRIDES` 시드:**
-  - **상업** (`commercial`): program_planning (앵커 매장·MD믹스·체류시간), site_response (보행 유입·접근성)
-  - **문화·집회** (`cultural`): public_value (공연/전시 운영 시나리오), architectural_form (랜드마크성·시그니처)
-  - **숙박·위락** (`hospitality`): product_competitiveness 격 (객실 유형·뷰·럭셔리 디테일), site_response (조망·소음)
-  - **업무** (`office`): program_planning (개방형/혼합·코어 효율), brief_compliance_quant (NLA 비율·층고)
-  - **산업** (`industrial`): technical_feasibility (생산동선·하중·전력), program_planning (zone 분리)
-  - **복합** (`mixed_use`): program_planning (용도간 간섭 차단·share 동선), site_response (저층부 활성화)
-  - **마스터플랜** (`masterplan`): site_response (단지/도시 스케일 맥락), public_value (오픈스페이스 네트워크)
-  - **재건축** (`reconstruction`): 이미 redev 그룹 별도 8축이 있으므로, override는 사업성/조합원혜택의 시드 정량 임계값(자산가치 증가율 %, 분담금 감소율 %)만 추가
-  - **대안설계** (`alternative`): reconstruction과 유사하되 base 비교 강조 (기존안 대비 우위 정량)
+- **3-C 완료** — `grade_justification` 자기검증 필드 3개 분석 스키마에 추가:
+  - MyProject deep_analyze: `axes_evidence.<axis>.grade_justification`
+  - 경쟁공모 블라인드 채점: `submissions.<label>.<axis>.grade_justification`
+  - 제안서 진단: `axes.<axis>.grade_justification`
+  - 형식: `"신호 X/Y개 충족 (충족: ... / 미충족: ...) → <등급> 기준 행과 일치"`
+  - UI 노출: MyProject 심층 리포트(grade pill 아래 monospace 박스) + ArchiveDetail AxisAccordion(펼침 영역 맨 위 ▣ 박스)
+  - 기존 데이터(필드 없음) 호환: 빈 값이면 박스 자체 미표시
 
-- **C. rubric 자기검증 단계 추가:** deep_analyze 출력에 `grade_justification: {axis_key: "신호 X/Y개 충족 → 등급 기준 행 매칭"}` 필드 추가. LLM이 자기 등급 부여 근거를 명시하게 함 → 후속 검토 시 임원이 즉시 "왜 B?" 검증 가능. 환각 억제 효과도 큼.
+**3-D 미진행 — rubric 버전 관리:**
 
-- **D. rubric 버전 관리:** `axis_rubric_for()` 반환에 `version: "v1"` 메타 포함. `_deep.json` 저장 시 어떤 rubric 버전으로 평가했는지 기록 → 향후 rubric 개정 시 기존 데이터 재평가 트리거 가능. 룰북 변경 이력은 `config.py` 상단 주석.
+`axis_rubric_for()` 반환에 `version: "v1"` 메타 포함. `_deep.json`/`_comparison.json` 저장 시 어떤 rubric 버전으로 평가했는지 기록 → 향후 rubric 개정 시 기존 데이터 재평가 트리거 가능. 룰북 변경 이력은 `config.py` 상단 주석. 진행 시 `build_axis_rubric_block()` 호출하는 곳마다 버전 메타 전파 + `comparison.json` 스키마 업데이트 필요.
 
-**주의:** rubric 시드는 임원·실무진 리뷰가 필수. 본 문서의 시드 내용은 일반적 건축 지식 기반 초안이며, 실제 회사 평가 관점·과거 당선/낙선 분석을 반영해 보정해야 함. 시설유형 1개씩 검토 후 머지 권장.
+**주의:** rubric 시드는 임원·실무진 리뷰가 필수. 시드 내용은 일반적 건축 지식 기반 초안이며, 실제 회사 평가 관점·과거 당선/낙선 분석을 반영해 보정해야 함. 시설유형 1개씩 검토 후 머지 권장.
