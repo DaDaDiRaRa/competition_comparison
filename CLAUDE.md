@@ -59,7 +59,7 @@ Located in `backend/` (repo root), the FastAPI application serves six routers, r
 
 6. **`routers/archive.py`** - 아카이브 자연어 검색 (Archive Mode 섹션 참조)
 
-**MyProject 심층 분석:** 별도 라우터 없음. `routers/accumulate.py`가 단일 제출물 등록 시 `services/myproject_analyzer.deep_analyze()` 호출 → `submissions/{slug}_deep.json` + `_deep.html` 생성. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report`로 서빙.
+**MyProject 심층 분석:** 별도 라우터 없음. `routers/accumulate.py`가 단일 제출물 등록 시 `services/myproject_analyzer.deep_analyze()` 호출 → `submissions/{slug}_{result}_deep.json` + `_{result}_deep.html` 생성. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report`로 서빙.
 
 **Core Services:**
 
@@ -136,7 +136,7 @@ Located in `frontend/` (repo root), the app has six main tabs:
 - `AccumulateMode/ComparisonResult.jsx` - 비교 결과 카드. `GapAnalysisCard`(블라인드 vs 실제 결과 정합도) + `key_differentiators` + `blind_ranking` 순위 + 회사별 `AxisCard` 그리드. `ranking` 옆에 "(블라인드 분석 기준)" 라벨 표시
 - `DiagnoseMode/DiagnosisResult.jsx` - 진단 결과 렌더링. `QuantCompare` 컴포넌트로 당선 평균 vs 낙선 평균 vs 내 제출물 정량 비교 바 표시. `pattern` prop 필요
 - `Settings/PatternViewer.jsx` - 시설유형 탭 전환 + 당선/낙선 통계. 섹션: 페이지 구성 이중 바 → 정량 지표 테이블 → 컨셉 키워드 태그 → 질적 인사이트 3열
-- `SubmissionEditor/SubmissionEditor.jsx` - 저장된 제출물 메타·정량·결과 라벨 인라인 편집. `getSubmission` / `updateSubmission` 호출. `ProjectList`에서 "편집" 버튼으로 진입. `QUANT_FIELDS` 11개 정량 필드 + `MASS_TYPE_OPTIONS` + `RESULT_OPTIONS`(win/contracted/lose) 폼
+- `SubmissionEditor/SubmissionEditor.jsx` - 저장된 제출물 메타·정량·결과 라벨 인라인 편집. `getSubmission` / `updateSubmission` 호출. `ProjectList`에서 "편집" 버튼으로 진입. `QUANT_FIELDS` 10개 정량 필드 + `MASS_TYPE_OPTIONS` + `RESULT_OPTIONS`(win/contracted/lose) 폼
 - `common/ProgressLog.jsx` - Real-time SSE log display with progress bars (`▓░` style), current item highlight, elapsed time counter (+Ns)
 - `hooks/useMeta.jsx` - **프론트 메타 단일 소스.** `MetaProvider`로 앱 전체를 감싸면 `/settings/meta` 1회 fetch. `useMeta()` 반환값: `{ ready, facilityLabel, facilityGroup, facilityTypes, pageTypeLabel, axesFor, axisLabel }`
 
@@ -548,3 +548,45 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 `axis_rubric_for()` 반환에 `version: "v1"` 메타 포함. `_deep.json`/`_comparison.json` 저장 시 어떤 rubric 버전으로 평가했는지 기록 → 향후 rubric 개정 시 기존 데이터 재평가 트리거 가능. 룰북 변경 이력은 `config.py` 상단 주석. 진행 시 `build_axis_rubric_block()` 호출하는 곳마다 버전 메타 전파 + `comparison.json` 스키마 업데이트 필요.
 
 **주의:** rubric 시드는 임원·실무진 리뷰가 필수. 시드 내용은 일반적 건축 지식 기반 초안이며, 실제 회사 평가 관점·과거 당선/낙선 분석을 반영해 보정해야 함. 시설유형 1개씩 검토 후 머지 권장.
+
+---
+
+## Known Issues — TODO
+
+코드 전수 검토 결과 발견된 미수정 이슈. 우선순위 표시: 🔴 = 실제 작동 오류 / 🟡 = 중복·캡슐화 / 🟢 = 엣지 케이스.
+
+### 🔴 실제 작동 오류 (사용자가 체감)
+
+1. **업로드 한도 에러 메시지 ↔ 실제 상수 불일치**
+   - `backend/routers/upload.py:51` — 메시지 `"300MB 초과"`인데 `_MAX_TOTAL = 600 * 1024 * 1024` (600MB)
+   - `backend/routers/accumulate.py:26` — 메시지 `"50MB 초과"`인데 `_MAX_PDF_BYTES = 200 * 1024 * 1024` (200MB)
+   - 수정안: 메시지를 상수에서 동적 생성(`{_MAX_TOTAL // 1024 // 1024}MB`)하거나 상수/메시지를 일치시킴
+
+2. **`load_pattern()` None 반환 미처리 — 새 시설유형 진단 시 항상 크래시**
+   - `services/db_manager.py:553` — 시그니처는 `-> dict`지만 파일 없으면 `_read_json`이 `None` 반환
+   - `routers/diagnose.py:60-61` — `patterns.get("win_count", 0)` → `AttributeError: 'NoneType'`
+   - `services/comparator.py:_run_diagnose_sync:416` — `winning_patterns.get("qualitative_insights", {})` 동일 크래시
+   - 외부 try/except가 잡지만 사용자는 "AttributeError" 같은 의미 없는 메시지를 봄
+   - 수정안: `load_pattern` 시그니처를 `-> dict | None`으로 정정 + `diagnose.py` / `comparator.py`에서 None 가드 (`patterns = patterns or {}`)
+
+### 🟡 중복 / 캡슐화
+
+3. **등급 처리 로직 3중 복제 — 동기화 누락 위험**
+   - `_to_grade()` + `_LEGACY_GRADE_MAP` + A~E 임계값(8.5/7.0/5.0/3.0)이 동일하게 존재:
+     - `services/report_generator.py:30`
+     - `services/diagnosis_report_generator.py:110` (`overall_grade`/`overall_score` 폴백 추가)
+     - `services/myproject_report_generator.py:14` (등급 색 dict만)
+   - `_GRADE_COLOR` hex값(`#16a34a` 등)도 3곳 모두 동일하게 박혀있음 → 한 곳만 바꾸면 리포트별 색 어긋남
+   - CLAUDE.md "Report Generation Rule"에서 "독립 문서"라 의도된 분리지만, 등급 판정·색 매핑 같은 비-렌더링 로직은 `services/grade_helpers.py`로 분리 가능 (HTML 렌더링 함수는 각 파일에 유지)
+
+4. **`ArchiveSearchIndex` 사설 속성 직접 접근**
+   - `routers/archive.py:34, 57` — `index._cards.values()` 직접 호출 (underscore-prefixed)
+   - 수정안: `ArchiveSearchIndex.all_cards() -> list[dict]` 공개 메서드 추가
+
+### 🟢 엣지 케이스
+
+5. **`/run-single` 재실행 시 `_meta.json`의 `submissions` 리스트 초기화**
+   - `routers/accumulate.py:676-679` → `save_project_meta(...)`는 항상 `meta["submissions"] = []`로 시작
+   - 같은 `project_number + competition_name`으로 두 번째 회사 등록 시 첫 회사의 메타 엔트리가 사라짐 (submission JSON 파일은 디스크에 고아로 남음)
+   - MyProjectMode는 1프로젝트=1제출물 전제라 통상 발생 안 함. 다회사 추가는 `/add-submission` 사용
+   - 수정안: `save_project_meta`에 `merge=True` 옵션을 두고 기존 `submissions` 리스트를 보존하거나, `/run-single` 진입 시 기존 cid 존재 여부 검사 후 명시적 에러
