@@ -80,7 +80,14 @@ def save_project_meta(
     project_number: str,
     client: str,
     location: str,
+    extra: dict | None = None,
 ) -> Path:
+    """프로젝트 _meta.json 저장.
+
+    extra: MyProjectMode 등에서 전달하는 선택 메타 (procurement_type, project_phase,
+    role, partners, tags, memo, gross_floor_area, floors, units 등).
+    빈 값/None은 자동 제거하여 _meta.json 비대화 방지.
+    """
     comp_dir = get_competition_dir(facility_type, competition_id)
     comp_dir.mkdir(parents=True, exist_ok=True)
     (comp_dir / "submissions").mkdir(exist_ok=True)
@@ -95,6 +102,11 @@ def save_project_meta(
         "created_at": datetime.now().isoformat(),
         "submissions": [],
     }
+    if extra:
+        for k, v in extra.items():
+            if v in (None, "", [], {}):
+                continue
+            meta[k] = v
     _atomic_write(comp_dir / "_meta.json", meta)
     return comp_dir
 

@@ -448,3 +448,56 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 - **SQLite threading:** FastAPI sync 라우트는 threadpool에서 실행되므로 startup 스레드에서 생성된 in-memory 커넥션이 cross-thread 에러(500)를 유발. `sqlite3.connect(":memory:", check_same_thread=False)` 필수
 - **자연어 검색 폴백:** `search_natural()`에서 Claude API 호출 실패(API 키 미설정 등) 시 `search_keyword(q)`로 자동 폴백 — 단순 키워드 검색은 API 키 없이도 동작. 전체 자연어 문장은 폴백으로 결과 없을 수 있음
 - **한국어 FTS 동의어:** `FACILITY_SYNONYMS` dict로 시설유형 FTS 컬럼에 영어 키 + 한국어 레이블 + 구어체 동의어 함께 저장 (예: "public" 컬럼 = "public 공공시설 시청 구청 관공서 ..."). `search_natural()` 프롬프트에 `_FACILITY_HINT` 블록 포함 — 쿼리에서 시설 카테고리 언급 시 정식 한국어 레이블도 키워드에 포함하도록 지시
+
+---
+
+## Next Steps (예정)
+
+### 1. MyProjectMode 메타데이터 확장 → 아카이브 자연어 검색 강화
+
+**배경:** 현재 `MyProjectMode`(내 프로젝트 등록)는 경쟁공모용 최소 필드(`competition_name`, `facility_type`, `project_number`, `client`, `location`, `company`, `result`)만 받음. 하지만 실무는 경쟁공모 외에도 **수의계약·지명·턴키·민간발주** 등 다양한 수주 형태가 있고, 이 맥락이 풍부할수록 아카이브 자연어 검색이 정확해짐 ("○○구 수의계약으로 했던 학교 있어?" 같은 질의 대응).
+
+**할 일:**
+- `MyProjectMode.jsx` 폼에 상세 메타 필드 추가 후보:
+  - **수주 형태** (`procurement_type`): 경쟁공모 / 수의계약 / 지명 / 턴키 / 민간발주 / 기타
+  - **사업 단계** (`project_phase`): 기획 / 계획 / 기본설계 / 실시설계 / CM
+  - **연면적·층수·세대수** (정량 메타 — 이미 추출 파이프라인에서 일부 잡지만 사용자가 명시적으로 넣으면 검색 정확도↑)
+  - **참여 역할** (`role`): 주관사 / 컨소시엄 / 협력사
+  - **컨소시엄 파트너** (`partners`: 자유 텍스트)
+  - **프로젝트 태그** (`tags`: 자유 키워드 — 예: "친환경", "리모델링", "도시재생")
+  - **프로젝트 메모** (`memo`: 자유 텍스트, 자연어 검색 핵심 소스)
+- 백엔드: `routers/upload.py`(또는 my-project 전용 라우터)에서 위 필드 받아 `_meta.json`에 저장
+- `services/archive_search.py`의 FTS5 스키마에 `procurement_type`, `tags`, `memo`, `partners` 컬럼 추가 → `build_index()`에서 인덱싱
+- `search_natural()` 프롬프트에 수주 형태 동의어(`FACILITY_SYNONYMS`와 같은 방식의 `PROCUREMENT_SYNONYMS`) 추가 — "수의계약", "지명공모", "턴키" 등 구어체 매핑
+- `ArchiveCard` / `ArchiveDetail`에 `procurement_type` 뱃지·태그 표시
+
+**주의:** 기존 `_meta.json` 호환성 유지 — 새 필드는 모두 optional, 누락 시 빈 문자열 폴백. `MyProjectMode`만 우선 확장하고 `AccumulateMode`는 기존 그대로 둠 (경쟁공모는 본래 정형화된 메타가 충분).
+
+### 2. MyProjectMode 심층 분석 파이프라인 (단일 제출물 deep-analysis)
+
+**배경:** `AccumulateMode`(경쟁공모)는 한 번에 N개 제출물을 비교해야 하므로 제출물당 토큰을 절약해야 함(2-pass blind-reveal도 슬림화 위한 설계). 반면 `MyProjectMode`는 **항상 1개 제출물**이라 토큰 예산이 훨씬 여유로움 → **분석 깊이를 대폭 늘려도 됨**. 이 깊이가 이후 아카이브 자연어 검색 인덱스의 품질을 좌우.
+
+**파이프라인:** 사용자가 "등록 시작" 클릭 → 백엔드가 단일 제출물 PDF에 대해 deep-analysis → `_myproject.json`(또는 `_deep.json`) 저장 → `generate_myproject_report(doc)`로 HTML 리포트 생성 → 프론트엔드에 결과 카드 + "리포트 열기" 링크 표시.
+
+**심층 분석 내용 (경쟁공모 대비 추가/확장):**
+- **페이지별 상세 분석:** 각 페이지마다 (a) 무엇을 보여주는가 (b) 핵심 메시지 (c) 시각적 강점 (d) 정보 밀도/가독성. 27개 페이지 유형 분류 결과를 그대로 쓰되 페이지별 narrative 추가
+- **평가축별 deep evidence:** 7~8축 각각에 strengths/weaknesses 각 5~10개 (경쟁공모는 2~3개), 각 항목마다 `(p.N)` 인용 + 짧은 직접 인용문(quote) 포함
+- **정량 메트릭 완전 추출:** 연면적·건폐율·용적률·층수·세대수·주차대수·친환경 인증·공사비·공기 등 가능한 모든 수치 + 출처 페이지
+- **컨셉 narrative:** 디자인 의도, 핵심 컨셉 키워드, 스토리텔링 구조, 차별화 포인트를 자연어 단락으로 정리 (검색 인덱스 핵심)
+- **요구사항 매핑:** 지침서 PDF가 있으면 요구사항 항목별 충족 여부 + 어느 페이지에서 대응했는지 매핑 테이블
+- **보강 포인트:** 결과가 `lose`이면 당선 패턴 대비 누락된 페이지·축·메트릭. 결과가 `win`/`contracted`여도 "다음 유사 공모 시 강조할 포인트" 추출
+- **검색 키워드 자동 생성:** 자연어 검색에 걸리도록 5~15개 키워드를 LLM이 직접 생성 → `_myproject.json`의 `search_keywords` 필드 → FTS5 인덱스에 포함
+
+**토큰 예산:** 경쟁공모 1제출물당 입력 ~30K, Pass1 출력 ~3K였다면, MyProject는 입력 동일하되 출력 max_tokens=16K~32K 허용. 다단계 LLM 호출도 가능 (Pass 1: 정량+페이지 분석 / Pass 2: 평가축 deep evidence / Pass 3: narrative + 키워드).
+
+**산출물:**
+- `{db_path}/_myprojects/{project_number}_{slug}/_deep.json` — 위 모든 내용을 담은 통합 JSON
+- `{db_path}/_myprojects/{project_number}_{slug}/_report.html` — HTML 리포트 (페이지별 섹션 + 정량 테이블 + 축별 deep card + narrative + 키워드 태그). LLM 호출 없음, JSON → HTML 렌더링만
+- `_meta.json` — 1번 항목에서 정의한 메타데이터
+
+**신규 파일:**
+- `backend/services/myproject_analyzer.py` — deep-analysis 멀티패스 호출
+- `backend/services/myproject_report_generator.py` — HTML 렌더링 (LLM 호출 금지)
+- `backend/routers/myproject.py`(또는 기존 `upload.py` 확장) — `/api/myproject/run` SSE 엔드포인트
+
+**아카이브 검색 연동:** `build_archive_index()`가 `_myprojects/` 하위도 스캔하도록 확장. FTS5 컬럼에 `narrative`, `search_keywords`, `concept_text`, `memo` 추가 → 자연어 질의 시 풍부하게 매칭.

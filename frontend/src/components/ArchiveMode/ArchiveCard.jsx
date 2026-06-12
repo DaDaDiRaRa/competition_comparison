@@ -7,6 +7,15 @@ const ALIGNMENT_META = {
   unknown: { label: '미상',   color: 'var(--color-text-faint)' },
 }
 
+const PROCUREMENT_LABEL = {
+  competition: '경쟁공모',
+  negotiated:  '수의계약',
+  invited:     '지명공모',
+  turnkey:     '턴키',
+  private:     '민간발주',
+  other:       '기타',
+}
+
 const s = {
   card: {
     background: 'var(--color-bg-surface)',
@@ -36,6 +45,16 @@ const s = {
     color: 'var(--color-accent)',
     fontWeight: 'var(--font-weight-semibold)',
     border: '1px solid var(--color-accent-border)',
+    flexShrink: 0,
+  },
+  procurementBadge: {
+    fontSize: 'var(--font-size-xs)',
+    padding: '2px 8px',
+    borderRadius: 20,
+    background: 'var(--color-bg-surface-alt)',
+    color: 'var(--color-text-muted)',
+    fontWeight: 'var(--font-weight-medium)',
+    border: '1px solid var(--color-border)',
     flexShrink: 0,
   },
   alignmentBadge: (color) => ({
@@ -86,7 +105,9 @@ export default function ArchiveCard({ card, onSelect }) {
   const alignMeta = ALIGNMENT_META[alignment] || ALIGNMENT_META.unknown
   const winner = ranking[0]
   const diffs = (key_differentiators || []).slice(0, 3)
+  const userTags = Array.isArray(meta.tags) ? meta.tags.slice(0, 3) : []
   const title = meta.competition_name || competition_id
+  const procurementLabel = PROCUREMENT_LABEL[meta.procurement_type]
 
   const handleClick = () => {
     if (onSelect) onSelect(competition_id, facility_type)
@@ -110,6 +131,7 @@ export default function ArchiveCard({ card, onSelect }) {
       <div style={s.header}>
         <div style={s.title} title={title}>{title}</div>
         <span style={s.facilityBadge}>{facilityLabel(facility_type)}</span>
+        {procurementLabel && <span style={s.procurementBadge}>{procurementLabel}</span>}
         <span style={s.alignmentBadge(alignMeta.color)}>정합도 {alignMeta.label}</span>
       </div>
 
@@ -118,10 +140,13 @@ export default function ArchiveCard({ card, onSelect }) {
         <span style={s.rankingValue}>{winner || '—'}</span>
       </div>
 
-      {diffs.length > 0 && (
+      {(diffs.length > 0 || userTags.length > 0) && (
         <div style={s.tagRow}>
           {diffs.map((d, i) => (
-            <span key={i} style={s.tag}>{typeof d === 'string' ? d : JSON.stringify(d)}</span>
+            <span key={`d-${i}`} style={s.tag}>{typeof d === 'string' ? d : JSON.stringify(d)}</span>
+          ))}
+          {userTags.map((t, i) => (
+            <span key={`t-${i}`} style={s.tag}>#{t}</span>
           ))}
         </div>
       )}

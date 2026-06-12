@@ -11,6 +11,34 @@ const RESULT_OPTIONS = [
   { value: 'lose', label: '참여 (낙선)', color: 'var(--color-text-faint)', bg: 'var(--color-bg-surface)' },
 ]
 
+// 수주 형태 — 백엔드 PROCUREMENT_SYNONYMS의 키와 일치해야 함.
+const PROCUREMENT_OPTIONS = [
+  { value: '', label: '— 선택 —' },
+  { value: 'competition', label: '경쟁공모' },
+  { value: 'negotiated',  label: '수의계약' },
+  { value: 'invited',     label: '지명공모' },
+  { value: 'turnkey',     label: '턴키/기술제안' },
+  { value: 'private',     label: '민간발주' },
+  { value: 'other',       label: '기타' },
+]
+
+// 사업 단계 — 백엔드 PHASE_SYNONYMS 키와 일치.
+const PHASE_OPTIONS = [
+  { value: '', label: '— 선택 —' },
+  { value: 'planning',         label: '기획' },
+  { value: 'concept',          label: '계획설계' },
+  { value: 'basic_design',     label: '기본설계' },
+  { value: 'detailed_design',  label: '실시설계' },
+  { value: 'cm',               label: 'CM/감리' },
+]
+
+const ROLE_OPTIONS = [
+  { value: '', label: '— 선택 —' },
+  { value: 'lead',         label: '주관사' },
+  { value: 'consortium',   label: '컨소시엄' },
+  { value: 'subcontractor', label: '협력사' },
+]
+
 const AXIS_KR = {
   concept: '개념', mass: '매스', landscape: '조경',
   program: '프로그램', facade: '파사드', technical: '기술', quantitative: '정량',
@@ -30,6 +58,17 @@ const s = {
     width: '100%', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
     borderRadius: 6, padding: '8px 12px', color: 'var(--color-text-body)', fontSize: 'var(--font-size-base)',
     boxSizing: 'border-box',
+  },
+  textarea: {
+    width: '100%', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
+    borderRadius: 6, padding: '8px 12px', color: 'var(--color-text-body)', fontSize: 'var(--font-size-base)',
+    boxSizing: 'border-box', minHeight: 80, resize: 'vertical', fontFamily: 'inherit',
+    lineHeight: 1.5,
+  },
+  grid3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--gap-md)' },
+  helperText: {
+    fontSize: 'var(--font-size-xs)', color: 'var(--color-text-faint)',
+    marginTop: 4, lineHeight: 1.5,
   },
   select: {
     width: '100%', background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
@@ -166,6 +205,10 @@ export default function MyProjectMode() {
     competition_name: '', facility_type: 'public',
     project_number: '', client: '', location: '',
     company: '',
+    // 상세 메타 (선택)
+    procurement_type: '', project_phase: '', role: '',
+    partners: '', tags: '', memo: '',
+    gross_floor_area: '', floors: '', units: '',
   })
   const [resultType, setResultType] = useState('win')
   const [briefFile, setBriefFile] = useState(null)
@@ -194,6 +237,16 @@ export default function MyProjectMode() {
     fd.append('location', form.location)
     fd.append('company', form.company)
     fd.append('result', resultType)
+    // 상세 메타 (모두 선택 — 빈 문자열도 그대로 전송, 백엔드가 필터링)
+    fd.append('procurement_type', form.procurement_type)
+    fd.append('project_phase', form.project_phase)
+    fd.append('role', form.role)
+    fd.append('partners', form.partners)
+    fd.append('tags', form.tags)
+    fd.append('memo', form.memo)
+    fd.append('gross_floor_area', form.gross_floor_area)
+    fd.append('floors', form.floors)
+    fd.append('units', form.units)
     if (briefFile) fd.append('brief_pdf', briefFile)
     fd.append('submission_pdf', submissionFile)
 
@@ -264,6 +317,88 @@ export default function MyProjectMode() {
           <input style={s.input} value={form.location}
             onChange={e => set('location', e.target.value)}
             placeholder="예: 서울시 영등포구 당산동" />
+        </div>
+
+        <div style={s.divider}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 12 }}>
+            <div style={s.sectionTitle}>프로젝트 상세</div>
+            <span style={s.optLabel}>(선택 — 채울수록 아카이브 자연어 검색이 정확해집니다)</span>
+          </div>
+
+          <div style={s.grid3}>
+            <div style={s.group}>
+              <label style={s.label}>수주 형태</label>
+              <select style={s.select} value={form.procurement_type}
+                onChange={e => set('procurement_type', e.target.value)}>
+                {PROCUREMENT_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={s.group}>
+              <label style={s.label}>사업 단계</label>
+              <select style={s.select} value={form.project_phase}
+                onChange={e => set('project_phase', e.target.value)}>
+                {PHASE_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={s.group}>
+              <label style={s.label}>참여 역할</label>
+              <select style={s.select} value={form.role}
+                onChange={e => set('role', e.target.value)}>
+                {ROLE_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={s.group}>
+            <label style={s.label}>컨소시엄 파트너 <span style={s.optLabel}>(자유 텍스트)</span></label>
+            <input style={s.input} value={form.partners}
+              onChange={e => set('partners', e.target.value)}
+              placeholder="예: ○○건축, △△엔지니어링" />
+          </div>
+
+          <div style={s.grid3}>
+            <div style={s.group}>
+              <label style={s.label}>연면적</label>
+              <input style={s.input} value={form.gross_floor_area}
+                onChange={e => set('gross_floor_area', e.target.value)}
+                placeholder="예: 12,500㎡" />
+            </div>
+            <div style={s.group}>
+              <label style={s.label}>층수</label>
+              <input style={s.input} value={form.floors}
+                onChange={e => set('floors', e.target.value)}
+                placeholder="예: 지상 8층/지하 2층" />
+            </div>
+            <div style={s.group}>
+              <label style={s.label}>세대수</label>
+              <input style={s.input} value={form.units}
+                onChange={e => set('units', e.target.value)}
+                placeholder="예: 320세대" />
+            </div>
+          </div>
+
+          <div style={s.group}>
+            <label style={s.label}>태그 <span style={s.optLabel}>(콤마/공백 구분)</span></label>
+            <input style={s.input} value={form.tags}
+              onChange={e => set('tags', e.target.value)}
+              placeholder="예: 친환경, 리모델링, 도시재생, 한옥" />
+          </div>
+
+          <div style={s.group}>
+            <label style={s.label}>프로젝트 메모 <span style={s.optLabel}>(자연어 검색 핵심 소스)</span></label>
+            <textarea style={s.textarea} value={form.memo}
+              onChange={e => set('memo', e.target.value)}
+              placeholder="이 프로젝트의 특징, 발주처 요구사항, 기억할 만한 점 등을 자유롭게 적어주세요. 아카이브 검색 시 이 메모가 핵심 매칭 소스로 활용됩니다." />
+            <div style={s.helperText}>
+              예: "기존 시청 부지 리모델링이라 외관 보존 요구가 강했음. 발주처가 BIM 100% 요구"
+            </div>
+          </div>
         </div>
 
         <div style={s.divider}>

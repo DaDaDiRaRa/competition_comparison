@@ -612,13 +612,24 @@ async def run_single_pipeline(
     location: str = Form(""),
     company: str = Form(...),
     result: str = Form(...),  # "win" | "contracted" | "lose"
+    # ── MyProjectMode 상세 메타 (선택) ──────────────────────────────────────
+    procurement_type: str = Form(""),  # 경쟁공모/수의계약/지명공모/턴키/민간발주/기타
+    project_phase: str = Form(""),     # 기획/계획/기본설계/실시설계/CM
+    role: str = Form(""),              # 주관사/컨소시엄/협력사
+    partners: str = Form(""),          # 컨소시엄 파트너 (자유 텍스트)
+    tags: str = Form(""),              # 콤마/공백 구분 자유 키워드
+    memo: str = Form(""),              # 자유 텍스트 (자연어 검색 핵심 소스)
+    gross_floor_area: str = Form(""),  # 연면적 (자유 텍스트 — 단위 포함 가능)
+    floors: str = Form(""),            # 층수
+    units: str = Form(""),             # 세대수
     brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
     submission_pdf: UploadFile | None = File(None),
     submission_pdf_ref: str | None = Form(None),
 ):
     """지침서(선택) + 제안서 1개. 비교 없이 DB 저장 → 패턴 갱신.
-    낙선(lose)인 경우 기존 패턴 대비 원인 진단을 추가로 수행."""
+    낙선(lose)인 경우 기존 패턴 대비 원인 진단을 추가로 수행.
+    선택 메타(procurement_type 등)는 _meta.json에 저장되어 아카이브 검색에 활용."""
     if not settings.has_api_key():
         raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 Anthropic API 키를 입력해주세요.")
     if facility_type not in FACILITY_TYPES:
@@ -634,7 +645,23 @@ async def run_single_pipeline(
     async def event_stream():
         ts = int(time.time() * 1000)
         cid = make_competition_id(project_number, competition_name)
-        save_project_meta(cid, facility_type, competition_name, project_number, client, location)
+        # 태그는 콤마/공백 구분 → 리스트로 정규화
+        tag_list = [t.strip() for t in (tags or "").replace(",", " ").split() if t.strip()]
+        extra_meta = {
+            "procurement_type": procurement_type.strip(),
+            "project_phase": project_phase.strip(),
+            "role": role.strip(),
+            "partners": partners.strip(),
+            "tags": tag_list,
+            "memo": memo.strip(),
+            "gross_floor_area": gross_floor_area.strip(),
+            "floors": floors.strip(),
+            "units": units.strip(),
+        }
+        save_project_meta(
+            cid, facility_type, competition_name, project_number, client, location,
+            extra=extra_meta,
+        )
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_single_"))
 
         try:
@@ -731,6 +758,10 @@ async def run_single_pipeline(
                         brief_data=brief_data,
                         submission_data=extracted,
                     )
+
+            # 아카이브 인덱스 갱신 — 새 _meta.json/_comparison.json이 즉시 검색에 잡히도록.
+            try: _rebuild_archive_index()
+            except Exception as e: logger.warning("archive 인덱스 갱신 실패: %s", e)
 
             yield sse({
                 "type": "complete",

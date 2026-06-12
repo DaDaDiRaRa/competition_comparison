@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 from config import FACILITY_TYPES
 from services.archive_search import get_index
-from services.db_manager import load_comparison
+from services.db_manager import load_comparison, load_project_meta
 
 router = APIRouter()
 
@@ -69,6 +69,8 @@ def get_comparison(facility_type: str, competition_id: str):
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
     comp = load_comparison(facility_type, competition_id)
-    if not comp:
-        raise HTTPException(404, f"Comparison not found: {facility_type}/{competition_id}")
-    return comp
+    meta = load_project_meta(facility_type, competition_id) or {}
+    if not comp and not meta:
+        raise HTTPException(404, f"Project not found: {facility_type}/{competition_id}")
+    # 비교 결과(있으면) + 메타 병합. 키 충돌 시 comparison이 우선이되 meta는 별도 키로 노출.
+    return {**(comp or {}), "meta": meta}

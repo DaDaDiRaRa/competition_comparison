@@ -11,6 +11,29 @@ const ALIGNMENT_META = {
   unknown: { label: '미상',             color: 'var(--color-text-faint)' },
 }
 
+const PROCUREMENT_LABEL = {
+  competition: '경쟁공모',
+  negotiated:  '수의계약',
+  invited:     '지명공모',
+  turnkey:     '턴키',
+  private:     '민간발주',
+  other:       '기타',
+}
+
+const PHASE_LABEL = {
+  planning:         '기획',
+  concept:          '계획설계',
+  basic_design:     '기본설계',
+  detailed_design:  '실시설계',
+  cm:               'CM/감리',
+}
+
+const ROLE_LABEL = {
+  lead:          '주관사',
+  consortium:    '컨소시엄',
+  subcontractor: '협력사',
+}
+
 const s = {
   overlay: (open) => ({
     position: 'fixed', inset: 0,
@@ -98,6 +121,34 @@ const s = {
     background: 'var(--color-bg-surface-alt)',
     borderRadius: 6,
     marginTop: 4,
+  },
+  metaGrid: {
+    display: 'grid', gridTemplateColumns: 'auto 1fr',
+    gap: '4px 12px',
+    fontSize: 'var(--font-size-sm)',
+    padding: '8px 12px',
+    background: 'var(--color-bg-surface-alt)',
+    borderRadius: 6,
+  },
+  metaKey: { color: 'var(--color-text-faint)' },
+  metaVal: { color: 'var(--color-text-body)', wordBreak: 'break-word' },
+  metaTagRow: { display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 },
+  metaTag: {
+    fontSize: 'var(--font-size-xs)',
+    padding: '2px 8px', borderRadius: 12,
+    background: 'var(--color-accent-soft)',
+    color: 'var(--color-accent)',
+    border: '1px solid var(--color-accent-border)',
+  },
+  memo: {
+    fontSize: 'var(--font-size-sm)',
+    color: 'var(--color-text-body)',
+    lineHeight: 1.7,
+    padding: '10px 12px',
+    background: 'var(--color-bg-surface-alt)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 6,
+    whiteSpace: 'pre-wrap',
   },
   list: { margin: 0, padding: 0, listStyle: 'none' },
   listItem: {
@@ -290,7 +341,8 @@ export default function ArchiveDetail({ data, onClose }) {
   if (!displayData && !isOpen) return null
 
   const d = displayData || {}
-  const title = d.competition_name || d.competition_id || '—'
+  const meta = d.meta || {}
+  const title = d.competition_name || meta.competition_name || d.competition_id || '—'
   const facilityType = d.facility_type
   const ranking = d.ranking || d.blind_ranking || []
   const gap = d.gap_analysis || {}
@@ -298,6 +350,21 @@ export default function ArchiveDetail({ data, onClose }) {
   const alignment = gap.alignment || 'unknown'
   const alignMeta = ALIGNMENT_META[alignment] || ALIGNMENT_META.unknown
   const submissions = d.submissions || {}
+
+  // 메타에 의미 있는 필드가 있는지 — 모두 비어있으면 섹션 자체를 숨김
+  const metaRows = [
+    ['수주 형태', PROCUREMENT_LABEL[meta.procurement_type]],
+    ['사업 단계', PHASE_LABEL[meta.project_phase]],
+    ['참여 역할', ROLE_LABEL[meta.role]],
+    ['컨소시엄', meta.partners],
+    ['발주처',  meta.client],
+    ['대지위치', meta.location],
+    ['연면적',  meta.gross_floor_area],
+    ['층수',    meta.floors],
+    ['세대수',  meta.units],
+  ].filter(([, v]) => v)
+  const userTags = Array.isArray(meta.tags) ? meta.tags : []
+  const hasMetaBlock = metaRows.length > 0 || userTags.length > 0 || meta.memo
 
   return (
     <>
@@ -323,6 +390,33 @@ export default function ArchiveDetail({ data, onClose }) {
         </div>
 
         <div style={s.body}>
+          {/* 0. 프로젝트 메타 (선택 필드 — 있을 때만) */}
+          {hasMetaBlock && (
+            <div style={s.section}>
+              <div style={s.sectionTitle}>프로젝트 정보</div>
+              {metaRows.length > 0 && (
+                <div style={s.metaGrid}>
+                  {metaRows.map(([k, v]) => (
+                    <span key={k} style={{ display: 'contents' }}>
+                      <span style={s.metaKey}>{k}</span>
+                      <span style={s.metaVal}>{v}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {userTags.length > 0 && (
+                <div style={s.metaTagRow}>
+                  {userTags.map((t, i) => (
+                    <span key={i} style={s.metaTag}>#{t}</span>
+                  ))}
+                </div>
+              )}
+              {meta.memo && (
+                <div style={{ ...s.memo, marginTop: 8 }}>{meta.memo}</div>
+              )}
+            </div>
+          )}
+
           {/* 1. 순위 + 정합도 */}
           <div style={s.section}>
             <div style={s.sectionTitle}>순위 · 정합도</div>

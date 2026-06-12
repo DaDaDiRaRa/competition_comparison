@@ -27,6 +27,27 @@ logger = logging.getLogger(__name__)
 
 # 시설유형 동의어 — 사용자가 자연어로 쓰는 표현(시청·병원·아파트 등)이
 # facility_type FTS 컬럼과 매칭되도록 영어 키 + 한국어 레이블 + 일반 호칭을 함께 저장한다.
+# 수주 형태 동의어 — MyProjectMode의 procurement_type FTS 매칭용.
+# 사용자가 "수의계약 했던 거", "턴키" 같은 구어체로 검색해도 정식 키와 매칭되도록.
+PROCUREMENT_SYNONYMS = {
+    "competition":  ["경쟁공모", "설계공모", "공모"],
+    "negotiated":   ["수의계약", "수의"],
+    "invited":      ["지명공모", "지명", "초청"],
+    "turnkey":      ["턴키", "일괄입찰", "기술제안"],
+    "private":      ["민간발주", "민간"],
+    "other":        ["기타"],
+}
+
+# 사업 단계 동의어.
+PHASE_SYNONYMS = {
+    "planning":         ["기획", "기획설계"],
+    "concept":          ["계획", "계획설계", "컨셉"],
+    "basic_design":     ["기본설계", "기본"],
+    "detailed_design":  ["실시설계", "실시"],
+    "cm":               ["CM", "사업관리", "감리"],
+}
+
+
 FACILITY_SYNONYMS = {
     "public":         ["공공시설", "시청", "구청", "관공서", "청사", "도서관", "문화시설", "체육관"],
     "residential":    ["주거시설", "공동주택", "아파트", "단지", "주거"],
@@ -52,6 +73,38 @@ def _facility_index_text(facility_type: str) -> str:
     return " ".join(p for p in parts if p)
 
 
+def _extra_meta_index_text(meta: dict) -> str:
+    """_meta.json의 MyProject 상세 필드를 FTS extra_meta 컬럼용으로 직렬화.
+
+    procurement_type/project_phase는 동의어까지 함께 펼쳐서 구어체 검색 매칭.
+    tags/memo/partners/role 등 자유 텍스트는 그대로 공백 조인.
+    """
+    parts: list[str] = []
+
+    proc = (meta.get("procurement_type") or "").strip()
+    if proc:
+        parts.append(proc)
+        parts.extend(PROCUREMENT_SYNONYMS.get(proc, []))
+
+    phase = (meta.get("project_phase") or "").strip()
+    if phase:
+        parts.append(phase)
+        parts.extend(PHASE_SYNONYMS.get(phase, []))
+
+    for k in ("role", "partners", "memo", "gross_floor_area", "floors", "units"):
+        v = (meta.get(k) or "").strip() if isinstance(meta.get(k), str) else meta.get(k)
+        if v:
+            parts.append(str(v))
+
+    tag_list = meta.get("tags") or []
+    if isinstance(tag_list, list):
+        parts.extend(str(t) for t in tag_list if t)
+    elif isinstance(tag_list, str) and tag_list.strip():
+        parts.append(tag_list.strip())
+
+    return " ".join(parts)
+
+
 def _build_facility_hint() -> str:
     """search_natural() 프롬프트용 시설유형 힌트 블록."""
     lines = []
@@ -62,7 +115,17 @@ def _build_facility_hint() -> str:
     return "\n".join(lines)
 
 
+def _build_procurement_hint() -> str:
+    """search_natural() 프롬프트용 수주 형태 힌트 블록."""
+    lines = []
+    for synonyms in PROCUREMENT_SYNONYMS.values():
+        if synonyms:
+            lines.append(f"- {synonyms[0]} (대표 표현)")
+    return "\n".join(lines)
+
+
 _FACILITY_HINT = _build_facility_hint()
+_PROCUREMENT_HINT = _build_procurement_hint()
 
 
 def _join_list(items, sep: str = " ") -> str:
@@ -108,12 +171,15 @@ class ArchiveSearchIndex:
     def _init_schema(self):
         # trigram 토크나이저 우선 (한글 부분일치 강함, SQLite 3.34+ 필요)
         # 미지원 환경에서는 unicode61로 폴백.
+        # extra_meta 컬럼: MyProjectMode 상세 메타(procurement_type, tags, memo, partners 등)
+        # 를 공백 조인하여 자연어 검색에 활용. 경쟁공모는 빈 문자열로 인덱싱.
         try:
             self.conn.executescript("""
                 CREATE VIRTUAL TABLE archive_fts USING fts5(
                     competition_id, facility_type, ranking,
                     key_differentiators, winner_patterns,
                     concept_keywords, gap_analysis_alignment,
+                    extra_meta,
                     tokenize='trigram'
                 );
             """)
@@ -123,6 +189,7 @@ class ArchiveSearchIndex:
                     competition_id, facility_type, ranking,
                     key_differentiators, winner_patterns,
                     concept_keywords, gap_analysis_alignment,
+                    extra_meta,
                     tokenize='unicode61'
                 );
             """)
@@ -170,7 +237,7 @@ class ArchiveSearchIndex:
                 self._cards[competition_id] = card
 
                 self.conn.execute(
-                    "INSERT INTO archive_fts VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO archive_fts VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         competition_id,
                         _facility_index_text(facility_type),
@@ -179,6 +246,7 @@ class ArchiveSearchIndex:
                         _join_list(winner_patterns),
                         _join_list(concept_keywords),
                         alignment,
+                        _extra_meta_index_text(meta),
                     ),
                 )
                 count += 1
@@ -230,13 +298,18 @@ class ArchiveSearchIndex:
             "- concept_keywords (설계 컨셉 키워드)\n"
             "- facility_type (시설 카테고리)\n"
             "- gap_analysis_alignment (high/partial/low)\n"
+            "- extra_meta (수주 형태/사업 단계/태그/메모 — 내 프로젝트만 보유)\n"
             "\n"
             "AVAILABLE_FACILITY_TYPES (정식 한국어 레이블 — 대표 동의어):\n"
             f"{_FACILITY_HINT}\n"
             "\n"
+            "AVAILABLE_PROCUREMENT_TYPES (대표 표현):\n"
+            f"{_PROCUREMENT_HINT}\n"
+            "\n"
             "RULE: 쿼리에서 시설 카테고리가 언급되면 (예: 시청, 병원, 학교, 아파트),\n"
             "해당 정식 한국어 레이블(예: 공공시설, 의료시설, 교육시설, 주거시설)을\n"
             "키워드에 반드시 포함시켜라. 원래 표현(시청 등)도 함께 포함해도 좋다.\n"
+            "수주 형태(수의계약·턴키·지명공모 등)나 태그/메모성 단어가 보이면 그대로 키워드에 넣어라.\n"
             "\n"
             "Use short noun phrases. Avoid stopwords.\n"
             "\n"
