@@ -20,7 +20,7 @@ Competition Analyzer is a full-stack application for analyzing architectural com
 
 ### Backend (FastAPI)
 
-Located in `competition-analyzer/backend/`, the FastAPI application serves four main routers:
+Located in `backend/` (repo root), the FastAPI application serves six routers, registered in `main.py` under `/api/<name>`:
 
 1. **`routers/accumulate.py`** - Data accumulation pipeline (PDF → JSON 추출만 담당)
    - Processes competition briefs and submission PDFs
@@ -51,6 +51,16 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
    - `GET /settings/meta` — 프론트 `useMeta()` 훅이 소비하는 단일 메타 엔드포인트. `facility_types`, `page_types`, `axes_by_group` 포함
    - `POST /settings/db-path` — DB 경로 저장 후 `init_db()` 자동 실행. `{ db_path: str }` 바디
 
+5. **`routers/upload.py`** - 대용량 PDF 청크 업로드 (Cloud Run 32MB 요청 한도 우회)
+   - `POST /upload/start` → `upload_id` 발급, `/tmp/cc_uploads/{upload_id}/`에 청크 누적
+   - `POST /upload/chunk/{upload_id}` — 25MB 단위 청크 (총 600MB 상한)
+   - `POST /upload/finish/{upload_id}` — 청크 조립 → `file_ref` 반환. 파이프라인 엔드포인트(accumulate/diagnose)는 multipart 대신 이 `file_ref`를 받아 /tmp에서 직접 읽음
+   - `POST /upload/cleanup/{upload_id}` — 파이프라인 완료 후 임시 파일 삭제
+
+6. **`routers/archive.py`** - 아카이브 자연어 검색 (Archive Mode 섹션 참조)
+
+**MyProject 심층 분석:** 별도 라우터 없음. `routers/accumulate.py`가 단일 제출물 등록 시 `services/myproject_analyzer.deep_analyze()` 호출 → `submissions/{slug}_deep.json` + `_deep.html` 생성. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report`로 서빙.
+
 **Core Services:**
 
 - `services/db_manager.py` - JSON-based database for projects, patterns, and reports
@@ -75,6 +85,9 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
   - `.replace()` (not `.format()`) for prompt templating (JSON 중괄호 충돌 방지)
 - `services/report_generator.py` - Generates HTML comparison reports (no LLM calls); facility-type-aware axes via `axes_for(facility_type)`. `gap_section` 블록이 `{ranking_section}`과 `{diff_section}` 사이에 삽입되어 블라인드 vs 실제 결과 정합도(alignment) 시각화
 - `services/submission_report_generator.py` - 개별 제출물 HTML 리포트 생성 (LLM 호출 없음). `generate_submission_report(sub_doc: dict) -> str`
+- `services/myproject_analyzer.py` - MyProjectMode 단일 제출물 멀티패스 deep-analysis (`deep_analyze()`). 페이지별 narrative + 평가축별 deep evidence + 정량 메트릭 + 검색 키워드 + auto_meta 추출
+- `services/myproject_report_generator.py` - `_deep.json` → HTML 리포트 렌더링 (LLM 호출 없음). `generate_myproject_report(deep_doc) -> str`
+- `services/archive_search.py` - in-memory SQLite FTS5 인덱싱 + 자연어 검색 (Archive Mode 섹션 참조)
 - `services/diagnosis_report_generator.py` - 진단 결과 HTML 리포트 생성 (LLM 호출 없음). `generate_diagnosis_report(diagnosis: dict) -> str`. 섹션: 종합점수 링 → 페이지 구성 바 → 패턴 편차 경고 → 지침서 충족도 → 요구사항 매핑 → 평가축별 상세 → 보강 포인트
 - `services/pattern_builder.py` - Builds patterns from winner data + qualitative LLM summary; `build_pattern()` now also collects `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords) for loser anti-pattern comparison
 - `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser
@@ -103,7 +116,7 @@ Located in `competition-analyzer/backend/`, the FastAPI application serves four 
 
 ### Frontend (React + Vite)
 
-Located in `competition-analyzer/frontend/`, the app has five main tabs:
+Located in `frontend/` (repo root), the app has six main tabs:
 
 1. **MyProjectMode** - 내 프로젝트 등록 (단일 제출물 + 결과 기록)
 2. **AccumulateMode** - PDF에서 JSON 추출만 담당
@@ -113,7 +126,8 @@ Located in `competition-analyzer/frontend/`, the app has five main tabs:
 4. **DiagnoseMode** - Analyzes new submissions
    - 진단 완료 후 "진단 리포트 열기" 링크 버튼 표시 (`report_filename` SSE 이벤트 수신 시)
    - `pattern` 상태를 `DiagnosisResult`에 prop으로 전달 → 정량 비교 바 렌더링
-5. **SettingsPanel** - Configuration + PatternViewer
+5. **ArchiveMode** - 아카이브 자연어 검색 (검색창 + 카드 그리드 + 슬라이드오버 상세)
+6. **SettingsPanel** - Configuration + PatternViewer
    - 하단에 `PatternViewer` 컴포넌트 포함 (시설유형별 당선/낙선 패턴 통계 시각화)
 
 **Key Components:**
@@ -122,6 +136,7 @@ Located in `competition-analyzer/frontend/`, the app has five main tabs:
 - `AccumulateMode/ComparisonResult.jsx` - 비교 결과 카드. `GapAnalysisCard`(블라인드 vs 실제 결과 정합도) + `key_differentiators` + `blind_ranking` 순위 + 회사별 `AxisCard` 그리드. `ranking` 옆에 "(블라인드 분석 기준)" 라벨 표시
 - `DiagnoseMode/DiagnosisResult.jsx` - 진단 결과 렌더링. `QuantCompare` 컴포넌트로 당선 평균 vs 낙선 평균 vs 내 제출물 정량 비교 바 표시. `pattern` prop 필요
 - `Settings/PatternViewer.jsx` - 시설유형 탭 전환 + 당선/낙선 통계. 섹션: 페이지 구성 이중 바 → 정량 지표 테이블 → 컨셉 키워드 태그 → 질적 인사이트 3열
+- `SubmissionEditor/SubmissionEditor.jsx` - 저장된 제출물 메타·정량·결과 라벨 인라인 편집. `getSubmission` / `updateSubmission` 호출. `ProjectList`에서 "편집" 버튼으로 진입. `QUANT_FIELDS` 11개 정량 필드 + `MASS_TYPE_OPTIONS` + `RESULT_OPTIONS`(win/contracted/lose) 폼
 - `common/ProgressLog.jsx` - Real-time SSE log display with progress bars (`▓░` style), current item highlight, elapsed time counter (+Ns)
 - `hooks/useMeta.jsx` - **프론트 메타 단일 소스.** `MetaProvider`로 앱 전체를 감싸면 `/settings/meta` 1회 fetch. `useMeta()` 반환값: `{ ready, facilityLabel, facilityGroup, facilityTypes, pageTypeLabel, axesFor, axisLabel }`
 
@@ -155,7 +170,7 @@ Located in `competition-analyzer/frontend/`, the app has five main tabs:
 1. **Backend** (terminal 1)
 
    ```powershell
-   cd competition-analyzer/backend
+   cd backend
    python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
@@ -165,7 +180,7 @@ Located in `competition-analyzer/frontend/`, the app has five main tabs:
 2. **Frontend** (terminal 2)
 
    ```powershell
-   cd competition-analyzer/frontend
+   cd frontend
    npm install  # First time only
    npm run dev
    ```
@@ -246,7 +261,11 @@ Test with curl or Postman by uploading files to:
 - **Pipeline 분리:** 데이터 축적(`/api/accumulate/run`)은 PDF → JSON 추출까지만 수행. 비교분석/패턴/리포트는 저장된 프로젝트의 "비교분석 실행" 버튼(`rerun-compare`)에서만 실행.
 - **Database Location:** 각 competition: `{db_path}/{facility_type}/{competition_id}/` — `_meta.json`, `_brief.json`, `_comparison.json`, `_report.html`, `submissions/*.json`, `submissions/*_report.html`. 진단 리포트: `{db_path}/_diagnosis_reports/*.html`. 교차비교 리포트: `{db_path}/_cross_reports/*.html`.
 - **GCSFUSE 쓰기 보장:** Cloud Run gen2 + GCS 버킷 마운트(GCSFUSE)에서 write-back 캐시로 인해 `rename()` 시점에 GCS에 원본이 없으면 데이터 유실. 모든 파일 쓰기는 `f.flush(); os.fsync(f.fileno())` 후 rename(`_atomic_write`) 또는 `_sync_write` 사용 — 새 파일 저장 함수 추가 시 반드시 fsync 포함.
-- **보안 — 커밋 금지 파일:** `service.yaml`은 `.gitignore`에 등록. Cloud Run 서비스 YAML은 API 키 등 시크릿이 평문으로 포함될 수 있으므로 절대 커밋하지 않음. 수정 필요 시 로컬에서만 편집 후 `gcloud run services replace service.yaml` 실행.
+- **보안 — 커밋 금지 파일:** 다음은 모두 `.gitignore`에 등록되어 있어야 하며 절대 커밋 금지:
+  - `service.yaml` — Cloud Run 서비스 YAML, API 키 등 시크릿 평문 포함 가능. 수정 필요 시 로컬에서만 편집 후 `gcloud run services replace service.yaml` 실행
+  - `gcp-sa-key.json`, `*-sa-key.json`, `key.json` — GCP 서비스 계정 키 (repo 루트에 존재)
+  - `.env`, `env.yaml` — 환경변수 정의
+  - 참고: `backend/app_settings.json`은 **추적 대상** (DB 경로·DPI·모델 ID만 저장). `anthropic_api_key`는 메모리에만 보관되며 디스크에 쓰지 않음
 - **FACILITY_TYPES 구조:** `{key: {"label_ko": str, "group": "redev"|"general"}}`. `group`으로 어느 axes 세트를 쓸지 결정. `facility_label(key)`, `axes_for(key)` 헬퍼 사용. 단순 `FACILITY_TYPES[key]`는 dict를 반환하므로 문자열로 쓰면 안 됨.
 - **Comparison Axes — 두 그룹:**
   - `"redev"` 그룹 (재건축/대안설계): `business_viability`, `member_benefit`, `product_competitiveness`, `site_planning`, `community`, `design_brand`, `constructability`, `firm_capability`
@@ -452,7 +471,9 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 
 ---
 
-## Next Steps (예정)
+## Implementation Notes (대부분 완료 — 남은 항목은 각 절 상단 참조)
+
+> 이 섹션은 신규 기능 도입 시점의 의사결정 기록. 1·2·3-A/B/C는 완료, 3-D만 미진행.
 
 ### 1. MyProjectMode 메타데이터 — AI 자동 추출 방식 (완료)
 
