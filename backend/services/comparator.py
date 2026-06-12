@@ -14,11 +14,11 @@ def _build_axes_strings(facility_type: str) -> dict:
         f"- {k}: {v['description']}" for k, v in axes_meta.items()
     )
     null_axes_block = ",\n".join(
-        f'      "{k}": {{"grade":null,"strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""}}'
+        f'      "{k}": {{"grade":null,"grade_justification":"","strengths":[],"weaknesses":[],"brief_compliance":"unclear","notes":""}}'
         for k in axes_keys
     )
     null_axes_diagnose = ",\n".join(
-        f'    "{k}":{{"grade":null,"strengths":[],"weaknesses":[],"recommendations":[],"evidence":""}}'
+        f'    "{k}":{{"grade":null,"grade_justification":"","strengths":[],"weaknesses":[],"recommendations":[],"evidence":""}}'
         for k in axes_keys
     )
     brief_compliance_block = ",\n".join(
@@ -62,6 +62,11 @@ def _make_blind_static(facility_type: str) -> str:
         "GRADING SUMMARY: 위 rubric의 A~E 중 하나만 출력. 숫자 점수 금지.\n"
         "A=신호 대부분 충족 + A 기준 행 일치 / B=다수 충족·일부 일반론 / "
         "C=절반 충족·평이 / D=일부 누락 / E=대부분 누락. 시설특화 hint가 있으면 우선 적용.\n"
+        "\n"
+        "GRADE_JUSTIFICATION (자기검증, 필수):\n"
+        "각 제출물·각 축마다 grade_justification 필드에 1줄로 등급 부여 근거 명시.\n"
+        "형식: '신호 X/Y개 충족 (충족: ... / 미충족: ...) → <등급> 기준 행과 일치'.\n"
+        "신호 이름은 rubric 그대로 짧게 인용. 임원 검토 시 '왜 이 등급?' 즉시 확인용.\n"
         "\n"
         "CITATION RULE (MANDATORY):\n"
         "Each item in STRENGTHS and WEAKNESSES MUST end with a page reference in the form '(p.N)'\n"
@@ -146,6 +151,11 @@ def _make_diagnose_static(facility_type: str) -> str:
         f"{rubric_block}\n"
         "\n"
         "GRADING SUMMARY: A~E 중 하나만 출력. 숫자 금지. overall_grade도 동일 5단계.\n"
+        "\n"
+        "GRADE_JUSTIFICATION (자기검증, 필수):\n"
+        "각 축의 grade_justification 필드에 1줄로 등급 부여 근거 명시.\n"
+        "형식: '신호 X/Y개 충족 (충족: ... / 미충족: ...) → <등급> 기준 행과 일치'.\n"
+        "신호 이름은 위 rubric 그대로 짧게 인용. 임원 검토 시 '왜 이 등급?' 즉시 확인용.\n"
         "\n"
         "CITATION RULE (MANDATORY):\n"
         "Each item in strengths/weaknesses/recommendations MUST end with a page reference '(p.N)' from MY_SUBMISSION_DATA._page.\n"

@@ -130,12 +130,18 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 
 .axis-card { background: var(--surface); border: 1px solid var(--border);
              border-radius: 10px; padding: 16px 20px; margin-bottom: 12px; }
-.axis-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
-             padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.axis-head { display: flex; align-items: center; gap: 10px;
+             padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .axis-name { font-size: 15px; font-weight: 700; color: var(--text); flex: 1; }
 .grade-pill { min-width: 36px; text-align: center;
               padding: 3px 10px; border-radius: 14px;
               font-weight: 700; font-size: 13px; letter-spacing: 1px; }
+.grade-justify { font-size: 11px; color: var(--text-muted);
+                 background: var(--surface-alt); padding: 6px 10px;
+                 border-radius: 4px; margin: 8px 0;
+                 border-left: 2px solid var(--accent-border);
+                 font-family: 'Consolas', 'Malgun Gothic', monospace;
+                 line-height: 1.5; }
 
 .evidence-block { margin-top: 12px; }
 .evidence-label { font-size: 10px; font-weight: 700;
@@ -220,14 +226,18 @@ def _axes_section(facility_type: str, axes_evidence: dict) -> str:
         ev = axes_evidence[axis_key] or {}
         axis_label = axes_meta.get(axis_key, axis_key)
         grade = ev.get("grade")
+        justification = ev.get("grade_justification") or ""
         strengths = ev.get("strengths") or []
         weaknesses = ev.get("weaknesses") or []
+        justify_html = (f'<div class="grade-justify">▣ {_esc(justification)}</div>'
+                        if justification else "")
         parts.append(
             '<div class="axis-card">'
             '  <div class="axis-head">'
             f'    <div class="axis-name">{_esc(axis_label)}</div>'
             f'    {_grade_badge(grade)}'
             '  </div>'
+            f'  {justify_html}'
             f'  {_evidence_list(strengths, "s")}'
             f'  {_evidence_list(weaknesses, "w")}'
             '</div>'

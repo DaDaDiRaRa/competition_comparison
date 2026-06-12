@@ -264,7 +264,8 @@ function AxisAccordion({ axisKey, axisData, label }) {
   const weaknesses = axisData?.weaknesses || []
   const notes = axisData?.notes
   const brief = axisData?.brief_compliance
-  const hasDetail = strengths.length > 0 || weaknesses.length > 0 || notes || brief
+  const justification = axisData?.grade_justification
+  const hasDetail = strengths.length > 0 || weaknesses.length > 0 || notes || brief || justification
 
   return (
     <div>
@@ -279,6 +280,16 @@ function AxisAccordion({ axisKey, axisData, label }) {
       </div>
       {open && hasDetail && (
         <div style={s.axisDetail}>
+          {justification && (
+            <div style={{
+              fontSize: 11, color: 'var(--color-text-muted)',
+              background: 'var(--color-bg-surface)',
+              padding: '6px 8px', borderRadius: 4,
+              borderLeft: '2px solid var(--color-accent-border)',
+              fontFamily: 'Consolas, "Malgun Gothic", monospace',
+              marginBottom: 8, lineHeight: 1.5,
+            }}>▣ {justification}</div>
+          )}
           {strengths.length > 0 && (
             <div style={s.detailGroup}>
               <div style={s.detailLabel('var(--color-success)')}>강점</div>
