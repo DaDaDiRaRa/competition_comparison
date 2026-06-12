@@ -510,6 +510,42 @@ def axis_rubric_for(facility_type: str, axis_key: str) -> dict:
             out["rubric_hint"] = override["rubric_hint"]
     return out
 
+
+def build_axis_rubric_block(facility_type: str, axes_keys: list[str] | None = None) -> str:
+    """평가축별 rubric을 LLM 프롬프트용 문자열로 직렬화 (공유 헬퍼).
+
+    각 축마다: label · description · 핵심 신호(signals) · A~E 등급 정의 · 시설특화 hint.
+    "왜 이 등급인지" LLM이 자기검증 가능한 수준의 룰북.
+
+    Args:
+        facility_type: 시설유형 키 (FACILITY_TYPES의 키)
+        axes_keys: 직렬화할 축 목록. None이면 시설유형 그룹의 전체 축 사용.
+
+    Returns:
+        프롬프트에 그대로 삽입 가능한 multi-line 문자열.
+    """
+    if axes_keys is None:
+        axes_keys = axes_keys_for(facility_type)
+    lines = []
+    for k in axes_keys:
+        r = axis_rubric_for(facility_type, k)
+        lines.append(f"\n■ {k} — {r['label_ko']}")
+        if r.get("description"):
+            lines.append(f"  설명: {r['description']}")
+        signals = r.get("signals") or []
+        if signals:
+            sig_lines = "\n".join(f"   · {s}" for s in signals)
+            lines.append(f"  PDF에서 볼 신호:\n{sig_lines}")
+        rubric = r.get("rubric") or {}
+        if rubric:
+            rub_lines = "\n".join(
+                f"   {g}: {rubric[g]}" for g in ("A", "B", "C", "D", "E") if g in rubric
+            )
+            lines.append(f"  등급 기준:\n{rub_lines}")
+        if r.get("rubric_hint"):
+            lines.append(f"  시설특화 hint: {r['rubric_hint']}")
+    return "\n".join(lines)
+
 def axes_for(facility_type: str) -> dict:
     group = FACILITY_TYPES.get(facility_type, {}).get("group", "general")
     return COMPARISON_AXES_BY_GROUP[group]

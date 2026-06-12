@@ -12,7 +12,7 @@ myproject_report_generator.py가 HTML로 렌더링하고, archive_search.py가 F
 import json
 import logging
 
-from config import settings, axes_keys_for, facility_label, axis_rubric_for
+from config import settings, axes_keys_for, facility_label, build_axis_rubric_block
 from services.comparator import _trim_extracted, _trim_brief
 from services.llm_client import call_messages
 from services.utils import parse_json_response
@@ -30,33 +30,6 @@ _SYSTEM = (
 )
 
 
-def _build_axis_rubric_block(facility_type: str, axes_keys: list[str]) -> str:
-    """평가축별 rubric을 LLM 프롬프트용 문자열로 직렬화.
-
-    각 축마다: label · 핵심 신호(signals) · A~E 등급 정의 · 시설특화 hint.
-    "왜 이 등급인지" LLM이 자기검증 가능한 수준의 룰북.
-    """
-    lines = []
-    for k in axes_keys:
-        r = axis_rubric_for(facility_type, k)
-        lines.append(f"\n■ {k} — {r['label_ko']}")
-        if r.get("description"):
-            lines.append(f"  설명: {r['description']}")
-        signals = r.get("signals") or []
-        if signals:
-            sig_lines = "\n".join(f"   · {s}" for s in signals)
-            lines.append(f"  PDF에서 볼 신호:\n{sig_lines}")
-        rubric = r.get("rubric") or {}
-        if rubric:
-            rub_lines = "\n".join(
-                f"   {g}: {rubric[g]}" for g in ("A", "B", "C", "D", "E") if g in rubric
-            )
-            lines.append(f"  등급 기준:\n{rub_lines}")
-        if r.get("rubric_hint"):
-            lines.append(f"  시설특화 hint: {r['rubric_hint']}")
-    return "\n".join(lines)
-
-
 def _build_prompt(
     facility_type: str,
     axes_keys: list[str],
@@ -70,7 +43,7 @@ def _build_prompt(
     facility_kr = facility_label(facility_type)
     result_kr = {"win": "당선", "contracted": "수의계약", "lose": "참여 (낙선)"}.get(result, result)
     axes_csv = ", ".join(axes_keys)
-    rubric_block = _build_axis_rubric_block(facility_type, axes_keys)
+    rubric_block = build_axis_rubric_block(facility_type, axes_keys)
 
     extracted_json = json.dumps(_trim_extracted(extracted or {}), ensure_ascii=False)
     brief_json = json.dumps(_trim_brief(brief or {}), ensure_ascii=False) if brief else "{}"

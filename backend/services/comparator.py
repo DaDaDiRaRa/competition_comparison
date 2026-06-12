@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from config import settings, COMPARISON_AXES, COMPARISON_AXES_META, axes_for
+from config import settings, COMPARISON_AXES, COMPARISON_AXES_META, axes_for, build_axis_rubric_block
 from services.llm_client import call_messages
 from services.utils import parse_json_response
 
@@ -38,6 +38,7 @@ def _make_blind_static(facility_type: str) -> str:
     회사명 익명화(A안/B안...) + 결과 라벨 제거 상태에서 순수 분석적 채점만 수행.
     `cache_control: ephemeral` 마킹 대상."""
     ax = _build_axes_strings(facility_type)
+    rubric_block = build_axis_rubric_block(facility_type)
     return (
         f"TASK: blind_comparative_scoring\n"
         f"COMPARISON_AXES: {ax['axes_key_str']}\n"
@@ -51,18 +52,16 @@ def _make_blind_static(facility_type: str) -> str:
         "\n"
         "COMPARE_EACH_SUBMISSION_AGAINST_BRIEF_AND_EACH_OTHER per axis.\n"
         "\n"
-        "AXIS_DEFINITIONS:\n"
-        f"{ax['axis_definitions']}\n"
+        "─────────── AXIS RUBRIC (시설유형 맞춤 룰북) ───────────\n"
+        "각 제출물에 등급을 부여할 때 아래 rubric을 엄격히 적용한다.\n"
+        "임의 기준 만들지 말고, 신호 충족 개수와 등급 기준 행에 직접 매칭한다.\n"
+        f"{rubric_block}\n"
         "\n"
         f"axis_keys: {ax['axes_key_str']}\n"
         "\n"
-        "GRADING (5 levels, no numeric scores):\n"
-        '- "A": clearly best / strongly exceeds brief on this axis\n'
-        '- "B": good / meets or slightly exceeds brief\n'
-        '- "C": adequate / meets brief at typical level\n'
-        '- "D": below average / partially meets brief\n'
-        '- "E": poor / misses brief or has significant weakness\n'
-        "Use only A/B/C/D/E. Do NOT output numeric values.\n"
+        "GRADING SUMMARY: 위 rubric의 A~E 중 하나만 출력. 숫자 점수 금지.\n"
+        "A=신호 대부분 충족 + A 기준 행 일치 / B=다수 충족·일부 일반론 / "
+        "C=절반 충족·평이 / D=일부 누락 / E=대부분 누락. 시설특화 hint가 있으면 우선 적용.\n"
         "\n"
         "CITATION RULE (MANDATORY):\n"
         "Each item in STRENGTHS and WEAKNESSES MUST end with a page reference in the form '(p.N)'\n"
@@ -132,6 +131,7 @@ def _make_reveal_static(facility_type: str) -> str:
 def _make_diagnose_static(facility_type: str) -> str:
     """진단 프롬프트의 정적 prefix — 동일 facility_type에서 항상 같음."""
     ax = _build_axes_strings(facility_type)
+    rubric_block = build_axis_rubric_block(facility_type)
     return (
         "TASK: new_submission_diagnosis\n"
         "FACILITY_TYPE: {facility_type}\n"
@@ -139,8 +139,13 @@ def _make_diagnose_static(facility_type: str) -> str:
         "TEMPERATURE: 0\n"
         "\n"
         "INSTRUCTIONS (data follows after this section):\n"
-        "GRADING (5 levels, no numeric scores): A=best/clearly exceeds, B=good/meets+, C=adequate/typical, D=below avg/partial, E=poor/misses.\n"
-        "Use only A/B/C/D/E for axis grade and overall_grade. Do NOT output numeric values.\n"
+        "\n"
+        "─────────── AXIS RUBRIC (시설유형 맞춤 룰북) ───────────\n"
+        "각 축 등급은 아래 rubric의 신호 충족 개수 + 등급 기준 행에 직접 매칭하여 부여.\n"
+        "임의 기준 만들지 말 것. 시설특화 hint가 있으면 그 기준 우선 적용.\n"
+        f"{rubric_block}\n"
+        "\n"
+        "GRADING SUMMARY: A~E 중 하나만 출력. 숫자 금지. overall_grade도 동일 5단계.\n"
         "\n"
         "CITATION RULE (MANDATORY):\n"
         "Each item in strengths/weaknesses/recommendations MUST end with a page reference '(p.N)' from MY_SUBMISSION_DATA._page.\n"

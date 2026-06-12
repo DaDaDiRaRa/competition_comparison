@@ -499,3 +499,28 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 - `backend/routers/myproject.py`(또는 기존 `upload.py` 확장) — `/api/myproject/run` SSE 엔드포인트
 
 **아카이브 검색 연동:** `build_archive_index()`가 `_myprojects/` 하위도 스캔하도록 확장. FTS5 컬럼에 `narrative`, `search_keywords`, `concept_text`, `memo` 추가 → 자연어 질의 시 풍부하게 매칭.
+
+### 3. 평가축 rubric 확장 (signals + A-E 정의 시스템)
+
+**배경:** `config.py`의 `axis_rubric_for()` + `FACILITY_AXIS_OVERRIDES`로 시설유형별 평가 룰북 구조를 구축했고 `myproject_analyzer.py`가 이를 프롬프트에 주입함. 현재 시드된 시설유형은 5개(의료/주거/공공/교육/교통)만이고, `comparator.py`(경쟁공모 비교)는 아직 base rubric만 사용. 다음 단계는 이 시스템을 전 영역으로 확장.
+
+**할 일:**
+
+- **A. `comparator.py`에 rubric 주입** — `_make_blind_static()` / `_make_diagnose_static()` 프롬프트의 `AXIS_DEFINITIONS` 블록을 `_build_axis_rubric_block()` 호출로 교체. 경쟁공모 블라인드 채점도 동일 룰북으로 등급 부여 → 같은 PDF가 MyProject·경쟁공모 어디서 분석되든 등급 일관성 보장. 토큰 캐시(`cache_control`) 활용 — facility_type별 rubric block을 정적 prefix에 포함시켜 90% 캐시 할인 유지.
+
+- **B. 나머지 9개 시설유형 `FACILITY_AXIS_OVERRIDES` 시드:**
+  - **상업** (`commercial`): program_planning (앵커 매장·MD믹스·체류시간), site_response (보행 유입·접근성)
+  - **문화·집회** (`cultural`): public_value (공연/전시 운영 시나리오), architectural_form (랜드마크성·시그니처)
+  - **숙박·위락** (`hospitality`): product_competitiveness 격 (객실 유형·뷰·럭셔리 디테일), site_response (조망·소음)
+  - **업무** (`office`): program_planning (개방형/혼합·코어 효율), brief_compliance_quant (NLA 비율·층고)
+  - **산업** (`industrial`): technical_feasibility (생산동선·하중·전력), program_planning (zone 분리)
+  - **복합** (`mixed_use`): program_planning (용도간 간섭 차단·share 동선), site_response (저층부 활성화)
+  - **마스터플랜** (`masterplan`): site_response (단지/도시 스케일 맥락), public_value (오픈스페이스 네트워크)
+  - **재건축** (`reconstruction`): 이미 redev 그룹 별도 8축이 있으므로, override는 사업성/조합원혜택의 시드 정량 임계값(자산가치 증가율 %, 분담금 감소율 %)만 추가
+  - **대안설계** (`alternative`): reconstruction과 유사하되 base 비교 강조 (기존안 대비 우위 정량)
+
+- **C. rubric 자기검증 단계 추가:** deep_analyze 출력에 `grade_justification: {axis_key: "신호 X/Y개 충족 → 등급 기준 행 매칭"}` 필드 추가. LLM이 자기 등급 부여 근거를 명시하게 함 → 후속 검토 시 임원이 즉시 "왜 B?" 검증 가능. 환각 억제 효과도 큼.
+
+- **D. rubric 버전 관리:** `axis_rubric_for()` 반환에 `version: "v1"` 메타 포함. `_deep.json` 저장 시 어떤 rubric 버전으로 평가했는지 기록 → 향후 rubric 개정 시 기존 데이터 재평가 트리거 가능. 룰북 변경 이력은 `config.py` 상단 주석.
+
+**주의:** rubric 시드는 임원·실무진 리뷰가 필수. 본 문서의 시드 내용은 일반적 건축 지식 기반 초안이며, 실제 회사 평가 관점·과거 당선/낙선 분석을 반영해 보정해야 함. 시설유형 1개씩 검토 후 머지 권장.
