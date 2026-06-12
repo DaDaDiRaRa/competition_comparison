@@ -448,6 +448,7 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 - **SQLite threading:** FastAPI sync 라우트는 threadpool에서 실행되므로 startup 스레드에서 생성된 in-memory 커넥션이 cross-thread 에러(500)를 유발. `sqlite3.connect(":memory:", check_same_thread=False)` 필수
 - **자연어 검색 폴백:** `search_natural()`에서 Claude API 호출 실패(API 키 미설정 등) 시 `search_keyword(q)`로 자동 폴백 — 단순 키워드 검색은 API 키 없이도 동작. 전체 자연어 문장은 폴백으로 결과 없을 수 있음
 - **한국어 FTS 동의어:** `FACILITY_SYNONYMS` dict로 시설유형 FTS 컬럼에 영어 키 + 한국어 레이블 + 구어체 동의어 함께 저장 (예: "public" 컬럼 = "public 공공시설 시청 구청 관공서 ..."). `search_natural()` 프롬프트에 `_FACILITY_HINT` 블록 포함 — 쿼리에서 시설 카테고리 언급 시 정식 한국어 레이블도 키워드에 포함하도록 지시
+- **평가축 rubric 구조 (config.py):** 각 axis는 `description`(1줄) + `signals`(PDF에서 볼 신호 4~5개) + `rubric`(A~E 등급 정의 문장)을 가짐. `FACILITY_AXIS_OVERRIDES[facility_type][axis_key]`로 시설유형별 `signals_extra` + `rubric_hint` 추가. `axis_rubric_for(facility_type, axis_key)` 헬퍼가 base + override 머지. `myproject_analyzer._build_axis_rubric_block()`이 이를 프롬프트에 직렬화하여 LLM이 직접 매칭 가능한 룰북 제공. 현재 시드: 의료(program/technical) · 주거(site/program) · 공공(public_value/brief) · 교육(program) · 교통(program). 다른 시설유형은 base rubric만 사용 — 점진적 확장.
 
 ---
 

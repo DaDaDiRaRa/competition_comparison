@@ -12,7 +12,7 @@ myproject_report_generator.py가 HTML로 렌더링하고, archive_search.py가 F
 import json
 import logging
 
-from config import settings, axes_keys_for, facility_label
+from config import settings, axes_keys_for, facility_label, axis_rubric_for
 from services.comparator import _trim_extracted, _trim_brief
 from services.llm_client import call_messages
 from services.utils import parse_json_response
@@ -25,8 +25,36 @@ _SYSTEM = (
     "Output Korean. Respond ONLY with valid JSON matching the schema. "
     "Every strength/weakness/improvement MUST cite the source page in (p.N) format. "
     "Be specific and evidence-based — quote concrete numbers, materials, room names "
-    "from the extracted data. Avoid generic boilerplate."
+    "from the extracted data. Avoid generic boilerplate. "
+    "Apply the per-axis RUBRIC strictly — do not invent your own grading scale."
 )
+
+
+def _build_axis_rubric_block(facility_type: str, axes_keys: list[str]) -> str:
+    """평가축별 rubric을 LLM 프롬프트용 문자열로 직렬화.
+
+    각 축마다: label · 핵심 신호(signals) · A~E 등급 정의 · 시설특화 hint.
+    "왜 이 등급인지" LLM이 자기검증 가능한 수준의 룰북.
+    """
+    lines = []
+    for k in axes_keys:
+        r = axis_rubric_for(facility_type, k)
+        lines.append(f"\n■ {k} — {r['label_ko']}")
+        if r.get("description"):
+            lines.append(f"  설명: {r['description']}")
+        signals = r.get("signals") or []
+        if signals:
+            sig_lines = "\n".join(f"   · {s}" for s in signals)
+            lines.append(f"  PDF에서 볼 신호:\n{sig_lines}")
+        rubric = r.get("rubric") or {}
+        if rubric:
+            rub_lines = "\n".join(
+                f"   {g}: {rubric[g]}" for g in ("A", "B", "C", "D", "E") if g in rubric
+            )
+            lines.append(f"  등급 기준:\n{rub_lines}")
+        if r.get("rubric_hint"):
+            lines.append(f"  시설특화 hint: {r['rubric_hint']}")
+    return "\n".join(lines)
 
 
 def _build_prompt(
@@ -42,6 +70,7 @@ def _build_prompt(
     facility_kr = facility_label(facility_type)
     result_kr = {"win": "당선", "contracted": "수의계약", "lose": "참여 (낙선)"}.get(result, result)
     axes_csv = ", ".join(axes_keys)
+    rubric_block = _build_axis_rubric_block(facility_type, axes_keys)
 
     extracted_json = json.dumps(_trim_extracted(extracted or {}), ensure_ascii=False)
     brief_json = json.dumps(_trim_brief(brief or {}), ensure_ascii=False) if brief else "{}"
@@ -66,6 +95,11 @@ def _build_prompt(
         f"RESULT: {result} ({result_kr})\n"
         f"AXES: {axes_csv}\n"
         "\n"
+        "─────────── AXIS RUBRIC (시설유형 맞춤) ───────────\n"
+        "아래 rubric을 엄격히 적용해라. 등급은 'PDF에서 볼 신호'의 충족 정도와 '등급 기준'의\n"
+        "행과 직접 매칭해서 부여하고, strengths/weaknesses는 그 신호들을 인용해서 작성한다.\n"
+        f"{rubric_block}\n"
+        "\n"
         f"USER_META (있을 수 있는 사용자 입력 — 빈 값은 네가 추출해서 채워야 함): {meta_json}\n"
         "\n"
         f"BRIEF (지침서 — 있을 수 있음): {brief_json}\n"
@@ -75,7 +109,9 @@ def _build_prompt(
         "─────────── INSTRUCTIONS ───────────\n"
         "1) 평가축별 심층 분석: 각 축마다 strengths 5~10개, weaknesses 3~8개. "
         "각 항목은 '(p.N) 근거 한 줄' 형식. 모호한 칭찬·일반론 금지. "
-        "추출 데이터에 등장하는 실제 수치·재료·실명·동선을 직접 인용.\n"
+        "추출 데이터에 등장하는 실제 수치·재료·실명·동선을 직접 인용. "
+        "**grade는 위 AXIS RUBRIC의 'PDF에서 볼 신호' 충족 개수와 '등급 기준' 행에 직접 매칭해서 부여**. "
+        "예: 신호 6개 중 5개 충족 + A 기준 행과 일치 → A. 시설특화 hint가 있으면 그 기준을 우선 적용.\n"
         "2) 컨셉 narrative: 이 제안서의 디자인 의도·핵심 컨셉·스토리 구조를 3~5문장으로. "
         "아카이브 자연어 검색의 핵심 소스이므로 단순 요약이 아니라 검색 가능한 키워드가 풍부한 문장으로.\n"
         "3) design_intent: 디자인 의도 한 문장 (검색·요약용).\n"
