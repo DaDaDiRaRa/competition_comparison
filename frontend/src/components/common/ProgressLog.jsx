@@ -2,9 +2,11 @@ import { useEffect, useRef } from 'react'
 import { useMeta } from '../../hooks/useMeta'
 
 const STAGE_KR = {
-  brief: '지침서 처리', brief_extract: '지침서 추출', submission: '제안서 처리',
+  brief: '지침서 처리', brief_extract: '지침서 추출', brief_reqs: '지침서 요구사항 분석',
+  submission: '제안서 처리',
   extract: '제안서 추출', compare: '비교분석', pattern: '패턴 업데이트',
   load_patterns: '패턴 로드', diagnose: 'AI 진단', report: '리포트 생성',
+  deep_analyze: '심층 분석',
 }
 
 export default function ProgressLog({ events }) {
@@ -24,6 +26,7 @@ export default function ProgressLog({ events }) {
     if (ev.type === 'done') return `✓ ${ev.step} 완료 (${ev.total_pages || ''} pages)`
     if (ev.type === 'info') return `  패턴: ${ev.win_count}개 당선작 로드됨`
     if (ev.type === 'complete') return '✅ 분석 완료'
+    if (ev.type === 'warn') return `⚠ ${ev.msg || ev.stage}`
     if (ev.type === 'error') return `❌ 오류: ${ev.message}${ev.detail ? '\n' + ev.detail : ''}`
     return JSON.stringify(ev)
   }

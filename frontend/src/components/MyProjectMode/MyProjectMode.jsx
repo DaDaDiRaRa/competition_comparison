@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getFacilityTypes, runMyProjectPipeline } from '../../api/client'
+import { getFacilityTypes, runMyProjectPipeline, getMyProjectDeepReportUrl } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
@@ -451,11 +451,30 @@ export default function MyProjectMode() {
 
       {done && (
         <div style={s.panel}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--gap-md)', marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)' }}>등록 완료</div>
             <div style={s.badge(selectedOpt.color, selectedOpt.bg)}>{selectedOpt.label}</div>
             {(done.result === 'win' || done.result === 'contracted') && (
               <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-success)' }}>✓ 패턴 DB 반영됨</div>
+            )}
+            {done.deep_report_available && (
+              <a
+                href={getMyProjectDeepReportUrl(done.facility_type, done.competition_id, done.company)}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  marginLeft: 'auto',
+                  background: 'var(--color-accent)',
+                  color: 'var(--color-text-on-accent)',
+                  textDecoration: 'none',
+                  padding: '8px 16px',
+                  borderRadius: 6,
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--font-weight-semibold)',
+                }}
+              >
+                📑 심층 리포트 열기
+              </a>
             )}
           </div>
 

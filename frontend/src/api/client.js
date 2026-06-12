@@ -118,6 +118,10 @@ export function getSubmissionReportUrl(facilityType, competitionId, company) {
   return `${BASE}/accumulate/projects/${facilityType}/${competitionId}/submissions/${encodeURIComponent(company)}/report`
 }
 
+export function getMyProjectDeepReportUrl(facilityType, competitionId, company) {
+  return `${BASE}/accumulate/projects/${facilityType}/${competitionId}/submissions/${encodeURIComponent(company)}/deep-report`
+}
+
 export function getCrossCompareReportUrl(filename) {
   return `${BASE}/accumulate/cross-compare/reports/${encodeURIComponent(filename)}`
 }

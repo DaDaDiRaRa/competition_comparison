@@ -73,6 +73,38 @@ def _facility_index_text(facility_type: str) -> str:
     return " ".join(p for p in parts if p)
 
 
+def _collect_deep_search_text(comp_dir: Path) -> str:
+    """경쟁공모 폴더 안의 submissions/*_deep.json 전체를 합쳐 FTS 검색 텍스트 생성.
+
+    MyProjectMode 심층 분석에서 LLM이 생성한 concept_narrative + design_intent +
+    key_differentiators + search_keywords를 모두 모아 한 문자열로 반환. 자연어
+    검색의 핵심 매칭 소스.
+    """
+    sub_dir = comp_dir / "submissions"
+    if not sub_dir.exists():
+        return ""
+
+    parts: list[str] = []
+    for deep_path in sub_dir.glob("*_deep.json"):
+        doc = _safe_read_json(deep_path)
+        if not doc:
+            continue
+        deep = doc.get("deep") or doc
+        if not isinstance(deep, dict):
+            continue
+        narrative = deep.get("concept_narrative")
+        if narrative:
+            parts.append(str(narrative))
+        intent = deep.get("design_intent")
+        if intent:
+            parts.append(str(intent))
+        for k in ("key_differentiators", "search_keywords", "improvement_points"):
+            v = deep.get(k)
+            if isinstance(v, list):
+                parts.extend(str(x) for x in v if x)
+    return " ".join(parts)
+
+
 def _extra_meta_index_text(meta: dict) -> str:
     """_meta.json의 MyProject 상세 필드를 FTS extra_meta 컬럼용으로 직렬화.
 
@@ -236,6 +268,11 @@ class ArchiveSearchIndex:
                 }
                 self._cards[competition_id] = card
 
+                # 사용자 메타 + MyProject 심층 분석(있으면)을 합쳐 extra_meta로.
+                extra_text = _extra_meta_index_text(meta)
+                deep_text = _collect_deep_search_text(comp_dir)
+                combined_extra = (extra_text + " " + deep_text).strip()
+
                 self.conn.execute(
                     "INSERT INTO archive_fts VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
@@ -246,7 +283,7 @@ class ArchiveSearchIndex:
                         _join_list(winner_patterns),
                         _join_list(concept_keywords),
                         alignment,
-                        _extra_meta_index_text(meta),
+                        combined_extra,
                     ),
                 )
                 count += 1

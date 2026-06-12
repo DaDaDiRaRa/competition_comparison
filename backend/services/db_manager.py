@@ -368,6 +368,77 @@ def get_submission_report_path(facility_type: str, competition_id: str, company:
     return None
 
 
+# ── MyProjectMode 심층 분석 (deep) ─────────────────────────────────────────────
+
+def save_myproject_deep(
+    facility_type: str, competition_id: str, company: str, deep_doc: dict,
+) -> bool:
+    """심층 분석 JSON 저장: submissions/{slug}_{result}_deep.json.
+
+    company로 기존 submission JSON을 찾아 _deep.json 파일명을 결정한다.
+    """
+    sub_dir = get_competition_dir(facility_type, competition_id) / "submissions"
+    if not sub_dir.exists():
+        return False
+    for f in sub_dir.glob("*.json"):
+        if f.name.endswith("_deep.json"):
+            continue
+        data = _read_json(f)
+        if data.get("company") == company:
+            deep_path = f.with_name(f.stem + "_deep.json")
+            _atomic_write(deep_path, deep_doc)
+            return True
+    return False
+
+
+def get_myproject_deep_path(
+    facility_type: str, competition_id: str, company: str,
+) -> Path | None:
+    sub_dir = get_competition_dir(facility_type, competition_id) / "submissions"
+    if not sub_dir.exists():
+        return None
+    for f in sub_dir.glob("*.json"):
+        if f.name.endswith("_deep.json"):
+            continue
+        data = _read_json(f)
+        if data.get("company") == company:
+            return f.with_name(f.stem + "_deep.json")
+    return None
+
+
+def save_myproject_report(
+    facility_type: str, competition_id: str, company: str, html: str,
+) -> bool:
+    """심층 분석 HTML 리포트 저장: submissions/{slug}_{result}_deep.html."""
+    sub_dir = get_competition_dir(facility_type, competition_id) / "submissions"
+    if not sub_dir.exists():
+        return False
+    for f in sub_dir.glob("*.json"):
+        if f.name.endswith("_deep.json"):
+            continue
+        data = _read_json(f)
+        if data.get("company") == company:
+            report_path = f.with_name(f.stem + "_deep.html")
+            _sync_write(report_path, html)
+            return True
+    return False
+
+
+def get_myproject_report_path(
+    facility_type: str, competition_id: str, company: str,
+) -> Path | None:
+    sub_dir = get_competition_dir(facility_type, competition_id) / "submissions"
+    if not sub_dir.exists():
+        return None
+    for f in sub_dir.glob("*.json"):
+        if f.name.endswith("_deep.json"):
+            continue
+        data = _read_json(f)
+        if data.get("company") == company:
+            return f.with_name(f.stem + "_deep.html")
+    return None
+
+
 def save_cross_compare_report(filename: str, html: str) -> Path:
     cross_dir = settings.db_path / "_cross_reports"
     cross_dir.mkdir(parents=True, exist_ok=True)

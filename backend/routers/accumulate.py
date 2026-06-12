@@ -56,6 +56,7 @@ from services.db_manager import (
     save_submission_report, get_submission_report_path,
     save_cross_compare_report, get_cross_compare_report_path, list_cross_compare_reports, _slugify,
     update_submission, has_comparison,
+    save_myproject_deep, save_myproject_report, get_myproject_report_path,
 )
 from services.page_classifier import classify_all_pages
 from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
@@ -63,6 +64,8 @@ from services.comparator import compare_submissions, diagnose_submission
 from services.pattern_builder import build_pattern
 from services.report_generator import generate_comparison_report
 from services.submission_report_generator import generate_submission_report
+from services.myproject_analyzer import deep_analyze
+from services.myproject_report_generator import generate_myproject_report
 from services.utils import sse, user_error_msg as _user_error_msg
 from services.archive_search import rebuild_index as _rebuild_archive_index
 
@@ -118,6 +121,17 @@ def get_submission_report(facility_type: str, competition_id: str, company: str)
     path = get_submission_report_path(facility_type, competition_id, company)
     if path is None or not path.exists():
         raise HTTPException(404, "Submission report not found")
+    resp = FileResponse(path, media_type="text/html")
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@router.get("/projects/{facility_type}/{competition_id}/submissions/{company}/deep-report")
+def get_myproject_deep_report(facility_type: str, competition_id: str, company: str):
+    """MyProjectMode 심층 분석 HTML 리포트 — submissions/{slug}_{result}_deep.html"""
+    path = get_myproject_report_path(facility_type, competition_id, company)
+    if path is None or not path.exists():
+        raise HTTPException(404, "Deep report not found")
     resp = FileResponse(path, media_type="text/html")
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -739,6 +753,48 @@ async def run_single_pipeline(
             yield sse({"type": "done", "step": "submission",
                        "company": company, "_timestamp": ts})
 
+            # ── 심층 분석 (MyProjectMode 단일 제출물 전용) ────────────────────
+            # 토큰 예산이 여유로워 평가축 deep evidence + 컨셉 narrative + 검색
+            # 키워드를 풍부하게 추출 → 아카이브 자연어 검색 품질 강화.
+            yield sse({"type": "stage", "stage": "deep_analyze",
+                       "msg": "심층 분석 중 (평가축 deep evidence + 컨셉 narrative + 검색 키워드)",
+                       "_timestamp": ts})
+            try:
+                deep = await deep_analyze(
+                    facility_type=facility_type,
+                    extracted_data=extracted,
+                    brief_data=brief_data,
+                    meta_extra=extra_meta,
+                    company=company,
+                    result=result,
+                )
+                deep_doc = {
+                    "competition_id": cid,
+                    "facility_type": facility_type,
+                    "company": company,
+                    "result": result,
+                    "deep": deep,
+                }
+                save_myproject_deep(facility_type, cid, company, deep_doc)
+                # HTML 리포트 — LLM 호출 없음, _deep.json + meta 렌더링만
+                project_meta = load_project_meta(facility_type, cid) or {}
+                # competition_name 보존을 위해 meta에 직접 주입
+                project_meta.setdefault("competition_name", competition_name)
+                deep_report_html = generate_myproject_report(
+                    deep=deep, sub_doc=sub_doc, meta=project_meta,
+                )
+                save_myproject_report(facility_type, cid, company, deep_report_html)
+                yield sse({"type": "done", "step": "deep_analyze",
+                           "company": company,
+                           "keywords_count": len(deep.get("search_keywords") or []),
+                           "_timestamp": ts})
+            except Exception as e:
+                # 심층 분석 실패는 전체 파이프라인 실패로 처리하지 않음
+                logger.warning("심층 분석 실패: %s", e)
+                yield sse({"type": "warn", "stage": "deep_analyze",
+                           "msg": f"심층 분석을 건너뛰었습니다: {_user_error_msg(e)}",
+                           "_timestamp": ts})
+
             # ── 패턴 갱신 (당선/수의계약만) ───────────────────────────────────
             if result in ("win", "contracted"):
                 yield sse({"type": "stage", "stage": "pattern",
@@ -763,11 +819,15 @@ async def run_single_pipeline(
             try: _rebuild_archive_index()
             except Exception as e: logger.warning("archive 인덱스 갱신 실패: %s", e)
 
+            # 심층 리포트 존재 여부 — 프론트가 "심층 리포트 열기" 버튼 노출에 사용
+            deep_report_available = get_myproject_report_path(facility_type, cid, company) is not None
+
             yield sse({
                 "type": "complete",
                 "competition_id": cid,
                 "facility_type": facility_type,
                 "report_available": False,
+                "deep_report_available": deep_report_available,
                 "company": company,
                 "result": result,
                 "total_pages": total_sub,
