@@ -66,7 +66,7 @@ def _build_prompt(
         f"RESULT: {result} ({result_kr})\n"
         f"AXES: {axes_csv}\n"
         "\n"
-        f"USER_META: {meta_json}\n"
+        f"USER_META (있을 수 있는 사용자 입력 — 빈 값은 네가 추출해서 채워야 함): {meta_json}\n"
         "\n"
         f"BRIEF (지침서 — 있을 수 있음): {brief_json}\n"
         "\n"
@@ -77,8 +77,7 @@ def _build_prompt(
         "각 항목은 '(p.N) 근거 한 줄' 형식. 모호한 칭찬·일반론 금지. "
         "추출 데이터에 등장하는 실제 수치·재료·실명·동선을 직접 인용.\n"
         "2) 컨셉 narrative: 이 제안서의 디자인 의도·핵심 컨셉·스토리 구조를 3~5문장으로. "
-        "USER_META의 memo와 tags를 자연스럽게 반영. 아카이브 자연어 검색의 핵심 소스이므로 "
-        "단순 요약이 아니라 검색 가능한 키워드가 풍부한 문장으로.\n"
+        "아카이브 자연어 검색의 핵심 소스이므로 단순 요약이 아니라 검색 가능한 키워드가 풍부한 문장으로.\n"
         "3) design_intent: 디자인 의도 한 문장 (검색·요약용).\n"
         "4) key_differentiators: 이 제안서가 같은 시설유형 평균 대비 두드러지는 점 3~7개.\n"
         "5) improvement_points: 결과와 무관하게 '다음 유사 공모 시 강조하거나 보강할 포인트' 5~10개. "
@@ -86,6 +85,21 @@ def _build_prompt(
         "6) search_keywords: 8~15개. 자연어 검색에 걸리도록 한국어 명사구 위주. "
         "facility_type·procurement_type·핵심 컨셉·차별화 요소·발주처 성격·기억할 만한 키워드 포함. "
         "단순 일반어(설계·건축·프로젝트) 금지.\n"
+        "7) auto_meta: PDF에서 직접 추출/추론한 프로젝트 메타데이터.\n"
+        "   - procurement_type: 다음 중 하나 — 'competition'(경쟁공모/설계공모) | 'negotiated'(수의계약) | "
+        "     'invited'(지명공모/초청) | 'turnkey'(턴키/기술제안/일괄입찰) | 'private'(민간발주) | "
+        "     'other'(기타) | ''(불명확하면 빈 문자열). 표지·제출 안내문·BRIEF에서 단서를 찾아라.\n"
+        "   - project_phase: 'planning'|'concept'|'basic_design'|'detailed_design'|'cm'|'' 중 하나. "
+        "     일반 설계공모는 'concept' 또는 'basic_design'. 단서가 없으면 빈 문자열.\n"
+        "   - role: 'lead'(주관사)|'consortium'(컨소시엄 일원)|'subcontractor'(협력사)|''. 표지·credits에서 단서.\n"
+        "   - partners: 컨소시엄·협력사명 자유 텍스트. 단독이면 빈 문자열.\n"
+        "   - gross_floor_area: 연면적 (예: '12,500㎡' '32,400m²'). 개요/면적표/사업개요 페이지에서 추출.\n"
+        "   - floors: 층수 (예: '지상 8층/지하 2층'). 건축개요·단면도에서 추출.\n"
+        "   - units: 세대수/실수 (주거: '320세대', 호텔: '180실', 학교: '24학급', 그 외 시설은 빈 문자열).\n"
+        "   - tags: 5~10개 한국어 키워드 리스트. 프로젝트 특성을 짧게 (예: '리모델링','친환경','도시재생').\n"
+        "   - summary: 1~2문장 짧은 프로젝트 설명. 발주처·시설성격·핵심 특성 포함. "
+        "     아카이브 카드 부제로 노출되므로 자연스러운 한국어로.\n"
+        "   USER_META에 사용자가 명시한 값이 있으면 그대로 두고, 빈 값만 너의 추출로 채워라.\n"
         "\n"
         "─────────── OUTPUT SCHEMA ───────────\n"
         "{\n"
@@ -100,7 +114,14 @@ def _build_prompt(
         "  },\n"
         '  "key_differentiators": ["...", ...],\n'
         '  "improvement_points": ["...", ...],\n'
-        '  "search_keywords": ["...", ...]\n'
+        '  "search_keywords": ["...", ...],\n'
+        '  "auto_meta": {\n'
+        '    "procurement_type": "competition|negotiated|invited|turnkey|private|other|"",\n'
+        '    "project_phase": "planning|concept|basic_design|detailed_design|cm|"",\n'
+        '    "role": "lead|consortium|subcontractor|"",\n'
+        '    "partners": "...", "gross_floor_area": "...", "floors": "...", "units": "...",\n'
+        '    "tags": ["...", "..."], "summary": "..."\n'
+        "  }\n"
         "}\n"
         "\n"
         "STRICT: respond ONLY with the JSON. No prose before/after."
@@ -145,6 +166,7 @@ async def deep_analyze(
         parsed.setdefault("key_differentiators", [])
         parsed.setdefault("improvement_points", [])
         parsed.setdefault("search_keywords", [])
+        parsed.setdefault("auto_meta", {})
         return parsed
     except Exception as e:
         logger.exception("[myproject_analyzer] deep_analyze 실패: %s", e)
@@ -155,5 +177,6 @@ async def deep_analyze(
             "key_differentiators": [],
             "improvement_points": [],
             "search_keywords": [],
+            "auto_meta": {},
             "_error": str(e),
         }

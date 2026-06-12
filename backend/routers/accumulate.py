@@ -57,6 +57,7 @@ from services.db_manager import (
     save_cross_compare_report, get_cross_compare_report_path, list_cross_compare_reports, _slugify,
     update_submission, has_comparison,
     save_myproject_deep, save_myproject_report, get_myproject_report_path,
+    update_project_meta,
 )
 from services.page_classifier import classify_all_pages
 from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
@@ -776,6 +777,25 @@ async def run_single_pipeline(
                     "deep": deep,
                 }
                 save_myproject_deep(facility_type, cid, company, deep_doc)
+
+                # AI가 추출한 auto_meta를 _meta.json에 머지 (사용자가 명시한 값 우선).
+                # tags는 list, summary는 _meta.json의 memo 필드로 매핑하여 ArchiveDetail에 자연 노출.
+                auto_meta = deep.get("auto_meta") or {}
+                if isinstance(auto_meta, dict):
+                    auto_extras = {
+                        "procurement_type": auto_meta.get("procurement_type") or "",
+                        "project_phase":    auto_meta.get("project_phase") or "",
+                        "role":             auto_meta.get("role") or "",
+                        "partners":         auto_meta.get("partners") or "",
+                        "gross_floor_area": auto_meta.get("gross_floor_area") or "",
+                        "floors":           auto_meta.get("floors") or "",
+                        "units":            auto_meta.get("units") or "",
+                        "tags":             auto_meta.get("tags") or [],
+                        # AI summary는 사용자 메모가 비어있을 때만 memo 필드로 채움
+                        "memo":             auto_meta.get("summary") or "",
+                    }
+                    update_project_meta(facility_type, cid, auto_extras)
+
                 # HTML 리포트 — LLM 호출 없음, _deep.json + meta 렌더링만
                 project_meta = load_project_meta(facility_type, cid) or {}
                 # competition_name 보존을 위해 meta에 직접 주입

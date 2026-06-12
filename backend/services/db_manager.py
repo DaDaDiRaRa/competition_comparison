@@ -111,6 +111,36 @@ def save_project_meta(
     return comp_dir
 
 
+def update_project_meta(
+    facility_type: str, competition_id: str, extras: dict,
+) -> Path | None:
+    """기존 _meta.json에 extras를 병합 (submissions/created_at 등 기존 필드 보존).
+
+    값 우선순위: 기존 메타에 비어있는 키만 extras로 채움 (덮어쓰지 않음).
+    빈 값('', [], {}, None)은 무시.
+    deep_analyze가 추출한 auto_meta를 사용자 입력 위에 덮어쓰지 않도록 보호.
+    """
+    if not extras:
+        return None
+    comp_dir = get_competition_dir(facility_type, competition_id)
+    meta_path = comp_dir / "_meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        with open(meta_path, encoding="utf-8") as f:
+            meta = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    for k, v in extras.items():
+        if v in (None, "", [], {}):
+            continue
+        # 기존 값이 비어있을 때만 채움 — 사용자 입력 보존
+        if meta.get(k) in (None, "", [], {}):
+            meta[k] = v
+    _atomic_write(meta_path, meta)
+    return meta_path
+
+
 def load_project_meta(facility_type: str, competition_id: str) -> dict:
     path = get_competition_dir(facility_type, competition_id) / "_meta.json"
     return _read_json(path)

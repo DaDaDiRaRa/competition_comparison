@@ -453,25 +453,22 @@ def search(conn, query: str, facility_type: str = None) -> list[dict]:
 
 ## Next Steps (예정)
 
-### 1. MyProjectMode 메타데이터 확장 → 아카이브 자연어 검색 강화
+### 1. MyProjectMode 메타데이터 — AI 자동 추출 방식 (완료)
 
-**배경:** 현재 `MyProjectMode`(내 프로젝트 등록)는 경쟁공모용 최소 필드(`competition_name`, `facility_type`, `project_number`, `client`, `location`, `company`, `result`)만 받음. 하지만 실무는 경쟁공모 외에도 **수의계약·지명·턴키·민간발주** 등 다양한 수주 형태가 있고, 이 맥락이 풍부할수록 아카이브 자연어 검색이 정확해짐 ("○○구 수의계약으로 했던 학교 있어?" 같은 질의 대응).
+**구현 방식:** 사용자 입력 폼을 두지 **않고**, `deep_analyze()`가 PDF를 분석할 때 `auto_meta` 필드로 함께 추출 → `update_project_meta()`로 `_meta.json`에 머지. 사용자가 명시한 값이 있으면(현재는 그런 입력 UI 없음) 그것이 우선, 아니면 AI 추출값으로 채움.
 
-**할 일:**
-- `MyProjectMode.jsx` 폼에 상세 메타 필드 추가 후보:
-  - **수주 형태** (`procurement_type`): 경쟁공모 / 수의계약 / 지명 / 턴키 / 민간발주 / 기타
-  - **사업 단계** (`project_phase`): 기획 / 계획 / 기본설계 / 실시설계 / CM
-  - **연면적·층수·세대수** (정량 메타 — 이미 추출 파이프라인에서 일부 잡지만 사용자가 명시적으로 넣으면 검색 정확도↑)
-  - **참여 역할** (`role`): 주관사 / 컨소시엄 / 협력사
-  - **컨소시엄 파트너** (`partners`: 자유 텍스트)
-  - **프로젝트 태그** (`tags`: 자유 키워드 — 예: "친환경", "리모델링", "도시재생")
-  - **프로젝트 메모** (`memo`: 자유 텍스트, 자연어 검색 핵심 소스)
-- 백엔드: `routers/upload.py`(또는 my-project 전용 라우터)에서 위 필드 받아 `_meta.json`에 저장
-- `services/archive_search.py`의 FTS5 스키마에 `procurement_type`, `tags`, `memo`, `partners` 컬럼 추가 → `build_index()`에서 인덱싱
-- `search_natural()` 프롬프트에 수주 형태 동의어(`FACILITY_SYNONYMS`와 같은 방식의 `PROCUREMENT_SYNONYMS`) 추가 — "수의계약", "지명공모", "턴키" 등 구어체 매핑
-- `ArchiveCard` / `ArchiveDetail`에 `procurement_type` 뱃지·태그 표시
+**AI가 추출하는 필드 (myproject_analyzer.py의 auto_meta 스키마):**
+- `procurement_type`: `competition|negotiated|invited|turnkey|private|other|""` — 표지·제출 안내·BRIEF에서 단서 탐색
+- `project_phase`: `planning|concept|basic_design|detailed_design|cm|""` — 설계공모는 보통 concept/basic_design
+- `role`: `lead|consortium|subcontractor|""` — 표지·credits에서
+- `partners`: 컨소시엄 파트너명 자유 텍스트
+- `gross_floor_area` / `floors` / `units` — 개요/사업개요/단면도 페이지에서 추출
+- `tags`: 5~10개 한국어 키워드 (예: "리모델링", "친환경", "도시재생")
+- `summary`: 1~2문장 짧은 설명 — `_meta.json`의 `memo` 필드로 매핑 → ArchiveDetail "프로젝트 정보"에 노출
 
-**주의:** 기존 `_meta.json` 호환성 유지 — 새 필드는 모두 optional, 누락 시 빈 문자열 폴백. `MyProjectMode`만 우선 확장하고 `AccumulateMode`는 기존 그대로 둠 (경쟁공모는 본래 정형화된 메타가 충분).
+**검색 동의어:** `services/archive_search.py`의 `PROCUREMENT_SYNONYMS`(수의계약·턴키·지명공모 등 구어체) + `PHASE_SYNONYMS`. FTS5 `extra_meta` 컬럼에 영어 키 + 정식 한국어 + 구어체를 함께 인덱싱.
+
+**우선순위 규칙 (`update_project_meta`):** 기존 `_meta.json`에 비어있는 키만 새 값으로 채움. 사용자가 미래에 폼/편집 UI로 명시한 값을 덮어쓰지 않도록 보호.
 
 ### 2. MyProjectMode 심층 분석 파이프라인 (단일 제출물 deep-analysis)
 
