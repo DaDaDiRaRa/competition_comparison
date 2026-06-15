@@ -446,6 +446,10 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         row = _write_subsection(ws1, "실별 면적 프로그램", row, span=5)
         row = _write_header(ws1, ["실명", "요구면적(㎡)", "개수", "위치/층", "비고"], row)
         for rm in a["rooms"]:
+            if not isinstance(rm, dict):
+                ws1.cell(row=row, column=1, value=_str_item(rm))
+                row += 1
+                continue
             ws1.cell(row=row, column=1, value=rm.get("name") or "")
             area = rm.get("required_area_sqm") or rm.get("area_sqm")
             ws1.cell(row=row, column=2, value=area)
@@ -482,6 +486,10 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         row = _write_header(ws2, ["항목명", "배점", "설명"], row)
         running_total: float = 0.0
         for ev in e["rows"]:
+            if not isinstance(ev, dict):
+                ws2.cell(row=row, column=1, value=_str_item(ev))
+                row += 1
+                continue
             ws2.cell(row=row, column=1, value=ev.get("name") or "")
             pts = ev.get("points")
             ws2.cell(row=row, column=2, value=pts)
@@ -516,6 +524,10 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         row = _write_subsection(ws3, "평가축별 요구사항", row, span=3)
         row = _write_header(ws3, ["평가축", "설명", "배점비중(%)"], row)
         for req in r["requirements"]:
+            if not isinstance(req, dict):
+                ws3.cell(row=row, column=1, value=_str_item(req))
+                row += 1
+                continue
             ws3.cell(row=row, column=1, value=req.get("axis") or "")
             d_cell = ws3.cell(row=row, column=2, value=req.get("description") or "")
             d_cell.alignment = _wrap_top

@@ -27,11 +27,22 @@ def _sync_write_bytes(path: Path, data: bytes):
         os.fsync(f.fileno())
 
 
+def _json_default(obj):
+    """json.dump fallback — numpy 정수/실수 등 비표준 타입 안전 변환."""
+    try:
+        # numpy.integer / numpy.floating 계열 처리
+        if hasattr(obj, "item"):
+            return obj.item()
+    except Exception:
+        pass
+    return str(obj)
+
+
 def _atomic_write(path: Path, data: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2, default=_json_default)
         f.flush()
         os.fsync(f.fileno())  # GCSFUSE write-back 캐시를 GCS까지 강제 플러시
     tmp.replace(path)

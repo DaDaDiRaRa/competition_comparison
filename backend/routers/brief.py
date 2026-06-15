@@ -259,9 +259,23 @@ async def analyze_brief(
             md_path    = briefs_dir / f"{brief_id}.md"
             xlsx_path  = briefs_dir / f"{brief_id}.xlsx"
 
-            _atomic_write(json_path, brief_data)
-            _sync_write(md_path, to_markdown(brief_data, validation))
-            _sync_write_bytes(xlsx_path, to_xlsx(brief_data, validation))
+            try:
+                _atomic_write(json_path, brief_data)
+            except Exception as je:
+                logger.error("brief save JSON error: %s", traceback.format_exc())
+                raise RuntimeError(f"JSON 저장 실패: {type(je).__name__}: {je}") from je
+
+            try:
+                _sync_write(md_path, to_markdown(brief_data, validation))
+            except Exception as me:
+                logger.error("brief save MD error: %s", traceback.format_exc())
+                raise RuntimeError(f"MD 저장 실패: {type(me).__name__}: {me}") from me
+
+            try:
+                _sync_write_bytes(xlsx_path, to_xlsx(brief_data, validation))
+            except Exception as xe:
+                logger.error("brief save XLSX error: %s", traceback.format_exc())
+                raise RuntimeError(f"XLSX 저장 실패: {type(xe).__name__}: {xe}") from xe
 
             yield sse({"type": "done", "step": "save", "_timestamp": ts})
 
@@ -279,7 +293,8 @@ async def analyze_brief(
 
         except Exception as e:
             logger.error("brief/analyze error: %s", traceback.format_exc())
-            yield sse({"type": "error", "message": _user_error_msg(e), "_timestamp": ts})
+            user_msg = str(e) if str(e) else type(e).__name__
+            yield sse({"type": "error", "message": user_msg, "_timestamp": ts})
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
