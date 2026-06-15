@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import AccumulateMode from './components/AccumulateMode/AccumulateMode'
 import ArchiveMode from './components/ArchiveMode/ArchiveMode'
+import BriefMode from './components/BriefMode/BriefMode'
 import CrossCompareMode from './components/CrossCompare/CrossCompareMode'
 import DiagnoseMode from './components/DiagnoseMode/DiagnoseMode'
 import MyProjectMode from './components/MyProjectMode/MyProjectMode'
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'diagnose', label: '제안서 진단', icon: '🔍' },
   { id: 'settings', label: '설정', icon: '⚙' },
   { id: 'archive', label: '아카이브 검색', icon: '🔎' },
+  { id: 'brief', label: '지침서 분석', icon: '📋' },
 ]
 
 const s = {
@@ -132,6 +134,7 @@ export default function App() {
         {activeTab === 'diagnose' && <DiagnoseMode />}
         {activeTab === 'settings' && <SettingsPanel />}
         {activeTab === 'archive' && <ArchiveMode />}
+        {activeTab === 'brief' && <BriefMode />}
       </main>
     </div>
     </ApiKeyGate>

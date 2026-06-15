@@ -328,6 +328,29 @@ export function crossCompare(items) {
   return streamSSE(`${BASE}/accumulate/cross-compare`, fd)
 }
 
+// ── Brief analysis ───────────────────────────────────────────────────────────
+
+export async function* runBriefAnalyze(formData) {
+  const refs = await upgradeFormDataFiles(formData, {
+    brief_pdf: formData.get('brief_pdf') instanceof File ? formData.get('brief_pdf') : null,
+  })
+  try {
+    yield* streamSSE(`${BASE}/brief/analyze`, formData)
+  } finally {
+    refs.forEach(cleanupUpload)
+  }
+}
+
+export async function listBriefs() {
+  const r = await fetch(`${BASE}/brief/list`)
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  return r.json()
+}
+
+export function getBriefExportUrl(filename) {
+  return `${BASE}/brief/exports/${encodeURIComponent(filename)}`
+}
+
 async function* streamSSE(url, formData) {
   const response = await fetch(url, { method: 'POST', body: formData ?? undefined })
   if (!response.ok) {

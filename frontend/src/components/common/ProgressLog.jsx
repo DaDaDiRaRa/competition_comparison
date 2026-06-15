@@ -2,7 +2,9 @@ import { useEffect, useRef } from 'react'
 import { useMeta } from '../../hooks/useMeta'
 
 const STAGE_KR = {
-  brief: '지침서 처리', brief_extract: '지침서 추출', brief_reqs: '지침서 요구사항 분석',
+  brief: '지침서 처리', brief_extract: '지침서 추출', extract_brief: '지침서 데이터 추출',
+  classify_brief: '지침서 페이지 분류', brief_reqs: '지침서 요구사항 분석',
+  validate: '지침서 검증', save: '결과 저장',
   submission: '제안서 처리',
   extract: '제안서 추출', compare: '비교분석', pattern: '패턴 업데이트',
   load_patterns: '패턴 로드', diagnose: 'AI 진단', report: '리포트 생성',

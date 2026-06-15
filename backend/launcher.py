@@ -43,7 +43,7 @@ def _setup_logging():
 
 class JsApi:
     """프론트엔드 JS에서 호출 가능한 Python 메서드.
-    window.pywebview.api.open_external(url) 형태로 사용.
+    window.pywebview.api.open_external(url) / save_file(url, filename) 형태로 사용.
     """
 
     def open_external(self, url: str) -> bool:
@@ -52,6 +52,38 @@ class JsApi:
             return True
         except Exception:
             return False
+
+    def save_file(self, url: str, default_filename: str) -> dict:
+        """네이티브 저장 대화상자를 열고 선택한 경로에 파일을 다운로드한다."""
+        import urllib.request
+        try:
+            import webview
+        except ImportError:
+            return {"ok": False, "reason": "webview 모듈 없음"}
+
+        try:
+            ext = default_filename.rsplit(".", 1)[-1].lower() if "." in default_filename else ""
+            if ext == "xlsx":
+                file_types = ("Excel 파일 (*.xlsx)",)
+            elif ext == "md":
+                file_types = ("Markdown 파일 (*.md)",)
+            else:
+                file_types = ()
+
+            result = webview.windows[0].create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=default_filename,
+                file_types=file_types,
+            )
+            if not result:
+                return {"ok": False, "reason": "cancelled"}
+
+            save_path = result[0] if isinstance(result, (list, tuple)) else result
+            urllib.request.urlretrieve(url, save_path)
+            return {"ok": True, "path": save_path}
+        except Exception as e:
+            logging.getLogger("launcher").exception("save_file 오류")
+            return {"ok": False, "reason": str(e)}
 
 
 def _wait_for_server(timeout_seconds: float = 60.0) -> bool:

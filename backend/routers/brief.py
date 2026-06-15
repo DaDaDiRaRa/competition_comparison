@@ -245,6 +245,7 @@ async def analyze_brief(
                     "medium": flag_summary.get("medium", 0),
                     "low":    flag_summary.get("low", 0),
                 },
+                "flag_list": validation.get("flags") or [],
                 "_timestamp": ts,
             })
 
