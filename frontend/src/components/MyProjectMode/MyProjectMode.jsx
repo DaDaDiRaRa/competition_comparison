@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getFacilityTypes, runMyProjectPipeline, getMyProjectDeepReportUrl } from '../../api/client'
+import { getFacilityTypes, runMyProjectPipeline, getMyProjectDeepReportUrl, getBriefExportUrl } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
@@ -174,6 +174,7 @@ export default function MyProjectMode() {
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [done, setDone] = useState(null)
+  const [briefExports, setBriefExports] = useState(null)
 
   useEffect(() => { getFacilityTypes().then(setFacilityTypes) }, [])
 
@@ -182,10 +183,22 @@ export default function MyProjectMode() {
   const canRun = form.competition_name && form.project_number
     && form.company && submissionFile && !running
 
+  const handleDownload = async (url, filename) => {
+    if (window.pywebview?.api?.save_file) {
+      const res = await window.pywebview.api.save_file(window.location.origin + url, filename)
+      if (res && !res.ok && res.reason !== 'cancelled') alert(`저장 실패: ${res.reason}`)
+    } else {
+      const a = document.createElement('a')
+      a.href = url; a.download = filename
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    }
+  }
+
   const run = async () => {
     setRunning(true)
     setEvents([])
     setDone(null)
+    setBriefExports(null)
 
     const fd = new FormData()
     fd.append('competition_name', form.competition_name)
@@ -201,6 +214,9 @@ export default function MyProjectMode() {
     try {
       for await (const ev of runMyProjectPipeline(fd)) {
         setEvents(prev => [...prev, ev])
+        if (ev.type === 'done' && ev.step === 'brief' && ev.md_filename) {
+          setBriefExports({ md_filename: ev.md_filename, xlsx_filename: ev.xlsx_filename })
+        }
         if (ev.type === 'complete') setDone(ev)
         if (ev.type === 'error') break
       }
@@ -313,6 +329,20 @@ export default function MyProjectMode() {
         <div style={s.panel}>
           <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 8 }}>진행 로그</div>
           <ProgressLog events={events} />
+        </div>
+      )}
+
+      {briefExports && (
+        <div style={{ ...s.panel, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--color-text-muted)', marginRight: 4 }}>지침서 체크리스트</span>
+          <button
+            style={{ background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}
+            onClick={() => handleDownload(getBriefExportUrl(briefExports.xlsx_filename), briefExports.xlsx_filename)}
+          >⬇ .xlsx</button>
+          <button
+            style={{ background: 'var(--color-bg-surface-alt)', color: 'var(--color-text-body)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)' }}
+            onClick={() => handleDownload(getBriefExportUrl(briefExports.md_filename), briefExports.md_filename)}
+          >⬇ .md</button>
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getFacilityTypes, runAccumulatePipeline } from '../../api/client'
+import { getFacilityTypes, runAccumulatePipeline, getBriefExportUrl } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
@@ -31,6 +31,11 @@ const s = {
   subCard: {
     background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 8,
     padding: 16, marginBottom: 12,
+  },
+  dlBtn: {
+    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', border: 'none',
+    borderRadius: 6, padding: '7px 16px', cursor: 'pointer',
+    fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
   subHeader: { display: 'flex', gap: 'var(--gap-md)', alignItems: 'center', marginBottom: 10 },
   tag: {
@@ -98,6 +103,7 @@ export default function AccumulateMode() {
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)
+  const [briefExports, setBriefExports] = useState(null)  // {md_filename, xlsx_filename}
 
   useEffect(() => {
     getFacilityTypes().then(setFacilityTypes)
@@ -114,10 +120,22 @@ export default function AccumulateMode() {
   const canRun = form.competition_name && form.project_number
     && submissions.every(s => s.company && s.file) && !running
 
+  const handleDownload = async (url, filename) => {
+    if (window.pywebview?.api?.save_file) {
+      const res = await window.pywebview.api.save_file(window.location.origin + url, filename)
+      if (res && !res.ok && res.reason !== 'cancelled') alert(`저장 실패: ${res.reason}`)
+    } else {
+      const a = document.createElement('a')
+      a.href = url; a.download = filename
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    }
+  }
+
   const runPipeline = async () => {
     setRunning(true)
     setEvents([])
     setResult(null)
+    setBriefExports(null)
 
     const fd = new FormData()
     fd.append('competition_name', form.competition_name)
@@ -135,6 +153,9 @@ export default function AccumulateMode() {
     try {
       for await (const ev of runAccumulatePipeline(fd)) {
         setEvents(prev => [...prev, ev])
+        if (ev.type === 'done' && ev.step === 'brief' && ev.md_filename) {
+          setBriefExports({ md_filename: ev.md_filename, xlsx_filename: ev.xlsx_filename })
+        }
         if (ev.type === 'complete') setResult(ev)
         if (ev.type === 'error') break
       }
@@ -255,6 +276,24 @@ export default function AccumulateMode() {
               </div>
             </div>
           </div>
+
+          {briefExports && (
+            <div style={{
+              background: 'var(--color-bg-surface-alt)', border: '1px solid var(--color-border)',
+              borderRadius: 8, padding: '12px 16px', marginBottom: 20,
+              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            }}>
+              <span style={{ fontSize: 13, color: 'var(--color-text-muted)', marginRight: 4 }}>지침서 체크리스트</span>
+              <button
+                style={s.dlBtn}
+                onClick={() => handleDownload(getBriefExportUrl(briefExports.xlsx_filename), briefExports.xlsx_filename)}
+              >⬇ .xlsx</button>
+              <button
+                style={{ ...s.dlBtn, background: 'var(--color-bg-surface)', color: 'var(--color-text-body)', border: '1px solid var(--color-border)' }}
+                onClick={() => handleDownload(getBriefExportUrl(briefExports.md_filename), briefExports.md_filename)}
+              >⬇ .md</button>
+            </div>
+          )}
           <div style={{ marginBottom: 12 }}>
             <div style={s.sectionTitle}>추출 결과</div>
           </div>

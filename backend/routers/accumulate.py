@@ -62,6 +62,8 @@ from services.db_manager import (
 from services.page_classifier import classify_all_pages, classify_all_pages_brief
 from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
 from services.brief_validator import validate_brief
+from services.brief_checklist_exporter import to_markdown, to_xlsx
+from services.db_manager import _sync_write, _sync_write_bytes
 from services.comparator import compare_submissions, diagnose_submission
 from services.pattern_builder import build_pattern
 from services.report_generator import generate_comparison_report
@@ -534,8 +536,19 @@ async def run_pipeline(
                 brief_data.update(validate_brief(brief_data, brief_data["_requirements"]))
 
                 save_brief(facility_type, cid, brief_data)
+
+                # MD / XLSX 생성 → _briefs/ 폴더에 저장 (다운로드 버튼용)
+                _brief_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{facility_type}_{_slugify(competition_name)}"[:120]
+                _briefs_dir = Path(settings.db_path) / "_briefs"
+                _validation = brief_data.get("validation", {})
+                _sync_write(_briefs_dir / f"{_brief_id}.md", to_markdown(brief_data, _validation))
+                _sync_write_bytes(_briefs_dir / f"{_brief_id}.xlsx", to_xlsx(brief_data, _validation))
+
                 yield sse({"type": "done", "step": "brief",
-                           "total_pages": total_brief, "_timestamp": ts})
+                           "total_pages": total_brief,
+                           "md_filename": f"{_brief_id}.md",
+                           "xlsx_filename": f"{_brief_id}.xlsx",
+                           "_timestamp": ts})
 
             # ── SUBMISSIONS ───────────────────────────────────────────────────
             processed_submissions = []
@@ -712,8 +725,19 @@ async def run_single_pipeline(
                 brief_data.update(validate_brief(brief_data, brief_data["_requirements"]))
 
                 save_brief(facility_type, cid, brief_data)
+
+                # MD / XLSX 생성 → _briefs/ 폴더에 저장 (다운로드 버튼용)
+                _brief_id = f"{time.strftime('%Y%m%d_%H%M%S')}_{facility_type}_{_slugify(competition_name)}"[:120]
+                _briefs_dir = Path(settings.db_path) / "_briefs"
+                _validation = brief_data.get("validation", {})
+                _sync_write(_briefs_dir / f"{_brief_id}.md", to_markdown(brief_data, _validation))
+                _sync_write_bytes(_briefs_dir / f"{_brief_id}.xlsx", to_xlsx(brief_data, _validation))
+
                 yield sse({"type": "done", "step": "brief",
-                           "total_pages": total_brief, "_timestamp": ts})
+                           "total_pages": total_brief,
+                           "md_filename": f"{_brief_id}.md",
+                           "xlsx_filename": f"{_brief_id}.xlsx",
+                           "_timestamp": ts})
 
             # ── SUBMISSION ────────────────────────────────────────────────────
             yield sse({"type": "stage", "stage": "submission", "company": company,

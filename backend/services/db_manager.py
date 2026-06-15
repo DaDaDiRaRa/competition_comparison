@@ -18,6 +18,15 @@ def _sync_write(path: Path, content: str):
         os.fsync(f.fileno())
 
 
+def _sync_write_bytes(path: Path, data: bytes):
+    """바이너리 파일 쓰기 후 fsync — GCSFUSE write-back 캐시 플러시 보장."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def _atomic_write(path: Path, data: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")

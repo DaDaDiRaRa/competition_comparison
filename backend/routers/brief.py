@@ -23,7 +23,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from config import settings, FACILITY_TYPES
 from routers.upload import resolve_file_ref
-from services.db_manager import _atomic_write, _sync_write, _slugify
+from services.db_manager import _atomic_write, _sync_write, _sync_write_bytes, _slugify
 from services.page_classifier import classify_all_pages_brief
 from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
 from services.brief_validator import validate_brief
@@ -55,15 +55,6 @@ def _briefs_dir() -> Path:
     d = settings.db_path / "_briefs"
     d.mkdir(parents=True, exist_ok=True)
     return d
-
-
-def _sync_write_bytes(path: Path, data: bytes) -> None:
-    """바이너리 파일 쓰기 + fsync — GCSFUSE write-back 캐시 플러시 보장."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "wb") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
 
 
 # ── 목록 조회 ─────────────────────────────────────────────────────────────────
