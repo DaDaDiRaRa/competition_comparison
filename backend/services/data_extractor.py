@@ -401,12 +401,26 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
     "BRIEF_EVALUATION": {
         "priority": 1,
         "instruction": (
-            'EXTRACT evaluation criteria and scoring table from this competition brief. '
+            'EXTRACT evaluation criteria and scoring table from this competition brief page. '
+            'This page may have merged cells (병합 셀) where one 비중/배점 value spans multiple rows or categories — '
+            'capture that with shared_with. '
             'Respond JSON ONLY.\n'
             '{"total_points":null,'
-            '"evaluation_categories":[{"name":"","points":null,"description":""}],'
+            '"evaluation_categories":['
+            '{"name":"","points":null,'
+            '"shared_with":[],'
+            '"sub_items":[""]}'
+            '],'
             '"evaluation_method":"","jury_composition":"",'
             '"disqualification_criteria":[]}'
+            '\n\nFIELD NOTES:\n'
+            '- total_points: integer sum of all top-level 배점/비중 values (typically 100)\n'
+            '- evaluation_categories[].name: 구분 or 평가항목 label\n'
+            '- evaluation_categories[].points: 해당 구분의 배점 or 비중 (integer)\n'
+            '- evaluation_categories[].shared_with: list of sibling category names '
+            'when the cell is merged across multiple rows (empty list [] if not merged)\n'
+            '- evaluation_categories[].sub_items: list of detailed criteria strings '
+            'nested under this category (항목 or 세부 내용); empty list [] if none'
         ),
     },
     "BRIEF_SUBMISSION": {
@@ -473,7 +487,7 @@ TILE_PAGE_TYPES = {
 DIGITAL_TEXT_EXCLUDE_TYPES = {
     "AREA_TABLE", "TECHNICAL", "INCENTIVE_TABLE",
     "BUSINESS_VIABILITY", "AREA_INCREASE",
-    "BRIEF_PROGRAM", "BRIEF_REGULATIONS",
+    "BRIEF_PROGRAM", "BRIEF_REGULATIONS", "BRIEF_EVALUATION",
 }
 
 # 추출 스킵 임계: priority가 이 값 이상이면 Claude 호출 생략 (토큰 절감)

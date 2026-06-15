@@ -197,25 +197,38 @@ TASK: Classify each provided page image from a competition brief (설계공모 �
 RULES:
 - For each image, select exactly ONE primary type from the list below
 - Confidence: 0.0-1.0
-- PRIORITY RULE (B-plan): If a page contains BOTH design guidelines text AND a numeric area table \
+- PRIORITY RULE 1 (area table): If a page contains BOTH design guidelines text AND a numeric area table \
 (실별 면적표, 주차 대수 등), classify as BRIEF_PROGRAM — the numeric table takes priority
+- PRIORITY RULE 2 (scoring table): If a page contains a table with columns for 비중(weight), 배점(score), \
+or 점수(points) — especially a table where column values sum to ~100 — classify as BRIEF_EVALUATION even if \
+the page also contains general design guidance text. The scoring table OVERRIDES BRIEF_DESIGN_GUIDE.
 
 BRIEF_PAGE_TYPES:
 - BRIEF_OVERVIEW: 공모개요. Purpose, schedule, eligibility, submission deadline, organizer info. Summary/introduction pages.
 - BRIEF_SITE: 대상지 현황. Site location map, aerial photo, cadastral map, site area, surrounding context. No design requirements — descriptive only.
 - BRIEF_PROGRAM: 면적 프로그램. Room-by-room area table (실별 면적표), floor-by-floor use table, required parking count, gross/net area requirements. ANY page with a numeric area breakdown table goes here, even if it also has some text guidelines.
-- BRIEF_DESIGN_GUIDE: 설계 지침. Text-based design requirements: height limits, setbacks, massing guidelines, material restrictions, sustainability requirements, concept direction. No numeric area tables — text guidance only.
+- BRIEF_DESIGN_GUIDE: 설계 지침. Text-based design requirements: height limits, setbacks, massing guidelines, material restrictions, sustainability requirements, concept direction. NO scoring/weighting table — bullet-point or paragraph text only. If any table with 비중/배점/점수 columns is present, use BRIEF_EVALUATION instead.
 - BRIEF_TECHNICAL: 기술 기준. Structural requirements, MEP specifications, fire safety, seismic standards, smart building criteria.
 - BRIEF_REGULATIONS: 법규 기준. Zoning district, building coverage ratio (건폐율), floor area ratio (용적률), height restrictions, setback rules — legal codes and ordinances.
-- BRIEF_EVALUATION: 심사 기준. Scoring table (배점표), evaluation categories with weights, jury composition, assessment criteria.
+- BRIEF_EVALUATION: 심사 기준. Scoring table (배점표) or weighting table with columns such as 구분/항목/비중/배점/점수. \
+Jury composition, assessment criteria. KEY SIGNALS → classify as BRIEF_EVALUATION if ANY of these are true: \
+(a) table has a 비중 or 배점 column, (b) table column values sum to approximately 100, \
+(c) rows list evaluation categories with numeric weights (e.g. "설계 개념 20점"). \
+Do NOT require all signals — any one is sufficient.
 - BRIEF_SUBMISSION: 제출 기준. Required drawing list, file format specifications (DWG/PDF/BIM), submission method, document scale requirements.
 - BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms. No design content — skip extraction.
 
+BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE — decision guide:
+  • Table with 비중/배점/점수 column → BRIEF_EVALUATION (even if design text also present)
+  • Bullet points (•) or paragraphs describing design requirements, NO scoring table → BRIEF_DESIGN_GUIDE
+  • Table present but columns are area/floor/quantity (not scoring weights) → BRIEF_PROGRAM (not BRIEF_EVALUATION)
+
 RESPOND JSON ONLY as an array, one object per image:
 [
-  {"page":1,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_text_guidelines":true},
-  {"page":2,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":true,"has_text_guidelines":false}
-]"""
+  {"page":1,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_scoring_table":false,"has_text_guidelines":true},
+  {"page":2,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_scoring_table":true,"has_text_guidelines":false}
+]
+has_scoring_table: true if the page has a table with 비중/배점/점수 columns or values summing to ~100."""
 
 
 def _normalise_brief_result(raw: dict) -> dict:
@@ -228,6 +241,7 @@ def _normalise_brief_result(raw: dict) -> dict:
         "has_drawing": raw.get("has_drawing", False),
         "has_rendering": raw.get("has_rendering", False),
         "has_table": raw.get("has_area_table", raw.get("has_table", False)),
+        "has_scoring_table": raw.get("has_scoring_table", False),
     }
     if result["primary_type"] not in BRIEF_PAGE_TYPES:
         result["primary_type"] = "BRIEF_DESIGN_GUIDE"
