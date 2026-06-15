@@ -79,7 +79,11 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
   - `list_diagnosis_reports() → list[dict]` — 타임스탬프·라벨 파싱 목록 (최신순)
   - `get_losing_submissions(facility_type) → list[dict]` — `*_lose.json` 전체 수집
 - `services/page_classifier.py` - Classifies PDF pages (cover, floor plan, section, etc.)
+  - `classify_all_pages_brief()` — 지침서 PDF 전용 분류. PRIORITY RULE 2: 비중/배점/점수 컬럼이 있는 표 → `BRIEF_EVALUATION` (BRIEF_DESIGN_GUIDE보다 우선). 응답 JSON에 `has_scoring_table` 필드 추가 (판단 근거 추적용).
+  - BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE 구분 기준: 배점 표(비중/배점/점수 컬럼, 합계 ≈ 100) → BRIEF_EVALUATION / 글머리기호(•) 위주 텍스트, 표 없음 → BRIEF_DESIGN_GUIDE
 - `services/data_extractor.py` - Extracts structured design data from pages; `merge_extracted_data()` returns `_quantitative` dict at top level
+  - `DIGITAL_TEXT_EXCLUDE_TYPES` — `{"AREA_TABLE","TECHNICAL","INCENTIVE_TABLE","BUSINESS_VIABILITY","AREA_INCREASE","BRIEF_PROGRAM","BRIEF_REGULATIONS","BRIEF_EVALUATION"}`. 이 타입들은 fitz.get_text() Tier 0을 건너뛰고 타일-비전 경로로 처리. `BRIEF_EVALUATION` 추가 이유: HWP→PDF 변환 시 병합 셀 구조 붕괴 → 구분/항목/비중 관계 오독 위험.
+  - `BRIEF_EVALUATION` 추출 스키마: `evaluation_categories[].sub_items`(구분 하위 세부항목 문자열 배열) + `evaluation_categories[].shared_with`(병합 셀로 배점이 공유된 형제 구분 이름 목록) 추가. `total_points`는 배점 합계(통상 100).
 - `services/llm_client.py` - Claude API 호출 래퍼 (`call_messages()`). `system` 인자는 `str | list` 모두 지원 (캐시 블록 전달용). 응답 `usage`의 `cache_creation_input_tokens` / `cache_read_input_tokens`를 로그 출력
 - `services/comparator.py` - Compares proposals via **2-pass blind-reveal**:
   - **Pass 1 (블라인드 채점):** `_anonymize_submissions()`이 회사명을 `A안/B안/C안...`으로 치환하고 `result` 라벨 제거 → `_make_blind_static()` 프롬프트로 LLM이 결과를 모른 채 점수·강약점·`blind_ranking` 생성. `max_tokens=32000`
@@ -491,7 +495,7 @@ python tools/eval/run_harness.py --pdf-dir pdfs/ --force-rerun
 | --- | --- | --- | --- |
 | V-1 | Tier 0 fast-path 실제 동작 | 디지털 지침서 PDF로 `/api/accumulate/run` SSE 실행 → 서버 로그 확인 | `_source: "digital_haiku"` 로그 출력. 이미지 토큰 대비 입력 토큰 감소 확인 |
 | V-2 | `classify_all_pages_brief()` 분류 품질 | 지침서 PDF 업로드 → 분류 결과 JSON 확인 (`_brief.json`의 `pages` 배열) | BRIEF_PROGRAM (면적표 페이지), BRIEF_DESIGN_GUIDE (텍스트 지침), BRIEF_EVALUATION (심사기준) 등 적절히 분류됨 |
-| V-3 | BRIEF_PROGRAM → Vision 경로 강제 | V-2와 동일 실행 + 서버 로그에서 BRIEF_PROGRAM 페이지 처리 경로 확인 | DIGITAL_TEXT_EXCLUDE_TYPES에 속해 Tier 0 텍스트 경로 미진입, Vision(이미지) 경로로 처리됨 |
+| V-3 | BRIEF_PROGRAM / BRIEF_EVALUATION → Vision 경로 강제 | V-2와 동일 실행 + 서버 로그에서 BRIEF_PROGRAM, BRIEF_EVALUATION 페이지 처리 경로 확인 | DIGITAL_TEXT_EXCLUDE_TYPES에 속해 Tier 0 텍스트 경로 미진입, Vision(이미지) 경로로 처리됨 |
 | V-4 | BRIEF_* 추출 스키마 적용 | `_brief.json` 열어서 각 BRIEF_* 타입 페이지의 `data` 키 확인 | BRIEF_PROGRAM 페이지에 `required_areas` / `optional_areas` 리스트 등 스키마 키 존재 |
 | V-5 | BRIEF_SUBMISSION / BRIEF_ADMIN skip | `_brief.json`의 해당 페이지 엔트리 확인 | `_skipped: true` 또는 `data: {}` — 행정 서식 페이지가 빈 추출 결과로 저장됨 |
 | V-6 | `rubric_version` 필드 전파 | `rerun-compare` 실행 후 `_comparison.json` / 진단 후 `diagnosis` JSON 확인 | 최상위에 `"rubric_version": "v1"` 필드 존재 |
