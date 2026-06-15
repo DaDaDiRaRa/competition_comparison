@@ -48,7 +48,7 @@ async def upload_chunk(
     # 누적 크기 검사
     existing = sum(f.stat().st_size for f in session_dir.glob("chunk_*"))
     if existing + len(data) > _MAX_TOTAL:
-        raise HTTPException(400, "파일 크기 합계가 300MB를 초과합니다.")
+        raise HTTPException(400, f"파일 크기 합계가 {_MAX_TOTAL // 1024 // 1024}MB를 초과합니다.")
 
     (session_dir / f"chunk_{chunk_index:05d}").write_bytes(data)
     return {"ok": True, "chunk_index": chunk_index, "bytes": len(data)}

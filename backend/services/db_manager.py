@@ -550,8 +550,10 @@ def save_pattern(facility_type: str, pattern: dict):
     _atomic_write(path, pattern)
 
 
-def load_pattern(facility_type: str) -> dict:
+def load_pattern(facility_type: str) -> dict | None:
     path = settings.db_path / "_patterns" / f"{facility_type}.json"
+    if not path.exists():
+        return None
     return _read_json(path)
 
 

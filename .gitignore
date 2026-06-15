@@ -34,3 +34,8 @@ gcp-sa-key.json
 .env
 env.yaml
 service.yaml
+
+# 평가 하네스 — 캐시·리포트·PDF는 커밋 제외
+tools/eval/predicted_cache/
+tools/eval/reports/
+tools/eval/pdfs/

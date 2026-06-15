@@ -1,0 +1,22 @@
+{
+  "_comment": "정량 필드별 허용 오차. abs OR rel 중 하나라도 만족하면 match=true.",
+  "numeric": {
+    "site_area_sqm":               {"abs": 10.0,  "rel": 0.01, "unit": "㎡"},
+    "building_area_sqm":           {"abs": 5.0,   "rel": 0.02, "unit": "㎡"},
+    "total_floor_area_sqm":        {"abs": 50.0,  "rel": 0.01, "unit": "㎡"},
+    "area_above_ground_sqm":       {"abs": 50.0,  "rel": 0.01, "unit": "㎡"},
+    "area_below_ground_sqm":       {"abs": 30.0,  "rel": 0.02, "unit": "㎡"},
+    "floor_area_ratio_pct":        {"abs": 0.5,   "rel": 0.02, "unit": "%"},
+    "building_coverage_ratio_pct": {"abs": 0.5,   "rel": 0.02, "unit": "%"},
+    "floors_above":                {"abs": 0.0,   "rel": 0.0,  "unit": "층"},
+    "floors_below":                {"abs": 0.0,   "rel": 0.0,  "unit": "층"},
+    "parking_count":               {"abs": 2.0,   "rel": 0.02, "unit": "대"}
+  },
+  "categorical": {
+    "structure_system":  {"method": "keyword"},
+    "zoning":            {"method": "normalize"},
+    "mass_type":         {"method": "exact"},
+    "certification":     {"method": "jaccard", "threshold": 0.6},
+    "concept_keywords":  {"method": "jaccard", "threshold": 0.3}
+  }
+}

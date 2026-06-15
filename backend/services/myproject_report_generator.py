@@ -11,13 +11,7 @@ import html
 from config import facility_label as _facility_label, axes_for as _axes_for
 
 
-_GRADE_COLOR = {
-    "A": ("#16a34a", "#dcfce7"),
-    "B": ("#0891b2", "#cffafe"),
-    "C": ("#ca8a04", "#fef3c7"),
-    "D": ("#ea580c", "#fed7aa"),
-    "E": ("#dc2626", "#fee2e2"),
-}
+from services.grade_helpers import GRADE_COLORS as _GRADE_COLOR
 
 _RESULT_BADGE = {
     "win":        ('<span style="background:#dcfce7;color:#15803d;font-size:13px;'

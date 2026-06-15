@@ -96,44 +96,11 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 """
 
 
-_GRADE_RING_COLORS = {
-    "A": "#16a34a",
-    "B": "#0891b2",
-    "C": "#ca8a04",
-    "D": "#ea580c",
-    "E": "#dc2626",
-}
-
-_LEGACY_GRADE_MAP = {"상": "B", "중": "C", "하": "D"}
+from services.grade_helpers import GRADE_RING_COLORS as _GRADE_RING_COLORS, to_grade as _to_grade_base
 
 
 def _to_grade(d) -> str | None:
-    """grade field or fall back to 구 상/중/하 or numeric score (자동 변환)."""
-    if not isinstance(d, dict):
-        return None
-    g = d.get("grade") or d.get("overall_grade")
-    if g in ("A", "B", "C", "D", "E"):
-        return g
-    if g in _LEGACY_GRADE_MAP:
-        return _LEGACY_GRADE_MAP[g]
-    s = d.get("score")
-    if s is None:
-        s = d.get("overall_score")
-    if s is None:
-        return None
-    try:
-        s = float(s)
-    except (TypeError, ValueError):
-        return None
-    if s >= 8.5:
-        return "A"
-    if s >= 7.0:
-        return "B"
-    if s >= 5.0:
-        return "C"
-    if s >= 3.0:
-        return "D"
-    return "E"
+    return _to_grade_base(d, check_overall=True)
 
 
 def _grade_color(grade) -> str:

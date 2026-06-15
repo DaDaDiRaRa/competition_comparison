@@ -215,6 +215,18 @@ def has_embedded_text(pdf_path: Path, page_index: int, min_chars: int = 50) -> b
         return False
 
 
+def get_page_text(pdf_path: Path, page_index: int) -> str:
+    """fitz.get_text()로 PDF 임베딩 텍스트를 반환. 이미지 기반 페이지는 빈 문자열."""
+    import fitz
+    try:
+        doc = fitz.open(str(pdf_path))
+        text = doc[page_index].get_text("text")
+        doc.close()
+        return text
+    except Exception:
+        return ""
+
+
 # ── 사용자 오류 메시지 ────────────────────────────────────────────────────────
 def user_error_msg(e: Exception) -> str:
     """예외를 사용자가 이해할 수 있는 한국어 메시지로 변환."""

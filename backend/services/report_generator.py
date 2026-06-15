@@ -16,42 +16,7 @@ PALETTE = [
 COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미충족', 'unclear': '불명'}
 
 
-_GRADE_COLORS = {
-    "A": ("#16a34a", "#dcfce7"),
-    "B": ("#0891b2", "#cffafe"),
-    "C": ("#ca8a04", "#fef3c7"),
-    "D": ("#ea580c", "#fed7aa"),
-    "E": ("#dc2626", "#fee2e2"),
-}
-
-_LEGACY_GRADE_MAP = {"상": "B", "중": "C", "하": "D"}
-
-
-def _to_grade(d) -> str | None:
-    """axis dict에서 grade 추출. 구 상/중/하 및 score(0-10) 데이터는 A-E로 자동 변환."""
-    if not isinstance(d, dict):
-        return None
-    g = d.get("grade")
-    if g in ("A", "B", "C", "D", "E"):
-        return g
-    if g in _LEGACY_GRADE_MAP:
-        return _LEGACY_GRADE_MAP[g]
-    s = d.get("score")
-    if s is None:
-        return None
-    try:
-        s = float(s)
-    except (TypeError, ValueError):
-        return None
-    if s >= 8.5:
-        return "A"
-    if s >= 7.0:
-        return "B"
-    if s >= 5.0:
-        return "C"
-    if s >= 3.0:
-        return "D"
-    return "E"
+from services.grade_helpers import GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade
 
 
 def _grade_badge(grade) -> str:

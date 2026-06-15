@@ -19,7 +19,7 @@ from services.db_manager import (
     load_pattern, load_submission,
     save_diagnosis_report, get_diagnosis_report_path, list_diagnosis_reports,
 )
-from services.page_classifier import classify_all_pages
+from services.page_classifier import classify_all_pages, classify_all_pages_brief
 from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
 from services.comparator import diagnose_submission
 from services.diagnosis_report_generator import generate_diagnosis_report
@@ -56,9 +56,13 @@ async def run_diagnosis(
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_diag_"))
         try:
             yield sse({"type": "stage", "stage": "load_patterns", "msg": f"DB 패턴 로드: {facility_type}"})
-            patterns = load_pattern(facility_type)
-            yield sse({"type": "info", "patterns_available": bool(patterns),
-                       "win_count": patterns.get("win_count", 0)})
+            patterns = load_pattern(facility_type) or {}
+            if not patterns:
+                yield sse({"type": "info", "patterns_available": False, "win_count": 0,
+                           "msg": f"해당 유형 당선 데이터 없음 ({facility_type}) — 패턴 없이 진단을 계속합니다."})
+            else:
+                yield sse({"type": "info", "patterns_available": True,
+                           "win_count": patterns.get("win_count", 0)})
 
             # --- BRIEF (선택 사항) ---
             brief_data: dict = {}
@@ -69,7 +73,7 @@ async def run_diagnosis(
                 brief_path.write_bytes(brief_bytes)
 
                 yield sse({"type": "progress", "step": "classify_brief", "page": 0, "total": 1})
-                brief_cls = await classify_all_pages(brief_path)
+                brief_cls = await classify_all_pages_brief(brief_path)
                 total_brief = len(brief_cls)
 
                 for c in brief_cls:
@@ -220,7 +224,7 @@ async def run_diagnosis_vs_projects(
                 brief_path.write_bytes(brief_bytes)
 
                 yield sse({"type": "progress", "step": "classify_brief", "page": 0, "total": 1})
-                brief_cls = await classify_all_pages(brief_path)
+                brief_cls = await classify_all_pages_brief(brief_path)
                 total_brief = len(brief_cls)
                 for c in brief_cls:
                     yield sse({"type": "progress", "step": "classify_brief",

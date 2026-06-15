@@ -20,7 +20,7 @@ Competition Analyzer is a full-stack application for analyzing architectural com
 
 ### Backend (FastAPI)
 
-Located in `backend/` (repo root), the FastAPI application serves six routers, registered in `main.py` under `/api/<name>`:
+Located in `backend/` (repo root), the FastAPI application serves seven routers, registered in `main.py` under `/api/<name>`:
 
 1. **`routers/accumulate.py`** - Data accumulation pipeline (PDF → JSON 추출만 담당)
    - Processes competition briefs and submission PDFs
@@ -57,7 +57,14 @@ Located in `backend/` (repo root), the FastAPI application serves six routers, r
    - `POST /upload/finish/{upload_id}` — 청크 조립 → `file_ref` 반환. 파이프라인 엔드포인트(accumulate/diagnose)는 multipart 대신 이 `file_ref`를 받아 /tmp에서 직접 읽음
    - `POST /upload/cleanup/{upload_id}` — 파이프라인 완료 후 임시 파일 삭제
 
-6. **`routers/archive.py`** - 아카이브 자연어 검색 (Archive Mode 섹션 참조)
+6. **`routers/archive.py`** - 아카이브 자연어 검색 (FTS5 in-memory SQLite, `GET /list` + `POST /search` + `GET /{ft}/{cid}`)
+
+7. **`routers/brief.py`** - 지침서 단독 분석 엔드포인트
+   - `POST /brief/analyze` — 지침서 PDF 1개 업로드 → 페이지 분류 → 데이터 추출 → 요구사항 분석 → 검증 → JSON·MD·xlsx 저장 (SSE)
+   - `GET /brief/list` — `{db_path}/_briefs/*.json` 최신순 목록
+   - `GET /brief/exports/{filename}` — md / xlsx 다운로드 (path traversal 방지)
+   - 저장 위치: `{db_path}/_briefs/{YYYYMMDD_HHMMSS}_{facility_type}_{slug}.{json|md|xlsx}`
+   - `brief_id` 명명: `{stamp}_{facility_type}_{slug}`, 최대 120자 (Windows 경로 여유)
 
 **MyProject 심층 분석:** 별도 라우터 없음. `routers/accumulate.py`가 단일 제출물 등록 시 `services/myproject_analyzer.deep_analyze()` 호출 → `submissions/{slug}_{result}_deep.json` + `_{result}_deep.html` 생성. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report`로 서빙.
 
@@ -87,7 +94,10 @@ Located in `backend/` (repo root), the FastAPI application serves six routers, r
 - `services/submission_report_generator.py` - 개별 제출물 HTML 리포트 생성 (LLM 호출 없음). `generate_submission_report(sub_doc: dict) -> str`
 - `services/myproject_analyzer.py` - MyProjectMode 단일 제출물 멀티패스 deep-analysis (`deep_analyze()`). 페이지별 narrative + 평가축별 deep evidence + 정량 메트릭 + 검색 키워드 + auto_meta 추출
 - `services/myproject_report_generator.py` - `_deep.json` → HTML 리포트 렌더링 (LLM 호출 없음). `generate_myproject_report(deep_doc) -> str`
-- `services/archive_search.py` - in-memory SQLite FTS5 인덱싱 + 자연어 검색 (Archive Mode 섹션 참조)
+- `services/archive_search.py` - in-memory SQLite FTS5 인덱싱 + 자연어 검색. `build_index()` 앱 시작 시 1회, `rerun-compare` 완료 후 `rebuild_index()`. `sqlite3.connect(":memory:", check_same_thread=False)` 필수 (FastAPI threadpool 교차).
+- `services/brief_validator.py` - 지침서 검증 (LLM 호출 없음). `validate_brief(brief_data, requirements) → dict`. 반환: `{flags: [...], summary: {high, medium, low}, checked_rules}`. 각 flag: `{rule_id, severity, message, evidence}`.
+- `services/brief_checklist_exporter.py` - 지침서 체크리스트 내보내기 (LLM 호출 금지). `to_markdown(brief_data, validation) → str` / `to_xlsx(brief_data, validation) → bytes`. 4개 섹션: 면적·프로그램 / 심사기준 / 요구사항·필수조건 / 검증 경고. openpyxl lazy import (`import openpyxl` 함수 내부) — PyInstaller spec에 서브모듈 전체 명시 필수. `_first(data, key)` 헬퍼가 `merge_extracted_data()` dict-or-list 반환을 정규화.
+- `services/grade_helpers.py` - 등급 처리 단일 소스. `LEGACY_GRADE_MAP`, `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade(d, *, check_overall=False)`. `report_generator` / `diagnosis_report_generator` / `myproject_report_generator` 모두 여기서 import.
 - `services/diagnosis_report_generator.py` - 진단 결과 HTML 리포트 생성 (LLM 호출 없음). `generate_diagnosis_report(diagnosis: dict) -> str`. 섹션: 종합점수 링 → 페이지 구성 바 → 패턴 편차 경고 → 지침서 충족도 → 요구사항 매핑 → 평가축별 상세 → 보강 포인트
 - `services/pattern_builder.py` - Builds patterns from winner data + qualitative LLM summary; `build_pattern()` now also collects `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords) for loser anti-pattern comparison
 - `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser
@@ -227,6 +237,16 @@ Test with curl or Postman by uploading files to:
 5. 모든 제출물 개별 리포트 재생성
 6. Stream SSE progress
 
+**Brief Pipeline (지침서 단독 분석 — `POST /api/brief/analyze`):**
+
+1. Upload brief PDF (multipart 또는 `/api/upload` `file_ref`)
+2. `classify_all_pages_brief()` → 9개 BRIEF_* 타입으로 분류
+3. `extract_pdf(pdf_path, page_map, is_brief=True)` → `merge_extracted_data()` → `brief_data`
+4. `extract_brief_requirements(brief_data, facility_type)` → `brief_data["_requirements"]`
+5. `validate_brief(brief_data, requirements)` → `brief_data["validation"]` (flags / summary)
+6. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write_bytes(xlsx)`
+7. SSE `complete` 이벤트: `{brief_id, md_filename, xlsx_filename, validation_summary}`
+
 **Diagnose Pipeline:**
 
 1. Upload facility type + brief PDF (선택) + submission PDF
@@ -259,7 +279,7 @@ Test with curl or Postman by uploading files to:
 ## Important Notes
 
 - **Pipeline 분리:** 데이터 축적(`/api/accumulate/run`)은 PDF → JSON 추출까지만 수행. 비교분석/패턴/리포트는 저장된 프로젝트의 "비교분석 실행" 버튼(`rerun-compare`)에서만 실행.
-- **Database Location:** 각 competition: `{db_path}/{facility_type}/{competition_id}/` — `_meta.json`, `_brief.json`, `_comparison.json`, `_report.html`, `submissions/*.json`, `submissions/*_report.html`. 진단 리포트: `{db_path}/_diagnosis_reports/*.html`. 교차비교 리포트: `{db_path}/_cross_reports/*.html`.
+- **Database Location:** 각 competition: `{db_path}/{facility_type}/{competition_id}/` — `_meta.json`, `_brief.json`, `_comparison.json`, `_report.html`, `submissions/*.json`, `submissions/*_report.html`. 진단 리포트: `{db_path}/_diagnosis_reports/*.html`. 교차비교 리포트: `{db_path}/_cross_reports/*.html`. 지침서 단독분석: `{db_path}/_briefs/{brief_id}.{json|md|xlsx}`.
 - **GCSFUSE 쓰기 보장:** Cloud Run gen2 + GCS 버킷 마운트(GCSFUSE)에서 write-back 캐시로 인해 `rename()` 시점에 GCS에 원본이 없으면 데이터 유실. 모든 파일 쓰기는 `f.flush(); os.fsync(f.fileno())` 후 rename(`_atomic_write`) 또는 `_sync_write` 사용 — 새 파일 저장 함수 추가 시 반드시 fsync 포함.
 - **보안 — 커밋 금지 파일:** 다음은 모두 `.gitignore`에 등록되어 있어야 하며 절대 커밋 금지:
   - `service.yaml` — Cloud Run 서비스 YAML, API 키 등 시크릿 평문 포함 가능. 수정 필요 시 로컬에서만 편집 후 `gcloud run services replace service.yaml` 실행
@@ -284,7 +304,7 @@ Test with curl or Postman by uploading files to:
 - **Grading (5-level A/B/C/D/E):** 점수는 0.0-10.0 숫자가 아닌 `grade: "A"|"B"|"C"|"D"|"E"` 문자열. `overall_grade`도 동일. 이유: 임원 검토 시 무의미한 정밀도 논쟁 차단 + 환각 검증 부담 감소.
   - **등급 색상 (라이트 테마):** A=`var(--color-success)` `#16a34a` / B=`var(--color-info)` `#0891b2` / C=`var(--color-warning)` `#ca8a04` / D=`var(--color-grade-d)` `#ea580c` / E=`var(--color-danger)` `#dc2626`. 배경(`GRADE_BG`)은 같은 hue 옅은 톤.
   - 구 데이터 자동 변환: `score`(0-10) → ≥8.5=A, ≥7=B, ≥5=C, ≥3=D, else=E. 구 `grade`("상"→B, "중"→C, "하"→D). 새 비교 실행하면 LLM이 직접 A-E 출력.
-  - 백엔드 헬퍼: `report_generator.py::_to_grade()` + `_grade_badge()`, `diagnosis_report_generator.py::_to_grade()` + `_grade_color()`
+  - 백엔드 헬퍼: `services/grade_helpers.py` 단일 소스 (`GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade()`). `report_generator` / `diagnosis_report_generator` / `myproject_report_generator`가 공통 import.
   - 프론트 헬퍼: `constants/index.js`의 `GRADE_COLOR`, `GRADE_BG`, `toGrade(d)` (구 score 호환)
   - `blind_ranking`은 그대로 유지 — LLM이 상 개수 우선으로 순위 부여
 - **페이지 인용 강제:** compare/diagnose 프롬프트에 "각 strength/weakness/recommendation은 반드시 `(p.N)` 형식 페이지 인용 포함" 룰 명시. `_page` 필드를 `_trim_extracted()`에서 보존하여 LLM에 페이지 번호 노출. 임원 검토 시 즉시 PDF 원문 검증 가능 → 환각 억제 효과도 큼. Pass 2도 Pass 1 결과 내 (p.N)을 그대로 인용하도록 지시.
@@ -338,255 +358,147 @@ Test with curl or Postman by uploading files to:
 
 ---
 
-## Archive Mode (신규 기능)
+## Archive Mode
 
-### 개요
+**구현 완료.** `routers/archive.py` + `services/archive_search.py`.
 
-Competition Analyzer에 **ArchiveMode 탭**을 추가한다. 기존 분석 파이프라인은 건드리지 않고, 새 탭과 새 백엔드 엔드포인트만 추가한다.
+- **데이터:** GCS(`/data`) 하위 `_comparison.json` + `_meta.json` 읽기 전용. 쓰기 없음.
+- **인덱싱:** 앱 시작 시 `build_index()` 1회. `rerun-compare` 완료 후 `rebuild_index()` 호출로 갱신.
+- **검색:** `search_natural()` — Claude API로 자연어 → 키워드+시설유형 추출 후 FTS5 MATCH. API 키 없으면 `search_keyword(q)` 폴백.
+- **FTS 동의어:** `FACILITY_SYNONYMS`로 시설유형 컬럼에 영어 키 + 한국어 레이블 + 구어체 함께 인덱싱.
+- **MyProject 연동:** `_myprojects/` 하위도 스캔. `search_keywords`, `narrative`, `memo` 필드 FTS5 인덱스 포함.
+- **auto_meta:** `deep_analyze()`가 `auto_meta` 추출 → `update_project_meta()`로 `_meta.json` 머지 (비어있는 키만 채움).
+- **프론트:** `ArchiveMode.jsx` (검색창+카드 그리드) + `ArchiveCard.jsx` + `ArchiveDetail.jsx` (슬라이드오버). `AxisAccordion` 컴포넌트로 평가축 행별 독립 펼침 상태.
+- **Known Issue (🟡):** `routers/archive.py:34,57`에서 `index._cards.values()` 직접 접근 중. `all_cards() → list[dict]` 공개 메서드 추가 권장.
 
-**목적:** 분석하고 버려지던 `_comparison.json` + `_patterns.json`을 검색 가능한 팀 공유 자산으로 전환. 새 공모 시작 시 자연어로 과거 사례를 찾아 참고할 수 있게 한다.
+## Rubric 시스템 (config.py)
 
-**PPT 03번 구현방향 1·2번에 해당:**
-1. 프로젝트 정보 입력 체계 → 기존 `_meta.json` + `_comparison.json` 재사용
-2. 자연어 검색 기능 → FTS5 + Claude API 레이어
+**3-A/B/C/D 모두 완료 (2026-06-12~15).**
 
----
-
-### 데이터 소스
-
-아카이브는 GCS(`/data`)에 이미 저장된 파일을 읽는다. 새로 저장하는 파일은 없다.
-
-```
-/data/{facility_type}/{competition_id}/
-  _meta.json          ← 프로젝트명, 시설유형, 위치, 연도
-  _comparison.json    ← 비교분석 결과 (submissions, ranking, gap_analysis)
-  _patterns_{facility_type}.json ← 시설유형별 당선/낙선 패턴 통계
-```
-
-**검색 대상 필드:**
-- `competition_id` — 프로젝트 번호 + 이름
-- `facility_type` — 시설유형 (residential/public/medical 등)
-- `gap_analysis.alignment` — 블라인드 분석 정합도
-- `ranking` — 당선 회사
-- `qualitative_insights.winner_patterns` — 당선 패턴 키워드
-- `qualitative_insights.key_differentiators` — 핵심 차별화 요소
-- `concept_keywords` — 설계 개념 키워드
-
----
-
-### 백엔드 추가 사항
-
-**신규 파일:**
-```
-backend/routers/archive.py       ← 검색 엔드포인트
-backend/services/archive_search.py ← 검색 로직 (FTS + Claude API)
-```
-
-**엔드포인트:**
-```
-GET  /api/archive/list           ← 전체 아카이브 목록 (facility_type 필터 선택)
-POST /api/archive/search         ← 자연어 검색
-     body: { query: str, facility_type?: str, result_filter?: "win"|"lose"|"all" }
-GET  /api/archive/{facility_type}/{competition_id}  ← 개별 공모 상세
-```
-
-**검색 로직 (`archive_search.py`):**
-1. `/data` 경로에서 `_comparison.json` + `_meta.json` 파일 목록 수집
-2. SQLite in-memory DB + FTS5로 인덱싱 (앱 시작 시 1회, 이후 `/data` 변경 감지 시 갱신)
-3. Claude API로 자연어 쿼리 → 검색 키워드 + facility_type 추출
-4. FTS5로 매칭 → 결과 카드 반환
-
-**주의:**
-- `_atomic_write` / `_sync_write` 패턴 — 아카이브는 읽기 전용이므로 쓰기 없음
-- SQLite는 디스크 저장 없이 in-memory 사용 (GCS에 별도 파일 생성 안 함)
-- Claude API 호출은 `services/llm_client.py::call_messages()` 사용
-
----
-
-### 프론트엔드 추가 사항
-
-**신규 파일:**
-```
-frontend/src/components/ArchiveMode/
-  ArchiveMode.jsx      ← 메인 탭 컴포넌트 (검색창 + 결과 목록)
-  ArchiveCard.jsx      ← 개별 공모 카드
-  ArchiveDetail.jsx    ← 카드 클릭 시 상세 (comparison.json 전체 표시)
-```
-
-**UI 방향:**
-- 기존 화이트 테마 + 건원 RED 액센트 유지 (`kunwon-tokens.css` 준수)
-- 검색창 상단 고정, 결과 카드 그리드 (시설유형 뱃지, 당선사, alignment 색상 표시)
-- 카드 클릭 → 슬라이드오버 패널로 `ArchiveDetail` 표시 (별도 라우트 없음)
-- `useMeta()` 훅으로 facility_type 한국어 레이블 표시
-- **평가축 아코디언:** `ArchiveDetail`의 제출사별 평가 섹션은 세로 리스트로 표시. 각 행(축 라벨 + 등급 뱃지) 클릭 시 인라인 아코디언 펼침 → 강점(초록)/약점(빨강)/지침 충족(파랑)/노트(회색 이탤릭) 순으로 표시. `axisData`에 `strengths|weaknesses|notes|brief_compliance` 중 하나라도 있어야 `▼` 표시 + 클릭 가능. 내부 `AxisAccordion` 컴포넌트로 개별 행 상태 관리 (펼침 상태는 행마다 독립)
-
-**탭 추가 위치 (`App.jsx`):**
-기존 5개 탭 뒤에 추가:
-```jsx
-{ key: 'archive', label: '아카이브 검색' }
-```
-
-**카드 표시 필드:**
-- `competition_id` (프로젝트명)
-- `facility_type` (시설유형 — `facilityLabel()`)
-- `ranking[0]` (1위 회사)
-- `gap_analysis.alignment` (색상 뱃지: high=green, partial=orange, low=red)
-- `key_differentiators` (최대 3개 태그)
-
----
-
-### 인덱싱 전략
-
-GCS 마운트(`/data`)에서 직접 파일을 읽어 in-memory SQLite FTS5로 인덱싱.
-앱 시작 시 `lifespan()`에서 `archive_search.py::build_index()` 1회 실행.
-파일 추가 시 (`rerun-compare` 완료 후) `rebuild_index()` 호출로 갱신.
-
-```python
-# archive_search.py 핵심 구조
-def build_index(db_path: str) -> sqlite3.Connection:
-    """
-    /data 하위 _comparison.json 전체 스캔 → in-memory FTS5 인덱싱
-    """
-
-def search(conn, query: str, facility_type: str = None) -> list[dict]:
-    """
-    1. llm_client으로 query → keywords 추출
-    2. FTS5 MATCH로 검색
-    3. 결과 카드 반환
-    """
-```
-
----
-
-### 주의사항
-
-- **기존 파이프라인 변경 금지:** `accumulate.py`, `comparator.py`, `db_manager.py` 수정 없음
-- **`rerun-compare` 완료 후 인덱스 갱신:** `routers/accumulate.py`의 `rerun-compare` 엔드포인트 완료 시점에 `rebuild_index()` 호출 1줄 추가 (최소 침습)
-- **GCS 읽기 전용 접근:** 아카이브 검색은 `/data` 파일을 읽기만 함. 쓰기 없으므로 `_atomic_write` 불필요
-- **인덱스 크기:** 현재 ~5개 공모, 향후 수십 개 수준. in-memory SQLite로 충분
-- **SQLite threading:** FastAPI sync 라우트는 threadpool에서 실행되므로 startup 스레드에서 생성된 in-memory 커넥션이 cross-thread 에러(500)를 유발. `sqlite3.connect(":memory:", check_same_thread=False)` 필수
-- **자연어 검색 폴백:** `search_natural()`에서 Claude API 호출 실패(API 키 미설정 등) 시 `search_keyword(q)`로 자동 폴백 — 단순 키워드 검색은 API 키 없이도 동작. 전체 자연어 문장은 폴백으로 결과 없을 수 있음
-- **한국어 FTS 동의어:** `FACILITY_SYNONYMS` dict로 시설유형 FTS 컬럼에 영어 키 + 한국어 레이블 + 구어체 동의어 함께 저장 (예: "public" 컬럼 = "public 공공시설 시청 구청 관공서 ..."). `search_natural()` 프롬프트에 `_FACILITY_HINT` 블록 포함 — 쿼리에서 시설 카테고리 언급 시 정식 한국어 레이블도 키워드에 포함하도록 지시
-- **평가축 rubric 구조 (config.py):** 각 axis는 `description`(1줄) + `signals`(PDF에서 볼 신호 4~5개) + `rubric`(A~E 등급 정의 문장)을 가짐. `FACILITY_AXIS_OVERRIDES[facility_type][axis_key]`로 시설유형별 `signals_extra` + `rubric_hint` 추가. `axis_rubric_for(facility_type, axis_key)` 헬퍼가 base + override 머지. `build_axis_rubric_block(facility_type, axes_keys=None)`은 LLM 프롬프트용 룰북 직렬화 공유 헬퍼 (config.py 정의, `myproject_analyzer` + `comparator` 양쪽 사용). 전 14개 시설유형 override 시드 완료(시설당 평균 2축). `grade_justification` 필드로 LLM이 등급 부여 근거(신호 X/Y 충족) 1줄 자기검증을 강제 — MyProject deep_analyze · 경쟁공모 블라인드 채점 · 진단 모두 동일 형식 출력.
-
----
-
-## Implementation Notes (대부분 완료 — 남은 항목은 각 절 상단 참조)
-
-> 이 섹션은 신규 기능 도입 시점의 의사결정 기록. 1·2·3-A/B/C는 완료, 3-D만 미진행.
-
-### 1. MyProjectMode 메타데이터 — AI 자동 추출 방식 (완료)
-
-**구현 방식:** 사용자 입력 폼을 두지 **않고**, `deep_analyze()`가 PDF를 분석할 때 `auto_meta` 필드로 함께 추출 → `update_project_meta()`로 `_meta.json`에 머지. 사용자가 명시한 값이 있으면(현재는 그런 입력 UI 없음) 그것이 우선, 아니면 AI 추출값으로 채움.
-
-**AI가 추출하는 필드 (myproject_analyzer.py의 auto_meta 스키마):**
-- `procurement_type`: `competition|negotiated|invited|turnkey|private|other|""` — 표지·제출 안내·BRIEF에서 단서 탐색
-- `project_phase`: `planning|concept|basic_design|detailed_design|cm|""` — 설계공모는 보통 concept/basic_design
-- `role`: `lead|consortium|subcontractor|""` — 표지·credits에서
-- `partners`: 컨소시엄 파트너명 자유 텍스트
-- `gross_floor_area` / `floors` / `units` — 개요/사업개요/단면도 페이지에서 추출
-- `tags`: 5~10개 한국어 키워드 (예: "리모델링", "친환경", "도시재생")
-- `summary`: 1~2문장 짧은 설명 — `_meta.json`의 `memo` 필드로 매핑 → ArchiveDetail "프로젝트 정보"에 노출
-
-**검색 동의어:** `services/archive_search.py`의 `PROCUREMENT_SYNONYMS`(수의계약·턴키·지명공모 등 구어체) + `PHASE_SYNONYMS`. FTS5 `extra_meta` 컬럼에 영어 키 + 정식 한국어 + 구어체를 함께 인덱싱.
-
-**우선순위 규칙 (`update_project_meta`):** 기존 `_meta.json`에 비어있는 키만 새 값으로 채움. 사용자가 미래에 폼/편집 UI로 명시한 값을 덮어쓰지 않도록 보호.
-
-### 2. MyProjectMode 심층 분석 파이프라인 (단일 제출물 deep-analysis)
-
-**배경:** `AccumulateMode`(경쟁공모)는 한 번에 N개 제출물을 비교해야 하므로 제출물당 토큰을 절약해야 함(2-pass blind-reveal도 슬림화 위한 설계). 반면 `MyProjectMode`는 **항상 1개 제출물**이라 토큰 예산이 훨씬 여유로움 → **분석 깊이를 대폭 늘려도 됨**. 이 깊이가 이후 아카이브 자연어 검색 인덱스의 품질을 좌우.
-
-**파이프라인:** 사용자가 "등록 시작" 클릭 → 백엔드가 단일 제출물 PDF에 대해 deep-analysis → `_myproject.json`(또는 `_deep.json`) 저장 → `generate_myproject_report(doc)`로 HTML 리포트 생성 → 프론트엔드에 결과 카드 + "리포트 열기" 링크 표시.
-
-**심층 분석 내용 (경쟁공모 대비 추가/확장):**
-- **페이지별 상세 분석:** 각 페이지마다 (a) 무엇을 보여주는가 (b) 핵심 메시지 (c) 시각적 강점 (d) 정보 밀도/가독성. 27개 페이지 유형 분류 결과를 그대로 쓰되 페이지별 narrative 추가
-- **평가축별 deep evidence:** 7~8축 각각에 strengths/weaknesses 각 5~10개 (경쟁공모는 2~3개), 각 항목마다 `(p.N)` 인용 + 짧은 직접 인용문(quote) 포함
-- **정량 메트릭 완전 추출:** 연면적·건폐율·용적률·층수·세대수·주차대수·친환경 인증·공사비·공기 등 가능한 모든 수치 + 출처 페이지
-- **컨셉 narrative:** 디자인 의도, 핵심 컨셉 키워드, 스토리텔링 구조, 차별화 포인트를 자연어 단락으로 정리 (검색 인덱스 핵심)
-- **요구사항 매핑:** 지침서 PDF가 있으면 요구사항 항목별 충족 여부 + 어느 페이지에서 대응했는지 매핑 테이블
-- **보강 포인트:** 결과가 `lose`이면 당선 패턴 대비 누락된 페이지·축·메트릭. 결과가 `win`/`contracted`여도 "다음 유사 공모 시 강조할 포인트" 추출
-- **검색 키워드 자동 생성:** 자연어 검색에 걸리도록 5~15개 키워드를 LLM이 직접 생성 → `_myproject.json`의 `search_keywords` 필드 → FTS5 인덱스에 포함
-
-**토큰 예산:** 경쟁공모 1제출물당 입력 ~30K, Pass1 출력 ~3K였다면, MyProject는 입력 동일하되 출력 max_tokens=16K~32K 허용. 다단계 LLM 호출도 가능 (Pass 1: 정량+페이지 분석 / Pass 2: 평가축 deep evidence / Pass 3: narrative + 키워드).
-
-**산출물:**
-- `{db_path}/_myprojects/{project_number}_{slug}/_deep.json` — 위 모든 내용을 담은 통합 JSON
-- `{db_path}/_myprojects/{project_number}_{slug}/_report.html` — HTML 리포트 (페이지별 섹션 + 정량 테이블 + 축별 deep card + narrative + 키워드 태그). LLM 호출 없음, JSON → HTML 렌더링만
-- `_meta.json` — 1번 항목에서 정의한 메타데이터
-
-**신규 파일:**
-- `backend/services/myproject_analyzer.py` — deep-analysis 멀티패스 호출
-- `backend/services/myproject_report_generator.py` — HTML 렌더링 (LLM 호출 금지)
-- `backend/routers/myproject.py`(또는 기존 `upload.py` 확장) — `/api/myproject/run` SSE 엔드포인트
-
-**아카이브 검색 연동:** `build_archive_index()`가 `_myprojects/` 하위도 스캔하도록 확장. FTS5 컬럼에 `narrative`, `search_keywords`, `concept_text`, `memo` 추가 → 자연어 질의 시 풍부하게 매칭.
-
-### 3. 평가축 rubric 시스템 (signals + A-E 정의)
-
-**3-A · 3-B · 3-C 완료 (2026-06-12):**
-
-- **3-A 완료** — `config.py`에 `build_axis_rubric_block(facility_type, axes_keys=None)` 공유 헬퍼 추가. `comparator.py`의 `_make_blind_static()` + `_make_diagnose_static()`도 이 헬퍼로 rubric block 주입. MyProject deep_analyze · 경쟁공모 블라인드 채점 · 새 제안서 진단 모두 동일 룰북으로 등급 부여 → 교차 일관성 확보. 정적 prefix는 facility_type별 ~2000 tokens로 증가했지만 `cache_control: ephemeral` 마킹으로 첫 호출만 비용 발생, 이후 90% 캐시 할인.
-
-- **3-B 완료** — 전체 14개 시설유형에 `FACILITY_AXIS_OVERRIDES` 시드. 시설유형별 평균 2축, 총 30+ override 엔트리. 주요 보강:
-  - **상업** program/site (MD믹스·체류시간·보행 유입), **문화** public/form/program (운영 시나리오·랜드마크성·백스테이지 분리)
-  - **숙박** program/site (객실 다양성·뷰·F&B 동선), **업무** program/brief (전용률·NLA·층고)
-  - **산업** technical/program (하중·전력·zone 분리), **복합** program/site (간섭 차단·share 동선)
-  - **마스터플랜** site/public/concept (축선·네트워크·single big idea)
-  - **재건축** business/member 정량 임계값 (자산가치 1.5×+, 남향 80%+), **대안설계** business/design (기존안 대비 정량)
-  - 기존 시드: 의료/주거/공공/교육/교통
-
-- **3-C 완료** — `grade_justification` 자기검증 필드 3개 분석 스키마에 추가:
-  - MyProject deep_analyze: `axes_evidence.<axis>.grade_justification`
-  - 경쟁공모 블라인드 채점: `submissions.<label>.<axis>.grade_justification`
-  - 제안서 진단: `axes.<axis>.grade_justification`
-  - 형식: `"신호 X/Y개 충족 (충족: ... / 미충족: ...) → <등급> 기준 행과 일치"`
-  - UI 노출: MyProject 심층 리포트(grade pill 아래 monospace 박스) + ArchiveDetail AxisAccordion(펼침 영역 맨 위 ▣ 박스)
-  - 기존 데이터(필드 없음) 호환: 빈 값이면 박스 자체 미표시
-
-**3-D 미진행 — rubric 버전 관리:**
-
-`axis_rubric_for()` 반환에 `version: "v1"` 메타 포함. `_deep.json`/`_comparison.json` 저장 시 어떤 rubric 버전으로 평가했는지 기록 → 향후 rubric 개정 시 기존 데이터 재평가 트리거 가능. 룰북 변경 이력은 `config.py` 상단 주석. 진행 시 `build_axis_rubric_block()` 호출하는 곳마다 버전 메타 전파 + `comparison.json` 스키마 업데이트 필요.
-
-**주의:** rubric 시드는 임원·실무진 리뷰가 필수. 시드 내용은 일반적 건축 지식 기반 초안이며, 실제 회사 평가 관점·과거 당선/낙선 분석을 반영해 보정해야 함. 시설유형 1개씩 검토 후 머지 권장.
+- **단일 소스:** `build_axis_rubric_block(facility_type, axes_keys=None)` — comparator·myproject_analyzer 공통 사용.
+- **구조:** 각 axis에 `description`(1줄) + `signals`(4~5개) + `rubric`(A~E 정의). `FACILITY_AXIS_OVERRIDES[facility_type][axis_key]`로 `signals_extra` + `rubric_hint` 추가.
+- **14개 시설유형 override 시드 완료** (시설당 평균 2축, 총 30+ 엔트리). **임원·실무진 검토 후 보정 필요** — 현재는 일반 건축 지식 기반 초안.
+- **`grade_justification` 자기검증:** 3개 분석 스키마(MyProject/비교/진단) 모두 `"신호 X/Y개 충족 → <등급> 기준 행과 일치"` 형식. 기존 데이터(필드 없음)는 UI 박스 미표시.
+- **`RUBRIC_VERSION = "v1"`** (`config.py`): `axis_rubric_for()` 반환 + `_comparison.json`/`_deep.json`/`diagnosis.json` 저장 파일에 자동 기록. 개정 시 상수만 올리면 전파됨.
 
 ---
 
 ## Known Issues — TODO
 
-코드 전수 검토 결과 발견된 미수정 이슈. 우선순위 표시: 🔴 = 실제 작동 오류 / 🟡 = 중복·캡슐화 / 🟢 = 엣지 케이스.
-
-### 🔴 실제 작동 오류 (사용자가 체감)
-
-1. **업로드 한도 에러 메시지 ↔ 실제 상수 불일치**
-   - `backend/routers/upload.py:51` — 메시지 `"300MB 초과"`인데 `_MAX_TOTAL = 600 * 1024 * 1024` (600MB)
-   - `backend/routers/accumulate.py:26` — 메시지 `"50MB 초과"`인데 `_MAX_PDF_BYTES = 200 * 1024 * 1024` (200MB)
-   - 수정안: 메시지를 상수에서 동적 생성(`{_MAX_TOTAL // 1024 // 1024}MB`)하거나 상수/메시지를 일치시킴
-
-2. **`load_pattern()` None 반환 미처리 — 새 시설유형 진단 시 항상 크래시**
-   - `services/db_manager.py:553` — 시그니처는 `-> dict`지만 파일 없으면 `_read_json`이 `None` 반환
-   - `routers/diagnose.py:60-61` — `patterns.get("win_count", 0)` → `AttributeError: 'NoneType'`
-   - `services/comparator.py:_run_diagnose_sync:416` — `winning_patterns.get("qualitative_insights", {})` 동일 크래시
-   - 외부 try/except가 잡지만 사용자는 "AttributeError" 같은 의미 없는 메시지를 봄
-   - 수정안: `load_pattern` 시그니처를 `-> dict | None`으로 정정 + `diagnose.py` / `comparator.py`에서 None 가드 (`patterns = patterns or {}`)
+우선순위 표시: 🟡 = 중복·캡슐화 / 🟢 = 엣지 케이스.
 
 ### 🟡 중복 / 캡슐화
 
-3. **등급 처리 로직 3중 복제 — 동기화 누락 위험**
-   - `_to_grade()` + `_LEGACY_GRADE_MAP` + A~E 임계값(8.5/7.0/5.0/3.0)이 동일하게 존재:
-     - `services/report_generator.py:30`
-     - `services/diagnosis_report_generator.py:110` (`overall_grade`/`overall_score` 폴백 추가)
-     - `services/myproject_report_generator.py:14` (등급 색 dict만)
-   - `_GRADE_COLOR` hex값(`#16a34a` 등)도 3곳 모두 동일하게 박혀있음 → 한 곳만 바꾸면 리포트별 색 어긋남
-   - CLAUDE.md "Report Generation Rule"에서 "독립 문서"라 의도된 분리지만, 등급 판정·색 매핑 같은 비-렌더링 로직은 `services/grade_helpers.py`로 분리 가능 (HTML 렌더링 함수는 각 파일에 유지)
-
-4. **`ArchiveSearchIndex` 사설 속성 직접 접근**
+1. **`ArchiveSearchIndex` 사설 속성 직접 접근**
    - `routers/archive.py:34, 57` — `index._cards.values()` 직접 호출 (underscore-prefixed)
    - 수정안: `ArchiveSearchIndex.all_cards() -> list[dict]` 공개 메서드 추가
 
 ### 🟢 엣지 케이스
 
-5. **`/run-single` 재실행 시 `_meta.json`의 `submissions` 리스트 초기화**
+1. **`/run-single` 재실행 시 `_meta.json`의 `submissions` 리스트 초기화**
    - `routers/accumulate.py:676-679` → `save_project_meta(...)`는 항상 `meta["submissions"] = []`로 시작
    - 같은 `project_number + competition_name`으로 두 번째 회사 등록 시 첫 회사의 메타 엔트리가 사라짐 (submission JSON 파일은 디스크에 고아로 남음)
    - MyProjectMode는 1프로젝트=1제출물 전제라 통상 발생 안 함. 다회사 추가는 `/add-submission` 사용
    - 수정안: `save_project_meta`에 `merge=True` 옵션을 두고 기존 `submissions` 리스트를 보존하거나, `/run-single` 진입 시 기존 cid 존재 여부 검사 후 명시적 에러
+
+---
+
+## 추출 정확도 평가 하네스 (tools/eval/)
+
+> B-1 설계 + B-2 구현 완료 (2026-06-15). **B-3 이후는 미진행.**
+
+### 목적
+
+5~10건 과거 공모 PDF에 사람이 라벨링한 정답 JSON과 앱 추출 결과를 비교해 `Brief competition analyzer.md` §8 `ACCURACY_METRICS`의 TBD를 채운다.
+
+### 디렉터리 구조
+
+```text
+tools/eval/
+├── tolerance.json            # 정량 필드별 허용 오차 (abs/rel OR 조건)
+├── ground_truth/             # 라벨러 작성 *_gt.json (커밋 대상)
+│   └── TEMPLATE_gt.json      # 복사해서 채우는 템플릿
+├── predicted_cache/          # LLM 추출 결과 캐시 (.gitignore)
+├── reports/                  # 출력 리포트 (.gitignore)
+├── lib/
+│   ├── comparators.py        # numeric/jaccard/keyword/normalize 비교
+│   ├── loaders.py            # GT 스캔, 캐시 로드/저장
+│   └── metrics.py            # 페이지·정량·범주형 비교 + 집계
+├── run_pipeline.py           # backend 직접 import → LLM 추출 래퍼
+└── run_harness.py            # CLI 진입점
+```
+
+### 실행 방법
+
+```powershell
+# 캐시 전용 — LLM 비용 없음 (캐시 없는 샘플 스킵)
+python tools/eval/run_harness.py --skip-extraction
+
+# PDF 추출 후 평가 ⚠️ ~$0.27/PDF (Haiku 분류 + Sonnet 추출)
+python tools/eval/run_harness.py --pdf-dir path/to/pdfs
+
+# 샘플 수 제한 + 시설유형 필터
+python tools/eval/run_harness.py --pdf-dir pdfs/ --max-samples 5 --facility-type residential
+
+# 캐시 무시 전체 재추출 ⚠️ LLM 비용 발생
+python tools/eval/run_harness.py --pdf-dir pdfs/ --force-rerun
+```
+
+### 출력물
+
+- `reports/{ts}_summary.json` — 전체 집계 지표
+- `reports/{ts}_per_sample.json` — 샘플별 상세 (misclassified 목록 포함)
+- `reports/{ts}_report.md` — 마크다운 리포트 (페이지 유형별 F1 테이블 포함)
+- `reports/{ts}_brief_block.md` — `Brief competition analyzer.md` §8에 붙여넣을 ACCURACY_METRICS 블록
+
+### GT 라벨링 가이드
+
+1. `ground_truth/TEMPLATE_gt.json` 복사 → `ground_truth/{facility_type}/{competition_id}/{slug}_gt.json`
+2. `pages_by_type`: 각 페이지 번호를 해당 PAGE_TYPE 배열에 기입. 애매한 페이지는 `_ambiguous` 처리 → 분모 제외
+3. `quantitative_truth`: 수치 + `source_page` 기입. PDF에 없는 필드는 삭제
+4. `field_presence`: PDF에 명시된 필드만 `true` — `false`인데 앱이 값 채우면 환각(field-level FP)으로 집계
+5. 2인 교차 라벨링 권장 (건축 실무자 + 검수자)
+
+### `_quantitative` 실제 키 (tolerance.json과 일치)
+
+`merge_extracted_data()` 출력 기준:
+`site_area_sqm` · `building_area_sqm` · `total_floor_area_sqm` · `area_above_ground_sqm` · `area_below_ground_sqm` · `floor_area_ratio_pct` · `building_coverage_ratio_pct` · `floors_above` · `floors_below` · `parking_count`
+
+### B-3 이후 미진행 항목
+
+- **B-3**: CI 통합 — `rerun-compare` 완료 후 자동 재평가 훅
+- **B-4**: confusion matrix HTML 렌더링 (임원 보고용)
+- **B-5**: 모델 ID 교체 시 ΔAccuracy 추적 (sonnet-4-6 → 4-7 회귀 감시)
+- `Brief competition analyzer.md` §8 ACCURACY_METRICS 실제 수치 채우기 — GT 라벨링 완료 후 `run_harness.py` 1회 실행으로 생성
+
+---
+
+## 시퀀스 B — 추출 정확도 측정 하네스 (보류)
+
+- B-2까지 구현 완료 (`tools/eval/` 폴더)
+- 재개 조건: 제안서 PDF 5건 + 정답지(ground_truth JSON) 준비
+- 정답지 형식: `tools/eval/ground_truth/TEMPLATE_gt.json` 참고
+- 대상: `D:\EVAL_DB\` (GCS kunwon-competition-db 로컬 복사본)
+- 다음 단계: B-3 (ground_truth 2건 이상 완성 후 `run_harness.py` 실행)
+
+---
+
+## 앱 실행 검증 체크리스트 (API 키 필요)
+
+아래 항목들은 코드 로직은 완성됐으나, 실제 Claude API 호출이 필요한 end-to-end 검증이 아직 이루어지지 않은 부분이다. 앱을 기동하고 소규모 실제 데이터로 한 번씩 확인한다.
+
+| # | 확인 항목 | 확인 방법 | 기대 결과 |
+| --- | --- | --- | --- |
+| V-1 | Tier 0 fast-path 실제 동작 | 디지털 지침서 PDF로 `/api/accumulate/run` SSE 실행 → 서버 로그 확인 | `_source: "digital_haiku"` 로그 출력. 이미지 토큰 대비 입력 토큰 감소 확인 |
+| V-2 | `classify_all_pages_brief()` 분류 품질 | 지침서 PDF 업로드 → 분류 결과 JSON 확인 (`_brief.json`의 `pages` 배열) | BRIEF_PROGRAM (면적표 페이지), BRIEF_DESIGN_GUIDE (텍스트 지침), BRIEF_EVALUATION (심사기준) 등 적절히 분류됨 |
+| V-3 | BRIEF_PROGRAM → Vision 경로 강제 | V-2와 동일 실행 + 서버 로그에서 BRIEF_PROGRAM 페이지 처리 경로 확인 | DIGITAL_TEXT_EXCLUDE_TYPES에 속해 Tier 0 텍스트 경로 미진입, Vision(이미지) 경로로 처리됨 |
+| V-4 | BRIEF_* 추출 스키마 적용 | `_brief.json` 열어서 각 BRIEF_* 타입 페이지의 `data` 키 확인 | BRIEF_PROGRAM 페이지에 `required_areas` / `optional_areas` 리스트 등 스키마 키 존재 |
+| V-5 | BRIEF_SUBMISSION / BRIEF_ADMIN skip | `_brief.json`의 해당 페이지 엔트리 확인 | `_skipped: true` 또는 `data: {}` — 행정 서식 페이지가 빈 추출 결과로 저장됨 |
+| V-6 | `rubric_version` 필드 전파 | `rerun-compare` 실행 후 `_comparison.json` / 진단 후 `diagnosis` JSON 확인 | 최상위에 `"rubric_version": "v1"` 필드 존재 |
+| V-7 | MyProject `rubric_version` | MyProjectMode로 단일 제출물 등록 → `_deep.json` 확인 | `"rubric_version": "v1"` 존재 |
+| V-8 | 스캔본 PDF → Vision fallback | 텍스트 없는 스캔 PDF로 파이프라인 실행 (보유 시) | Tier 0 None 반환 → Vision(이미지 기반) 추출로 자연 전환. `_source: "vision"` 로그 |
+| V-9 | `grade_justification` 출력 | 비교분석 또는 MyProject 실행 후 JSON / HTML 리포트 확인 | 각 axis에 `grade_justification` 문자열 존재. 형식: `"신호 X/Y개 충족 (충족: ... / 미충족: ...) → <등급> 기준 행과 일치"` |
+
+**확인 우선순위:** V-2 → V-3 → V-4 (지침서 분류 파이프라인 핵심) → V-1 (토큰 절감 실측) → V-6/V-7 (rubric 버전) → V-9 (grade_justification)
+
+**주의:** V-8(스캔본 PDF)은 텍스트 없는 실제 스캔 PDF가 없으면 검증 불가. 향후 스캔본 지침서 확보 시 진행.

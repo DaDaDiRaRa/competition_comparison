@@ -2,7 +2,7 @@ import asyncio
 import base64
 from pathlib import Path
 
-from config import settings, PAGE_TYPES
+from config import settings, PAGE_TYPES, BRIEF_PAGE_TYPES
 from services.llm_client import call_messages
 from services.utils import parse_json_response, rasterize_pdf
 
@@ -175,3 +175,129 @@ async def classify_all_pages(pdf_path: Path) -> list[dict]:
     """PDF 전체 페이지 분류"""
     async with _SEMAPHORE:
         return await asyncio.to_thread(_classify_pdf_sync, pdf_path)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 지침서(Brief) 전용 분류기
+# 제안서 27개 타입과 별개의 taxonomy (BRIEF_PAGE_TYPES 9개).
+# B-plan: 면적 숫자 표(실별 면적·주차수량 등)가 있으면 BRIEF_PROGRAM 우선,
+#         텍스트만인 설계 지침은 BRIEF_DESIGN_GUIDE.
+# ══════════════════════════════════════════════════════════════════════════════
+
+BRIEF_SYSTEM_PROMPT = (
+    "You are an architectural competition brief (설계공모 지침서) page classifier. "
+    "You analyze pages from Korean competition brief documents that specify requirements "
+    "for design submissions. Respond ONLY in the specified JSON format. "
+    "Do NOT add explanations or natural language."
+)
+
+BRIEF_CLASSIFY_PROMPT = """\
+TASK: Classify each provided page image from a competition brief (설계공모 지침서).
+
+RULES:
+- For each image, select exactly ONE primary type from the list below
+- Confidence: 0.0-1.0
+- PRIORITY RULE (B-plan): If a page contains BOTH design guidelines text AND a numeric area table \
+(실별 면적표, 주차 대수 등), classify as BRIEF_PROGRAM — the numeric table takes priority
+
+BRIEF_PAGE_TYPES:
+- BRIEF_OVERVIEW: 공모개요. Purpose, schedule, eligibility, submission deadline, organizer info. Summary/introduction pages.
+- BRIEF_SITE: 대상지 현황. Site location map, aerial photo, cadastral map, site area, surrounding context. No design requirements — descriptive only.
+- BRIEF_PROGRAM: 면적 프로그램. Room-by-room area table (실별 면적표), floor-by-floor use table, required parking count, gross/net area requirements. ANY page with a numeric area breakdown table goes here, even if it also has some text guidelines.
+- BRIEF_DESIGN_GUIDE: 설계 지침. Text-based design requirements: height limits, setbacks, massing guidelines, material restrictions, sustainability requirements, concept direction. No numeric area tables — text guidance only.
+- BRIEF_TECHNICAL: 기술 기준. Structural requirements, MEP specifications, fire safety, seismic standards, smart building criteria.
+- BRIEF_REGULATIONS: 법규 기준. Zoning district, building coverage ratio (건폐율), floor area ratio (용적률), height restrictions, setback rules — legal codes and ordinances.
+- BRIEF_EVALUATION: 심사 기준. Scoring table (배점표), evaluation categories with weights, jury composition, assessment criteria.
+- BRIEF_SUBMISSION: 제출 기준. Required drawing list, file format specifications (DWG/PDF/BIM), submission method, document scale requirements.
+- BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms. No design content — skip extraction.
+
+RESPOND JSON ONLY as an array, one object per image:
+[
+  {"page":1,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_text_guidelines":true},
+  {"page":2,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":true,"has_text_guidelines":false}
+]"""
+
+
+def _normalise_brief_result(raw: dict) -> dict:
+    result = {
+        "primary_type": raw.get("type") or raw.get("primary_type", "BRIEF_DESIGN_GUIDE"),
+        "secondary_type": raw.get("secondary_type"),
+        "confidence": raw.get("confidence", 0.0),
+        "key_elements": raw.get("sub_elements") or raw.get("key_elements", []),
+        "has_text": raw.get("has_text", False),
+        "has_drawing": raw.get("has_drawing", False),
+        "has_rendering": raw.get("has_rendering", False),
+        "has_table": raw.get("has_area_table", raw.get("has_table", False)),
+    }
+    if result["primary_type"] not in BRIEF_PAGE_TYPES:
+        result["primary_type"] = "BRIEF_DESIGN_GUIDE"
+    return result
+
+
+def _call_classify_brief(batch: list) -> list[dict]:
+    content = []
+    for img_bytes, _ in batch:
+        content.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": base64.standard_b64encode(img_bytes).decode("utf-8"),
+            },
+        })
+    content.append({"type": "text", "text": BRIEF_CLASSIFY_PROMPT})
+
+    raw_text = call_messages(
+        model=settings.model_id_classify,
+        max_tokens=3000,
+        temperature=0,
+        system=BRIEF_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": content}],
+    )
+    try:
+        results = parse_json_response(raw_text)
+        if not isinstance(results, list):
+            results = [results]
+        return results
+    except Exception:
+        return []
+
+
+def _classify_brief_batch_with_validation(batch: list, max_retries: int = 2) -> list[dict]:
+    for _ in range(max_retries + 1):
+        results = _call_classify_brief(batch)
+        if isinstance(results, list) and len(results) == len(batch):
+            return results
+    fallback = []
+    for single in batch:
+        res = _call_classify_brief([single])
+        fallback.append(res[0] if res else {})
+    return fallback
+
+
+def _fallback_brief_entry(page: int) -> dict:
+    return {**_normalise_brief_result({}), "page": page}
+
+
+def _classify_brief_pdf_sync(pdf_path: Path) -> list[dict]:
+    """지침서 PDF를 배치 단위로 분류 (BRIEF_PAGE_TYPES 9개 taxonomy)."""
+    pages = rasterize_pdf(pdf_path, dpi=settings.dpi_classify)
+
+    all_results = []
+    for batch_start in range(0, len(pages), BATCH_SIZE):
+        batch = pages[batch_start:batch_start + BATCH_SIZE]
+        raw_results = _classify_brief_batch_with_validation(batch)
+
+        for i, r in enumerate(raw_results):
+            actual_page = batch[i][1] if i < len(batch) else batch_start + i + 1
+            all_results.append({**_normalise_brief_result(r), "page": actual_page})
+
+    # 결과 정렬 및 누락 페이지 폴백
+    by_page = {r["page"]: r for r in all_results}
+    return [by_page.get(p, _fallback_brief_entry(p)) for p in range(1, len(pages) + 1)]
+
+
+async def classify_all_pages_brief(pdf_path: Path) -> list[dict]:
+    """지침서 PDF 전체 페이지 분류 (BRIEF taxonomy)."""
+    async with _SEMAPHORE:
+        return await asyncio.to_thread(_classify_brief_pdf_sync, pdf_path)

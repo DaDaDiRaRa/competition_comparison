@@ -12,7 +12,7 @@ myproject_report_generator.py가 HTML로 렌더링하고, archive_search.py가 F
 import json
 import logging
 
-from config import settings, axes_keys_for, facility_label, build_axis_rubric_block
+from config import settings, axes_keys_for, facility_label, build_axis_rubric_block, RUBRIC_VERSION
 from services.comparator import _trim_extracted, _trim_brief
 from services.llm_client import call_messages
 from services.utils import parse_json_response
@@ -181,6 +181,7 @@ async def deep_analyze(
         parsed.setdefault("improvement_points", [])
         parsed.setdefault("search_keywords", [])
         parsed.setdefault("auto_meta", {})
+        parsed["rubric_version"] = RUBRIC_VERSION
         return parsed
     except Exception as e:
         logger.exception("[myproject_analyzer] deep_analyze 실패: %s", e)
@@ -192,5 +193,6 @@ async def deep_analyze(
             "improvement_points": [],
             "search_keywords": [],
             "auto_meta": {},
+            "rubric_version": RUBRIC_VERSION,
             "_error": str(e),
         }

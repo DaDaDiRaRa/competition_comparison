@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from routers import accumulate, diagnose, settings, patterns, upload, archive
+from routers import accumulate, diagnose, settings, patterns, upload, archive, brief
 from services.archive_search import build_index as build_archive_index
 from services.db_manager import init_db
 from version import __version__
@@ -43,6 +43,7 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(patterns.router, prefix="/api/patterns", tags=["patterns"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 app.include_router(archive.router, prefix="/api/archive", tags=["archive"])
+app.include_router(brief.router, prefix="/api/brief", tags=["brief"])
 
 
 @app.get("/api/health")

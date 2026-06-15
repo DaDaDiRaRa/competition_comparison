@@ -84,6 +84,33 @@ PAGE_TYPES_META = {
     "UNIT_PLAN_PENTHOUSE":"펜트하우스",
 }
 
+# ── 지침서(Brief) 전용 페이지 분류 ──────────────────────────────────────────
+# 제안서(27개)와 별도 taxonomy. 지침서는 구조가 달라 억지 매핑 불필요.
+# B-plan: 숫자 면적표가 있으면 BRIEF_PROGRAM 우선; 텍스트 지침만이면 BRIEF_DESIGN_GUIDE.
+BRIEF_PAGE_TYPES = [
+    "BRIEF_OVERVIEW",      # 공모개요 (목적·일정·조건 요약)
+    "BRIEF_SITE",          # 대상지 현황 (위치·현황도·지적도)
+    "BRIEF_PROGRAM",       # 면적 프로그램 (실별 면적표·층별 용도·주차 수량)
+    "BRIEF_DESIGN_GUIDE",  # 설계 지침 (배치·높이·재료·친환경 요구 텍스트)
+    "BRIEF_TECHNICAL",     # 기술 기준 (구조·설비·법규 기술 사항)
+    "BRIEF_REGULATIONS",   # 법규 기준 (용도지역·건폐율·용적률·높이제한 조문)
+    "BRIEF_EVALUATION",    # 심사 기준 (배점표·평가 항목·심사위원)
+    "BRIEF_SUBMISSION",    # 제출 기준 (도서 목록·파일 형식·제출 방법)
+    "BRIEF_ADMIN",         # 행정 절차 (Q&A·일정·문의처 — 추출 불필요)
+]
+
+BRIEF_PAGE_TYPES_META = {
+    "BRIEF_OVERVIEW":     "공모개요",
+    "BRIEF_SITE":         "대상지현황",
+    "BRIEF_PROGRAM":      "면적프로그램",
+    "BRIEF_DESIGN_GUIDE": "설계지침",
+    "BRIEF_TECHNICAL":    "기술기준",
+    "BRIEF_REGULATIONS":  "법규기준",
+    "BRIEF_EVALUATION":   "심사기준",
+    "BRIEF_SUBMISSION":   "제출기준",
+    "BRIEF_ADMIN":        "행정절차",
+}
+
 COMPARISON_AXES_BY_GROUP = {
     "redev": {
         "business_viability": {
@@ -683,6 +710,15 @@ FACILITY_AXIS_OVERRIDES: dict[str, dict[str, dict]] = {
     },
 }
 
+# ── Rubric 버전 관리 ──────────────────────────────────────────────────────────
+# rubric 개정 시 버전을 올리고 아래에 변경 이력을 남긴다.
+# comparison.json / deep.json / diagnosis.json에 rubric_version 필드로 기록되어
+# 기존 데이터의 재평가 필요 여부 판단 기준이 된다.
+#
+# 버전 이력:
+#   v1 (2026-06-15) — initial rubric seed: 8축×2그룹 + 14개 시설유형 override
+RUBRIC_VERSION = "v1"
+
 
 def axis_rubric_for(facility_type: str, axis_key: str) -> dict:
     """시설유형 + 평가축에 적용되는 최종 rubric.
@@ -699,6 +735,7 @@ def axis_rubric_for(facility_type: str, axis_key: str) -> dict:
         "signals":     list(base.get("signals", [])),
         "rubric":      dict(base.get("rubric", {})),
         "rubric_hint": "",
+        "version":     RUBRIC_VERSION,
     }
     override = FACILITY_AXIS_OVERRIDES.get(facility_type, {}).get(axis_key)
     if override:

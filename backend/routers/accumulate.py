@@ -23,7 +23,7 @@ _PDF_MAGIC = b"%PDF"
 
 def _validate_pdf(data: bytes, name: str = "파일"):
     if len(data) > _MAX_PDF_BYTES:
-        raise HTTPException(400, f"{name}: 파일 크기가 50MB를 초과합니다 ({len(data) // 1024 // 1024}MB).")
+        raise HTTPException(400, f"{name}: 파일 크기가 {_MAX_PDF_BYTES // 1024 // 1024}MB를 초과합니다 ({len(data) // 1024 // 1024}MB).")
     if not data.startswith(_PDF_MAGIC):
         raise HTTPException(400, f"{name}: PDF 형식이 아닙니다.")
 
@@ -59,8 +59,9 @@ from services.db_manager import (
     save_myproject_deep, save_myproject_report, get_myproject_report_path,
     update_project_meta,
 )
-from services.page_classifier import classify_all_pages
+from services.page_classifier import classify_all_pages, classify_all_pages_brief
 from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
+from services.brief_validator import validate_brief
 from services.comparator import compare_submissions, diagnose_submission
 from services.pattern_builder import build_pattern
 from services.report_generator import generate_comparison_report
@@ -507,7 +508,7 @@ async def run_pipeline(
                 # 1단계: 페이지 분류
                 yield sse({"type": "progress", "step": "classify_brief",
                            "page": 0, "total": 1, "_timestamp": ts})
-                brief_classifications = await classify_all_pages(brief_path)
+                brief_classifications = await classify_all_pages_brief(brief_path)
                 total_brief = len(brief_classifications)
 
                 for cls in brief_classifications:
@@ -530,6 +531,7 @@ async def run_pipeline(
                 yield sse({"type": "stage", "stage": "brief_reqs",
                            "msg": "지침서 요구사항 분석 중", "_timestamp": ts})
                 brief_data["_requirements"] = await extract_brief_requirements(brief_data, facility_type)
+                brief_data.update(validate_brief(brief_data, brief_data["_requirements"]))
 
                 save_brief(facility_type, cid, brief_data)
                 yield sse({"type": "done", "step": "brief",
@@ -689,7 +691,7 @@ async def run_single_pipeline(
                 brief_path = tmp_root / "brief.pdf"
                 brief_path.write_bytes(brief_bytes_single)
 
-                brief_classifications = await classify_all_pages(brief_path)
+                brief_classifications = await classify_all_pages_brief(brief_path)
                 total_brief = len(brief_classifications)
                 for cls in brief_classifications:
                     yield sse({"type": "progress", "step": "classify_brief",
@@ -707,6 +709,7 @@ async def run_single_pipeline(
                 yield sse({"type": "stage", "stage": "brief_reqs",
                            "msg": "지침서 요구사항 분석 중", "_timestamp": ts})
                 brief_data["_requirements"] = await extract_brief_requirements(brief_data, facility_type)
+                brief_data.update(validate_brief(brief_data, brief_data["_requirements"]))
 
                 save_brief(facility_type, cid, brief_data)
                 yield sse({"type": "done", "step": "brief",

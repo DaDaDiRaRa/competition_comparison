@@ -17,7 +17,7 @@ from pathlib import Path
 
 from config import settings, axes_keys_for
 from services.llm_client import call_messages
-from services.utils import ocr_page, parse_json_response, rasterize_pdf, rasterize_page_tiled, safe_encode_image
+from services.utils import get_page_text, ocr_page, parse_json_response, rasterize_pdf, rasterize_page_tiled, safe_encode_image
 
 _BRIEF_REQ_SYSTEM = (
     "You are an architectural competition brief analyst. "
@@ -332,9 +332,100 @@ FALLBACK_PROMPT = {
 }
 
 # ── 지침서(Brief) 전용 추출 스키마 ─────────────────────────────────────────────
-# 지침서의 AREA_TABLE은 설계 결과가 아닌 '요구사항'이므로 전용 스키마 사용.
-# 이 dict에 없는 타입은 기존 EXTRACTION_PROMPTS를 그대로 사용.
+# BRIEF_* 타입(9개)은 이 dict에서 전용 스키마로 추출.
+# 구 submission 타입 override(AREA_TABLE/TECHNICAL/SPECIAL_SPACE)도 하위호환 유지.
 EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
+    # ── 신규 BRIEF_* 타입 ─────────────────────────────────────────────────────
+    "BRIEF_OVERVIEW": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT competition overview from this brief page. Respond JSON ONLY.\n'
+            '{"competition_name":"","organizer":"","budget_won":null,'
+            '"schedule":{"submission_deadline":"","winner_announcement":"","qa_period":""},'
+            '"eligible_applicants":"","awards":[{"rank":"","prize_won":null}],'
+            '"brief_summary":""}'
+        ),
+    },
+    "BRIEF_SITE": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT site information from this competition brief page. Respond JSON ONLY.\n'
+            '{"address":"","site_area_sqm":null,"zoning":"","current_use":"",'
+            '"surrounding_context":"","transportation":[],'
+            '"site_constraints":[],"notable_features":[]}'
+        ),
+    },
+    "BRIEF_PROGRAM": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT required program and area from this competition brief. '
+            'Respond JSON ONLY. Use exact numbers if visible, null if not visible.\n'
+            '{"total_required_floor_area_sqm":null,"site_area_sqm":null,'
+            '"building_coverage_limit_pct":null,"floor_area_ratio_limit_pct":null,'
+            '"max_floors_above":null,"max_floors_below":null,"required_parking":null,'
+            '"rooms":[{"name":"","required_area_sqm":null,"required_count":1,'
+            '"floor":"","notes":""}],'
+            '"zones":[{"name":"","area_sqm":null}]}'
+        ),
+    },
+    "BRIEF_DESIGN_GUIDE": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT design guidelines and requirements from this competition brief. '
+            'Respond JSON ONLY.\n'
+            '{"design_requirements":[],"height_limit_m":null,'
+            '"setback_requirements":[],"materials_required":[],'
+            '"sustainability_requirements":[],"concept_direction":"",'
+            '"prohibited_items":[],"special_guidelines":[]}'
+        ),
+    },
+    "BRIEF_TECHNICAL": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT technical requirements from this competition brief. Respond JSON ONLY.\n'
+            '{"structural_requirements":"","hvac_requirements":"",'
+            '"required_energy_grade":"","required_certifications":[],'
+            '"special_technical_requirements":[]}'
+        ),
+    },
+    "BRIEF_REGULATIONS": {
+        "priority": 2,
+        "instruction": (
+            'EXTRACT legal and zoning regulations from this competition brief. '
+            'Respond JSON ONLY. Use exact numbers if visible.\n'
+            '{"zoning_district":"","building_coverage_ratio_limit_pct":null,'
+            '"floor_area_ratio_limit_pct":null,"height_limit_m":null,'
+            '"setback_rules":[],"special_regulations":[]}'
+        ),
+    },
+    "BRIEF_EVALUATION": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT evaluation criteria and scoring table from this competition brief. '
+            'Respond JSON ONLY.\n'
+            '{"total_points":null,'
+            '"evaluation_categories":[{"name":"","points":null,"description":""}],'
+            '"evaluation_method":"","jury_composition":"",'
+            '"disqualification_criteria":[]}'
+        ),
+    },
+    "BRIEF_SUBMISSION": {
+        "priority": 3,  # 제출 형식 — 비교분석 기여 없음, 스킵
+        "instruction": (
+            'EXTRACT submission requirements from this brief. Respond JSON ONLY.\n'
+            '{"required_documents":[],"file_formats":[],"submission_scale":"",'
+            '"submission_method":""}'
+        ),
+    },
+    "BRIEF_ADMIN": {
+        "priority": 3,  # 행정절차 — 추출 가치 없음, 스킵
+        "instruction": (
+            'EXTRACT admin info from this brief. Respond JSON ONLY.\n'
+            '{"contact":"","qa_method":"","important_dates":[]}'
+        ),
+    },
+
+    # ── 구 submission 타입 override (하위호환 — is_brief=True 구 데이터용) ─────
     "AREA_TABLE": {
         "priority": 1,
         "instruction": (
@@ -374,6 +465,15 @@ CONFIDENCE_DOWNGRADE_THRESHOLD = 0.7
 TILE_PAGE_TYPES = {
     "AREA_TABLE", "TECHNICAL", "INCENTIVE_TABLE",
     "BUSINESS_VIABILITY", "AREA_INCREASE",
+}
+
+# digital text tier(Tier 0) 제외 대상: fitz.get_text()는 표 열 순서가 뒤섞여 숫자 오독 위험.
+# 이 타입들은 OCR_FIRST → tiled vision 경로를 그대로 사용.
+# BRIEF_PROGRAM / BRIEF_REGULATIONS: 실별 면적표·법규 수치표 → 마찬가지로 제외.
+DIGITAL_TEXT_EXCLUDE_TYPES = {
+    "AREA_TABLE", "TECHNICAL", "INCENTIVE_TABLE",
+    "BUSINESS_VIABILITY", "AREA_INCREASE",
+    "BRIEF_PROGRAM", "BRIEF_REGULATIONS",
 }
 
 # 추출 스킵 임계: priority가 이 값 이상이면 Claude 호출 생략 (토큰 절감)
@@ -496,6 +596,51 @@ def _extract_tiled(
     return {"page": page_num, "type": page_type, "data": data, "_tiled": True}
 
 
+# ── 디지털 텍스트 추출 (이미지 토큰 0, OCR 불필요) ────────────────────────────
+def _extract_digital_text_only(
+    pdf_path: Path,
+    page_index: int,
+    page_num: int,
+    page_type: str,
+    prompt_cfg: dict,
+) -> dict | None:
+    """
+    fitz.get_text()로 임베딩 텍스트 추출 → Haiku 구조화 (Tier 0).
+    이미지를 Claude에 전송하지 않으므로 입력 이미지 토큰이 0.
+    PaddleOCR 설치 불필요.
+
+    Returns None if embedded text is insufficient (< OCR_MIN_CHARS) → caller
+    falls back to OCR_FIRST / tiled / vision.
+    """
+    raw_text = get_page_text(pdf_path, page_index)
+    if len(raw_text.strip()) < OCR_MIN_CHARS:
+        return None  # 임베딩 텍스트 없음 → 이미지 기반 PDF, 폴백
+
+    content = [
+        {
+            "type": "text",
+            "text": (
+                "다음 텍스트는 건축 설계공모 PDF 페이지에서 직접 추출한 임베딩 텍스트입니다.\n\n"
+                f"--- 페이지 텍스트 ---\n{raw_text}\n---\n\n"
+                f"{prompt_cfg['instruction']}"
+            ),
+        }
+    ]
+    try:
+        raw = call_messages(
+            model=settings.model_id_classify,  # Haiku — 텍스트 구조화는 Sonnet 불필요
+            max_tokens=2000,
+            temperature=0,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content}],
+        )
+        data = parse_json_response(raw)
+    except Exception as e:
+        data = {"error": str(e)}
+
+    return {"page": page_num, "type": page_type, "data": data, "_source": "digital_haiku"}
+
+
 # ── OCR 텍스트 추출 (이미지 토큰 0) ──────────────────────────────────────────
 def _extract_ocr_text_only(
     pdf_path: Path,
@@ -575,9 +720,13 @@ async def extract_pdf(
         page_type = type_by_page.get(page_num, "CONCEPT")
         confidence = confidence_by_page.get(page_num, 1.0)
 
-        # ── 스킵: 비교분석에 미사용 페이지 (COVER, RENDERING_EXT/INT)
+        # ── 스킵: 비교분석에 미사용 페이지
+        # BRIEF_* 타입은 EXTRACTION_PROMPTS에 없으므로 EXTRACTION_PROMPTS_BRIEF 먼저 조회.
         priority_limit = settings.extraction_priority_limit
-        cfg_for_check = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
+        if is_brief and page_type in EXTRACTION_PROMPTS_BRIEF:
+            cfg_for_check = EXTRACTION_PROMPTS_BRIEF[page_type]
+        else:
+            cfg_for_check = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
         if cfg_for_check["priority"] > priority_limit or page_type in SKIP_PAGE_TYPES:
             return {"page": page_num, "type": page_type, "data": {}, "_skipped": True}
 
@@ -597,7 +746,19 @@ async def extract_pdf(
             return {"page": page_num, "type": effective_type, "data": {}, "_skipped": True}
 
         async with sem:
-            # ── OCR fast-path: AREA_TABLE / TECHNICAL / SUSTAINABILITY
+            # ── Tier 0 — digital text fast-path: fitz.get_text() → Haiku
+            # 이미지 토큰 0, PaddleOCR 불필요. 임베딩 텍스트 없는 이미지 기반 PDF는 자동 폴백.
+            # 표 레이아웃 타입(DIGITAL_TEXT_EXCLUDE_TYPES)은 열 순서 왜곡 위험 → 제외.
+            if effective_type not in DIGITAL_TEXT_EXCLUDE_TYPES:
+                digital_result = await asyncio.to_thread(
+                    _extract_digital_text_only,
+                    pdf_path, page_num - 1, page_num, effective_type, prompt_cfg,
+                )
+                if digital_result is not None:
+                    return digital_result
+                # 임베딩 텍스트 부족 → 이하 OCR_FIRST / tiled / vision으로 폴백
+
+            # ── Tier 1 — OCR fast-path: AREA_TABLE / TECHNICAL / SUSTAINABILITY
             # PaddleOCR(무료·로컬) → Haiku(저렴). 이미지 토큰 0.
             # OCR 결과 불충분 시 자동으로 아래 vision 경로로 fallback.
             if effective_type in OCR_FIRST_TYPES:
@@ -651,8 +812,12 @@ async def extract_brief_requirements(brief_data: dict, facility_type: str = "") 
         }
     """
     relevant_keys = {
+        # 구 submission 타입 경로 (레거시 / AREA_TABLE 분류 경우)
         "area_table", "special_space", "technical", "_quantitative",
         "circulation", "sustainability", "site_plan",
+        # 새 BRIEF taxonomy 경로 (classify_all_pages_brief 사용 시)
+        "brief_program", "brief_evaluation", "brief_design_guide",
+        "brief_technical", "brief_regulations", "brief_site",
     }
     trimmed = {k: v for k, v in brief_data.items() if k in relevant_keys}
     if not trimmed:
@@ -731,6 +896,34 @@ def merge_extracted_data(
             v = entry.get(field)
             if v is not None and field not in quant:
                 quant[field] = v
+
+    # 새 BRIEF taxonomy 경로: brief_program / brief_regulations 필드명 리매핑
+    # area_table 경로가 이미 채운 필드는 덮어쓰지 않음 (first-write wins 유지)
+    _brief_remap = {
+        # brief_program 키 → _quantitative 키
+        "total_required_floor_area_sqm": "total_floor_area_sqm",
+        "site_area_sqm":                 "site_area_sqm",
+        "building_coverage_limit_pct":   "building_coverage_ratio_pct",  # brief_program
+        "floor_area_ratio_limit_pct":    "floor_area_ratio_pct",         # brief_program + brief_regulations 공통
+        "max_floors_above":              "floors_above",
+        "max_floors_below":              "floors_below",
+        "required_parking":              "parking_count",
+        # brief_regulations 추가 키 (brief_program과 필드명 다름)
+        "building_coverage_ratio_limit_pct": "building_coverage_ratio_pct",
+    }
+    bp_list = result.get("brief_program", [])
+    if isinstance(bp_list, dict):
+        bp_list = [bp_list]
+    br_list = result.get("brief_regulations", [])
+    if isinstance(br_list, dict):
+        br_list = [br_list]
+    for entry in bp_list + br_list:
+        if not isinstance(entry, dict):
+            continue
+        for src, dst in _brief_remap.items():
+            v = entry.get(src)
+            if v is not None and dst not in quant:
+                quant[dst] = v
 
     result["_quantitative"] = quant
     return result

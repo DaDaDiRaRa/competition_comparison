@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from config import settings, COMPARISON_AXES, COMPARISON_AXES_META, axes_for, build_axis_rubric_block
+from config import settings, COMPARISON_AXES, COMPARISON_AXES_META, axes_for, build_axis_rubric_block, RUBRIC_VERSION
 from services.llm_client import call_messages
 from services.utils import parse_json_response
 
@@ -404,7 +404,9 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
 
 
 async def compare_submissions(brief_data: dict, submissions: list[dict], facility_type: str = "") -> dict:
-    return await asyncio.to_thread(_run_compare_sync, brief_data, submissions, facility_type)
+    result = await asyncio.to_thread(_run_compare_sync, brief_data, submissions, facility_type)
+    result["rubric_version"] = RUBRIC_VERSION
+    return result
 
 
 def _run_diagnose_sync(
@@ -413,6 +415,7 @@ def _run_diagnose_sync(
     brief_data: dict,
     submission_data: dict,
 ) -> dict:
+    winning_patterns = winning_patterns or {}
     qualitative = winning_patterns.get("qualitative_insights", {})
     requirements = brief_data.get("_requirements", {})
     static = _make_diagnose_static(facility_type).replace("{facility_type}", facility_type)
@@ -451,6 +454,8 @@ async def diagnose_submission(
     brief_data: dict,
     submission_data: dict,
 ) -> dict:
-    return await asyncio.to_thread(
+    result = await asyncio.to_thread(
         _run_diagnose_sync, facility_type, winning_patterns, brief_data, submission_data
     )
+    result["rubric_version"] = RUBRIC_VERSION
+    return result
