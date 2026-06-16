@@ -212,7 +212,11 @@ BRIEF_PAGE_TYPES:
 - BRIEF_PROJECT_INFO: 사업 개요 수치표. Page with a table where ROWS are site-level scale metrics (대지면적, 건폐율, 용적률, 최고높이, 건축규모/연면적, 공개공지) and COLUMNS are sites or facility types (부지1/부지2, 어린이집/구청사/커뮤니티센터 등). Column headers may be site labels (부지1, A, B) OR facility-type names (어린이집, 공공업무시설 등) — both count. Additional signals: 예정 공사비, 설계비, 공사기간. DISTINGUISH → BRIEF_OVERVIEW (text-only purpose/background/schedule, no numeric table) / BRIEF_PROGRAM (ROW names are room/space names like 회의실·로비, not metric names like 대지면적·건폐율) / BRIEF_REGULATIONS (zoning code text without project-specific numeric table).
 - BRIEF_SITE: 대상지 현황. Site location map, aerial photo, cadastral map, site area, surrounding context. No design requirements — descriptive only.
 - BRIEF_PROGRAM: 면적 프로그램. Room-by-room area table (실별 면적표 — ROW names are space/room names like 회의실, 로비, 주차장), floor-by-floor use table, required parking count, gross/net area requirements. NOTE: if the table ROWS are metric names (대지면적, 건폐율, 용적률, 높이) rather than room names, use BRIEF_PROJECT_INFO instead.
-- BRIEF_DESIGN_GUIDE: 설계 지침. Text-based design requirements: height limits, setbacks, massing guidelines, material restrictions, sustainability requirements, concept direction. NO scoring/weighting table — bullet-point or paragraph text only. If any table with 비중/배점/점수 columns is present, use BRIEF_EVALUATION instead.
+- BRIEF_DESIGN_MASSING: 배치·매싱·동선 지침. Site layout, setbacks, open space, pedestrian/vehicle circulation, parking access, building connections. 신호어: 배치계획, 이격거리, 세트백, 공개공지, 동선, 보행환경, 연결통로, 주차동선.
+- BRIEF_DESIGN_FACADE: 입면·재료·경관 지침. Facade design, cladding materials, color scheme, skyline, landscape. 신호어: 입면, 외장재, 마감재, 파사드, 색상, 색채, 경관, 외관디자인.
+- BRIEF_DESIGN_SUSTAIN: 친환경·에너지·인증 지침. Green building certifications (G-SEED, LEED, ZEB, BF인증), renewable energy ratio, BEMS, energy performance grade. 신호어: 친환경, 에너지절약, ZEB, G-SEED, 신재생에너지, 인증등급, BEMS, 녹색건축.
+- BRIEF_DESIGN_SPECIAL: 특수·보안·안전 지침. Crime prevention (CPTED), fire safety, seismic design, universal design, disability access, railway protection zones. 신호어: 방재, CPTED, 범죄예방, 장애인, 유니버설디자인, 소방, 내진, 철도보호.
+- BRIEF_DESIGN_GUIDE: 기타 설계 지침 (폴백). General design concept/direction, prohibited items, mixed requirements not covered by the four specific design types above. Use ONLY when no single theme dominates.
 - BRIEF_TECHNICAL: 기술 기준. Structural requirements, MEP specifications, fire safety, seismic standards, smart building criteria.
 - BRIEF_REGULATIONS: 법규 기준. Zoning district, building coverage ratio (건폐율), floor area ratio (용적률), height restrictions, setback rules — legal codes and ordinances.
 - BRIEF_EVALUATION: 심사 기준. Scoring table (배점표) or weighting table with columns such as 구분/항목/비중/배점/점수. \
@@ -223,10 +227,17 @@ Do NOT require all signals — any one is sufficient.
 - BRIEF_SUBMISSION: 제출 기준. Required drawing list, file format specifications (DWG/PDF/BIM), submission method, document scale requirements.
 - BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms. No design content — skip extraction.
 
-BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE — decision guide:
+BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE family — decision guide:
   • Table with 비중/배점/점수 column → BRIEF_EVALUATION (even if design text also present)
-  • Bullet points (•) or paragraphs describing design requirements, NO scoring table → BRIEF_DESIGN_GUIDE
+  • Bullet points (•) or paragraphs describing design requirements, NO scoring table → one of the 5 BRIEF_DESIGN_* types below
   • Table present but columns are area/floor/quantity (not scoring weights) → BRIEF_PROGRAM (not BRIEF_EVALUATION)
+
+BRIEF_DESIGN sub-types — choose after ruling out BRIEF_EVALUATION and BRIEF_PROGRAM:
+  • Certification code/grade (ZEB, G-SEED, LEED, BEMS, 에너지등급) present → BRIEF_DESIGN_SUSTAIN (highest priority)
+  • Security/safety signals dominant (CPTED, 방재, 소방, 내진, 장애인편의) → BRIEF_DESIGN_SPECIAL
+  • Facade/materials/color/landscape dominant → BRIEF_DESIGN_FACADE
+  • Site layout/setback/open-space/circulation/parking dominant → BRIEF_DESIGN_MASSING
+  • Mixed or no single dominant theme → BRIEF_DESIGN_GUIDE (fallback)
 
 BRIEF_PROJECT_INFO vs BRIEF_OVERVIEW vs BRIEF_PROGRAM — decision guide:
   • Table ROWS = 대지면적, 건폐율, 용적률, 높이, 건축규모/연면적 (metric names), COLUMNS = sites or facility types → BRIEF_PROJECT_INFO (PRIORITY RULE 3 applies — overrides BRIEF_PROGRAM)

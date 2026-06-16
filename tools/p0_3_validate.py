@@ -50,10 +50,28 @@ def classify_brief(pdf_path: str, label: str):
 
     # Print full distribution
     from collections import Counter
+    _NEW_TYPES = {
+        "BRIEF_PROJECT_INFO", "BRIEF_DESIGN_MASSING", "BRIEF_DESIGN_FACADE",
+        "BRIEF_DESIGN_SUSTAIN", "BRIEF_DESIGN_SPECIAL",
+    }
     dist = Counter(item.get("primary_type") for item in page_map)
     for ptype, cnt in sorted(dist.items()):
-        marker = " <-- NEW" if ptype == "BRIEF_PROJECT_INFO" else ""
+        marker = " <-- NEW" if ptype in _NEW_TYPES else ""
         print(f"    {ptype}: {cnt}{marker}")
+
+    # P2-3-1: BRIEF_DESIGN_* 분산 체크
+    design_types = {
+        k: v for k, v in dist.items()
+        if k and k.startswith("BRIEF_DESIGN_")
+    }
+    total_design = sum(design_types.values())
+    guide_cnt = design_types.get("BRIEF_DESIGN_GUIDE", 0)
+    if total_design:
+        pct = guide_cnt / total_design * 100
+        print(f"\n  [P2-3] 설계 지침 분산: 총 {total_design}페이지")
+        for dt, cnt in sorted(design_types.items()):
+            print(f"    {dt}: {cnt}페이지")
+        print(f"  BRIEF_DESIGN_GUIDE(폴백) 비율: {pct:.0f}%  {'<-- 높음(개선 필요)' if pct > 50 else 'OK'}")
 
     return page_map
 
@@ -68,33 +86,127 @@ def extract_brief(pdf_path: str, page_map: list, label: str):
     raw = asyncio.run(extract_pdf(pdf_path, page_map, is_brief=True))
     brief_data = merge_extracted_data(page_map, raw)
 
-    bpi = brief_data.get("brief_project_info")
-    if bpi:
-        if isinstance(bpi, list):
-            bpi = bpi[0] if bpi else {}
-        sites = bpi.get("sites", [])
-        print(f"  brief_project_info found: {len(sites)} site(s)")
-        for i, s in enumerate(sites):
-            print(f"    site[{i}]")
-            print(f"      id       = {s.get('site_id')}")
-            print(f"      address  = {s.get('address')}")
-            print(f"      zoning   = {s.get('zoning')}")
-            print(f"      scope    = {s.get('scope')}")
-            print(f"      facilities = {s.get('facilities')}")
-            print(f"      site_area_sqm      = {s.get('site_area_sqm')}")
-            print(f"      floor_area_sqm     = {s.get('floor_area_sqm')}")
-            print(f"      building_coverage_pct = {s.get('building_coverage_pct')}")
-            print(f"      floor_area_ratio_pct  = {s.get('floor_area_ratio_pct')}")
-            print(f"      max_height_m       = {s.get('max_height_m')}")
-            print(f"      open_space_sqm     = {s.get('open_space_sqm')}")
-        cost = bpi.get("construction_cost_100m_won")
-        design_cost = bpi.get("design_cost_100m_won")
-        period = bpi.get("construction_period_months")
-        print(f"  construction_cost={cost} 억원  design_cost={design_cost} 억원  period={period} 개월")
-        print(f"  budget_notes={bpi.get('budget_notes')}")
-        print(f"  special_conditions={bpi.get('special_conditions')}")
+    # ── area_table (P1 new schema) — ALL brief_program pages ─────────────────
+    _bp_all = brief_data.get("brief_program") or []
+    if isinstance(_bp_all, dict):
+        _bp_all = [_bp_all]
+    area_table: list = []
+    shared_areas: list = []
+    for _bpp in _bp_all:
+        if isinstance(_bpp, dict):
+            area_table.extend(_bpp.get("area_table") or [])
+            shared_areas.extend(_bpp.get("shared_areas") or [])
+
+    if area_table:
+        total_items = sum(len(g.get("items") or []) for g in area_table if isinstance(g, dict))
+        total_subs  = sum(
+            len(item.get("sub_items") or [])
+            for g in area_table if isinstance(g, dict)
+            for item in (g.get("items") or []) if isinstance(item, dict)
+        )
+        depth = 1 + (1 if total_items else 0) + (1 if total_subs else 0)
+        print(f"  area_table: {len(area_table)} group(s)  items={total_items}  sub_items={total_subs}  depth={depth}단")
+        for gi, grp in enumerate(area_table):
+            if not isinstance(grp, dict):
+                continue
+            gname  = grp.get("group_name") or "(no name)"
+            gtotal = grp.get("total_area_sqm")
+            site   = grp.get("site_id") or "-"
+            items  = grp.get("items") or []
+            print(f"    [{gi}] '{gname}'  site={site}  total={gtotal}㎡  items={len(items)}")
+            for ii, item in enumerate(items[:5]):  # max 5 items per group
+                if not isinstance(item, dict):
+                    continue
+                subs = item.get("sub_items") or []
+                print(f"         [{ii}] {item.get('name')}  {item.get('area_sqm')}㎡  sub_items={len(subs)}")
+                for si, sub in enumerate(subs[:3]):  # max 3 subs
+                    if isinstance(sub, dict):
+                        print(f"              [{si}] {sub.get('name')}  {sub.get('area_sqm')}㎡")
+            if len(items) > 5:
+                print(f"         ... ({len(items)-5} more items)")
+        if shared_areas:
+            print(f"  shared_areas: {len(shared_areas)} item(s)")
+            for sa in shared_areas[:3]:
+                if isinstance(sa, dict):
+                    print(f"    '{sa.get('name')}'  {sa.get('area_sqm')}㎡")
     else:
-        print("  brief_project_info: (not extracted)")
+        print("  area_table: (not extracted — may be old rooms[] schema or empty BRIEF_PROGRAM)")
+
+    # ── KI-2: BRIEF_PROJECT_INFO 수치 필드 체크 ──────────────────────────────
+    def _first(d, k):
+        v = d.get(k) or {}
+        if isinstance(v, list): v = v[0] if v else {}
+        return v if isinstance(v, dict) else {}
+
+    bpi = _first(brief_data, "brief_project_info")
+    if bpi:
+        print(f"\n  [KI-2] BRIEF_PROJECT_INFO 수치 필드:")
+        for field in ("competition_name", "organizer", "construction_cost_100m_won",
+                      "construction_period_months"):
+            print(f"    {field}: {bpi.get(field)}")
+        for i, site in enumerate(bpi.get("sites") or []):
+            if not isinstance(site, dict): continue
+            print(f"    sites[{i}] {site.get('site_id')}: "
+                  f"site_area={site.get('site_area_sqm')}  "
+                  f"bcr={site.get('building_coverage_pct')}%  "
+                  f"far={site.get('floor_area_ratio_pct')}%  "
+                  f"height={site.get('max_height_m')}m")
+    else:
+        print("\n  [KI-2] BRIEF_PROJECT_INFO: (not extracted)")
+
+    # ── KI-1: BRIEF_EVALUATION 배점 합계 체크 ────────────────────────────────
+    be = _first(brief_data, "brief_evaluation")
+    if be:
+        total_pts = be.get("total_points")
+        cats = be.get("evaluation_categories") or []
+        computed = sum(
+            c.get("points") or 0 for c in cats
+            if isinstance(c, dict) and isinstance(c.get("points"), (int, float))
+        )
+        print(f"\n  [KI-1] BRIEF_EVALUATION:")
+        print(f"    total_points(LLM): {total_pts}  computed_sum: {computed}  "
+              f"{'OK' if 95 <= computed <= 105 else '<-- 이상 (중복 집계 의심)'}")
+        for c in cats[:5]:
+            if isinstance(c, dict):
+                print(f"    {c.get('name')}: {c.get('points')}점")
+        if len(cats) > 5:
+            print(f"    ... ({len(cats)-5} more)")
+    else:
+        print("\n  [KI-1] BRIEF_EVALUATION: (not extracted)")
+
+    # ── P2-3-3/4: BRIEF_DESIGN_* 추출 데이터 체크 ───────────────────────────
+    print(f"\n  [P2-3] BRIEF_DESIGN_* 추출 결과:")
+    for dtype, label_ko in [
+        ("brief_design_massing", "배치·동선"),
+        ("brief_design_facade",  "입면·재료"),
+        ("brief_design_sustain", "친환경·인증"),
+        ("brief_design_special", "특수·보안"),
+        ("brief_design_guide",   "기타(폴백)"),
+    ]:
+        raw = brief_data.get(dtype)
+        if not raw:
+            print(f"    {dtype}: (없음)")
+            continue
+        pages = raw if isinstance(raw, list) else [raw]
+        all_items = 0
+        for page in pages:
+            if not isinstance(page, dict): continue
+            for v in page.values():
+                if isinstance(v, list): all_items += len(v)
+                elif v and not isinstance(v, (dict, list)): all_items += 1
+        print(f"    {dtype} ({label_ko}): {len(pages)}페이지  총 추출항목~{all_items}개")
+        # 인증 수치 (P2-3-3/4)
+        if dtype == "brief_design_sustain":
+            for page in pages:
+                if not isinstance(page, dict): continue
+                certs = page.get("required_certifications") or []
+                rpct  = page.get("renewable_energy_min_pct")
+                if certs:
+                    for c in certs:
+                        if isinstance(c, dict):
+                            print(f"      인증: {c.get('name')}  등급: {c.get('required_grade')}")
+                if rpct is not None:
+                    print(f"      신재생에너지 최소비율: {rpct}%")
 
     return brief_data
 
@@ -117,35 +229,79 @@ def export_xlsx(brief_data: dict, label: str):
     print(f"  Sheet 1 name: {ws1.title}")
     print(f"  Rows: {ws1.max_row}  Cols: {ws1.max_column}")
 
-    # Find 사업 개요 header
-    found_bpi = False
+    # Check key sections + col B values (기준면적A)
+    found_area_prog = False
     found_area_limit = False
-    row_labels = []
-    for row in ws1.iter_rows(min_row=1, values_only=True):
-        cell0 = str(row[0] or "")
-        if "사업 개요" in cell0:
-            found_bpi = True
-            print(f"  ✓ '사업 개요' section header found")
-        if "전체 규모 한도" in cell0:
+    row_data = []  # (col_A_text, col_B_value, col_B_indent)
+    for r in ws1.iter_rows(min_row=1):
+        cell0 = str(r[0].value or "").strip()
+        cell1 = r[1].value if len(r) > 1 else None  # 기준면적(A)
+        indent = getattr(r[0].alignment, "indent", 0) if r[0].alignment else 0
+        if "실별 면적 프로그램" in cell0:
+            found_area_prog = True
+        if "전체 규모 한도" in cell0 or "부지별 건축개요" in cell0:
             found_area_limit = True
-            print(f"  ✓ '전체 규모 한도' section found (still present)")
-        if cell0.strip():
-            row_labels.append(cell0.strip())
+        if cell0:
+            row_data.append((cell0, cell1, indent))
 
-    if not found_bpi:
-        print("  ✗ '사업 개요' section NOT found in Sheet 1")
-    if not found_area_limit:
-        print("  ✗ '전체 규모 한도' section NOT found — may have been removed unintentionally")
+    print(f"  {'✓' if found_area_prog else '✗'} '실별 면적 프로그램' 섹션")
+    print(f"  {'✓' if found_area_limit else '✗'} '전체 규모 한도' / '부지별 건축개요' 섹션")
 
-    print(f"\n  Sheet 1 non-empty cell[0] labels (first 30):")
-    for lbl in row_labels[:30]:
-        print(f"    {lbl}")
+    # Count rows with area_table data (non-empty col B in program section)
+    in_prog = False
+    filled_B = 0
+    for lbl, colB, _ind in row_data:
+        if "실별 면적 프로그램" in lbl:
+            in_prog = True
+        if in_prog and colB is not None:
+            filled_B += 1
+    print(f"  기준면적(A) 채워진 행: {filled_B}개")
+
+    print(f"\n  Sheet 1 rows (col A  |  col B  |  indent) — first 35:")
+    for lbl, colB, ind in row_data[:35]:
+        indent_str = "  " * int(ind) if ind else ""
+        print(f"    {indent_str}{lbl:<30}  |  {colB}")
+
+    # ── P2-3-6: Sheet 3 설계 지침 섹션 체크 ─────────────────────────────────
+    if len(wb.worksheets) >= 3:
+        ws3 = wb.worksheets[2]
+        _S3_SECTIONS = ["배치·동선", "입면·재료", "친환경·인증", "특수·보안", "기타 설계"]
+        found_s3 = {s: False for s in _S3_SECTIONS}
+        for r in ws3.iter_rows(min_row=1):
+            cell0 = str(r[0].value or "").strip()
+            for s in _S3_SECTIONS:
+                if s in cell0:
+                    found_s3[s] = True
+        print(f"\n  Sheet 3 ({ws3.title}) 설계 지침 섹션:")
+        for s, ok in found_s3.items():
+            print(f"    {'✓' if ok else '✗'} '{s}' 섹션")
 
     # Save for manual inspection
-    out_path = pathlib.Path(tempfile.gettempdir()) / f"p03_{label}.xlsx"
+    safe_label = label.replace("/", "_").replace("\\", "_")
+    out_path = pathlib.Path(tempfile.gettempdir()) / f"p03_{safe_label}.xlsx"
     out_path.write_bytes(raw_bytes)
     print(f"\n  Saved to: {out_path}")
     return out_path
+
+
+def export_md(brief_data: dict, label: str):
+    """Generate markdown and check P2-3-5 section headers."""
+    from services.brief_checklist_exporter import to_markdown
+    print(f"\n[MD] {label}")
+    validation = {"flags": [], "summary": {"high": 0, "medium": 0, "low": 0}, "checked_rules": []}
+    md_text = to_markdown(brief_data, validation)
+
+    _MD_SECTIONS = ["배치·동선 지침", "입면·재료 지침", "친환경·인증 요구사항", "특수·보안 지침", "기타 설계 지침"]
+    print("  MD 설계 지침 섹션:")
+    for s in _MD_SECTIONS:
+        found = f"### {s}" in md_text
+        print(f"    {'✓' if found else '✗'} '### {s}'")
+
+    # Save MD
+    safe_label = label.replace("/", "_").replace("\\", "_")
+    out_path = pathlib.Path(tempfile.gettempdir()) / f"p03_{safe_label}.md"
+    out_path.write_text(md_text, encoding="utf-8")
+    print(f"  Saved to: {out_path}")
 
 
 def check_page_map_from_saved_json(label: str, json_path: str):
@@ -173,11 +329,16 @@ def main():
     print("="*70)
 
     # Sanity check config
-    assert "BRIEF_PROJECT_INFO" in BRIEF_PAGE_TYPES, "BRIEF_PROJECT_INFO missing from BRIEF_PAGE_TYPES!"
-    assert BRIEF_PAGE_TYPES_META.get("BRIEF_PROJECT_INFO") == "사업개요", "Meta mismatch!"
-    print("\n[CONFIG] BRIEF_PROJECT_INFO registered OK")
-    print(f"  Index in list: {BRIEF_PAGE_TYPES.index('BRIEF_PROJECT_INFO')}")
-    print(f"  Meta label: {BRIEF_PAGE_TYPES_META['BRIEF_PROJECT_INFO']}")
+    _NEW_TYPES_CHECK = [
+        "BRIEF_PROJECT_INFO", "BRIEF_DESIGN_MASSING", "BRIEF_DESIGN_FACADE",
+        "BRIEF_DESIGN_SUSTAIN", "BRIEF_DESIGN_SPECIAL",
+    ]
+    print("\n[CONFIG] BRIEF_PAGE_TYPES 등록 확인:")
+    for t in _NEW_TYPES_CHECK:
+        ok = t in BRIEF_PAGE_TYPES
+        meta = BRIEF_PAGE_TYPES_META.get(t, "(없음)")
+        print(f"  {'✓' if ok else '✗'} {t}  meta={meta}")
+    assert all(t in BRIEF_PAGE_TYPES for t in _NEW_TYPES_CHECK), "일부 타입 미등록!"
 
     # Check API key
     api_key = settings.api_key
@@ -199,9 +360,10 @@ def main():
 
         brief_data = extract_brief(pdf_path, page_map, label)
         export_xlsx(brief_data, label)
+        export_md(brief_data, label)
 
     print("\n" + "="*70)
-    print("P0-3 DONE")
+    print("P0-3 / P1-3 / P2-3 DONE")
     print("="*70)
 
 
@@ -235,6 +397,36 @@ def _test_xlsx_synthetic():
             "budget_notes": ["VAT 별도", "공사비 산정 기준: 2024년 단가"],
             "special_conditions": ["면적 허용 오차 ±5%"],
         }
+    }
+
+    # Add brief_program with area_table (1-level simple)
+    brief_single["brief_program"] = {
+        "area_table": [
+            {
+                "group_name": "구청사",
+                "site_id": "단일부지",
+                "total_area_sqm": 12000.0,
+                "items": [
+                    {"name": "민원실", "area_sqm": 800.0, "notes": "1층 배치", "sub_items": []},
+                    {"name": "사무실", "area_sqm": 4500.0, "notes": "", "sub_items": []},
+                    {"name": "회의실", "area_sqm": 600.0, "notes": "2~3층", "sub_items": []},
+                    {"name": "로비·홀", "area_sqm": 500.0, "notes": "", "sub_items": []},
+                ],
+            },
+            {
+                "group_name": "주민 편의시설",
+                "site_id": "단일부지",
+                "total_area_sqm": 2800.0,
+                "items": [
+                    {"name": "도서관", "area_sqm": 1200.0, "notes": "", "sub_items": []},
+                    {"name": "체육관", "area_sqm": 1600.0, "notes": "", "sub_items": []},
+                ],
+            },
+        ],
+        "shared_areas": [
+            {"name": "공용주차장", "area_sqm": 3200.0, "notes": "지하 1~2층"},
+            {"name": "기계·전기실", "area_sqm": 500.0, "notes": ""},
+        ],
     }
 
     # Multi-site synthetic data
@@ -281,10 +473,55 @@ def _test_xlsx_synthetic():
         }
     }
 
-    print("\n  --- Synthetic single-site xlsx ---")
+    # Add brief_program with area_table (3-level complex) to multi-site
+    brief_multi["brief_program"] = {
+        "area_table": [
+            {
+                "group_name": "행정동 (부지1)",
+                "site_id": "부지1",
+                "total_area_sqm": 35000.0,
+                "items": [
+                    {
+                        "name": "구청 본청",
+                        "area_sqm": 20000.0,
+                        "notes": "",
+                        "sub_items": [
+                            {"name": "민원창구", "area_sqm": 800.0, "notes": "1F"},
+                            {"name": "행정사무실", "area_sqm": 12000.0, "notes": "2~8F"},
+                            {"name": "대강당", "area_sqm": 1200.0, "notes": ""},
+                        ],
+                    },
+                    {
+                        "name": "구의회",
+                        "area_sqm": 5000.0,
+                        "notes": "별관 연결",
+                        "sub_items": [
+                            {"name": "의회 본회의장", "area_sqm": 800.0, "notes": ""},
+                            {"name": "의원실", "area_sqm": 2000.0, "notes": ""},
+                        ],
+                    },
+                ],
+            },
+            {
+                "group_name": "생활SOC동 (부지2)",
+                "site_id": "부지2",
+                "total_area_sqm": 9300.0,
+                "items": [
+                    {"name": "주민센터", "area_sqm": 3000.0, "notes": "", "sub_items": []},
+                    {"name": "도서관", "area_sqm": 2500.0, "notes": "", "sub_items": []},
+                    {"name": "체육시설", "area_sqm": 3800.0, "notes": "", "sub_items": []},
+                ],
+            },
+        ],
+        "shared_areas": [
+            {"name": "지하주차장 (공용)", "area_sqm": 12000.0, "notes": "B1~B3"},
+        ],
+    }
+
+    print("\n  --- Synthetic single-site xlsx (1-level area_table) ---")
     out1 = export_xlsx(brief_single, "synthetic_single")
 
-    print("\n  --- Synthetic multi-site xlsx ---")
+    print("\n  --- Synthetic multi-site xlsx (3-level area_table) ---")
     out2 = export_xlsx(brief_multi, "synthetic_multi")
 
     print(f"\n  Open these files to verify Sheet 1 '사업 개요' section:")

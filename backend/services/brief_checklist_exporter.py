@@ -104,7 +104,11 @@ def _extract_sections(brief_data: dict) -> dict:
     br    = _first(brief_data, "brief_regulations")
     at    = _first(brief_data, "area_table")
     be    = _first(brief_data, "brief_evaluation")
-    dg    = _first(brief_data, "brief_design_guide")
+    dg    = _first(brief_data, "brief_design_guide")   # 기타/폴백
+    dm    = _first(brief_data, "brief_design_massing")
+    dfa   = _first(brief_data, "brief_design_facade")
+    ds    = _first(brief_data, "brief_design_sustain")
+    dsp   = _first(brief_data, "brief_design_special")
     bpi   = _first(brief_data, "brief_project_info")
     quant = brief_data.get("_quantitative") or {}
     reqs  = brief_data.get("_requirements") or {}
@@ -149,11 +153,20 @@ def _extract_sections(brief_data: dict) -> dict:
         or quant.get("parking_count")
     )
 
-    # 실별 면적 — 새 taxonomy: rooms[{name,required_area_sqm,required_count,floor,notes}]
-    #            구 경로:      room_program[{name,area_sqm,count,notes}]
-    rooms = _as_list(bp, "rooms") or _as_list(at, "room_program")
+    # 계층 면적표 — ALL brief_program 페이지의 area_table 합산
+    # (BRIEF_PROGRAM이 여러 페이지면 각 페이지의 group이 다를 수 있어 concat)
+    _bp_all = brief_data.get("brief_program") or []
+    if isinstance(_bp_all, dict):
+        _bp_all = [_bp_all]
+    area_table: list = []
+    shared_areas: list = []
+    for _bpp in _bp_all:
+        if isinstance(_bpp, dict):
+            area_table.extend(_bpp.get("area_table") or [])
+            shared_areas.extend(_bpp.get("shared_areas") or [])
 
-    # 존 구성 — 새: zones[{name,area_sqm}], 구: zone_summary[{zone,area_sqm}]
+    # 구 경로 폴백: rooms / zones (area_table 없는 기존 데이터 호환)
+    rooms = _as_list(bp, "rooms") or _as_list(at, "room_program")
     zones = _as_list(bp, "zones") or _as_list(at, "zone_summary")
 
     # 사업비·기간 — project-wide (병합 셀로 두 부지 공통)
@@ -176,6 +189,7 @@ def _extract_sections(brief_data: dict) -> dict:
     # ── Section 3: 요구사항 ───────────────────────────────────────────────────
     requirements   = _as_list(reqs, "requirements")
     special_reqs   = _as_list(reqs, "special_requirements")
+    # 기타/폴백 BRIEF_DESIGN_GUIDE (구 데이터 하위호환)
     design_reqs    = _as_list(dg, "design_requirements")
     setbacks       = _as_list(dg, "setback_requirements")
     materials      = _as_list(dg, "materials_required")
@@ -189,7 +203,9 @@ def _extract_sections(brief_data: dict) -> dict:
             "total_fa": total_fa, "site_area": site_area,
             "bcr": bcr, "far": far, "height": height,
             "floors_above": floors_above, "floors_below": floors_below,
-            "parking": parking, "rooms": rooms, "zones": zones,
+            "parking": parking,
+            "area_table": area_table, "shared_areas": shared_areas,  # 새 계층 구조
+            "rooms": rooms, "zones": zones,                           # 구 경로 폴백
             "sites": sites,  # 복수 부지 raw 배열 (단일 부지면 len==1 or [])
             "construction_cost": construction_cost,
             "design_fee": design_fee,
@@ -201,6 +217,36 @@ def _extract_sections(brief_data: dict) -> dict:
         },
         "reqs": {
             "requirements": requirements, "special_reqs": special_reqs,
+            # 새 typed 설계 지침
+            "massing": {
+                "setback_m":    dm.get("building_setback_m"),
+                "open_space":   _as_list(dm, "open_space_requirements"),
+                "parking":      _as_list(dm, "parking_requirements"),
+                "pedestrian":   _as_list(dm, "pedestrian_requirements"),
+                "connection":   _as_list(dm, "connection_requirements"),
+                "height_strategy": dm.get("height_strategy") or "",
+                "guidelines":   _as_list(dm, "massing_guidelines"),
+            },
+            "facade": {
+                "primary_materials":   _as_list(dfa, "primary_materials"),
+                "prohibited_materials": _as_list(dfa, "prohibited_materials"),
+                "color":               _as_list(dfa, "color_requirements"),
+                "facade_guidelines":   _as_list(dfa, "facade_guidelines"),
+                "landscape":           _as_list(dfa, "landscape_requirements"),
+            },
+            "sustain": {
+                "certifications":    _as_list(ds, "required_certifications"),
+                "renewable_pct":     ds.get("renewable_energy_min_pct"),
+                "energy_guidelines": _as_list(ds, "energy_guidelines"),
+                "sustainability_reqs": _as_list(ds, "sustainability_requirements"),
+            },
+            "special": {
+                "security":      _as_list(dsp, "security_requirements"),
+                "accessibility": _as_list(dsp, "accessibility_requirements"),
+                "safety":        _as_list(dsp, "safety_requirements"),
+                "special_tech":  _as_list(dsp, "special_technical_requirements"),
+            },
+            # 기타/폴백 (구 BRIEF_DESIGN_GUIDE 하위호환)
             "design_reqs": design_reqs, "setbacks": setbacks,
             "materials": materials, "sustainability": sustainability,
             "prohibited": prohibited, "concept": concept,
@@ -384,7 +430,46 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
         lines.append(_md_table(["항목", "내용"], scale_rows))
     lines.append("")
 
-    if a["rooms"]:
+    _AREA_HDR = ["구분", "기준면적(A)", "계획면적(B)", "비고"]
+
+    if a["area_table"]:
+        lines.append("### 실별 면적 프로그램\n")
+        at_rows = []
+        for grp in a["area_table"]:
+            if not isinstance(grp, dict):
+                continue
+            gname = grp.get("group_name") or ""
+            gtotal = _fmt_num(grp.get("total_area_sqm"), " ㎡")
+            at_rows.append([f"**{gname}**" if gname else "", gtotal, "", ""])
+            for item in (grp.get("items") or []):
+                if not isinstance(item, dict):
+                    continue
+                at_rows.append([
+                    f"　{item.get('name') or ''}",
+                    _fmt_num(item.get("area_sqm"), " ㎡"), "",
+                    item.get("notes") or "",
+                ])
+                for sub in (item.get("sub_items") or []):
+                    if not isinstance(sub, dict):
+                        continue
+                    at_rows.append([
+                        f"　　{sub.get('name') or ''}",
+                        _fmt_num(sub.get("area_sqm"), " ㎡"), "",
+                        sub.get("notes") or "",
+                    ])
+        if at_rows:
+            lines.append(_md_table(_AREA_HDR, at_rows))
+            lines.append("")
+        if a["shared_areas"]:
+            lines.append("#### 공용·공동 면적\n")
+            sa_rows = [
+                [sa.get("name") or "", _fmt_num(sa.get("area_sqm"), " ㎡"), "", sa.get("notes") or ""]
+                for sa in a["shared_areas"] if isinstance(sa, dict)
+            ]
+            if sa_rows:
+                lines.append(_md_table(_AREA_HDR, sa_rows))
+                lines.append("")
+    elif a["rooms"]:
         lines.append("### 실별 면적 프로그램\n")
         room_rows = [
             [
@@ -399,7 +484,7 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
         lines.append(_md_table(["실명", "요구면적(㎡)", "개수", "위치/층", "비고"], room_rows))
         lines.append("")
 
-    if a["zones"]:
+    if not a["area_table"] and a["zones"]:
         lines.append("### 존 구성\n")
         zone_rows = [
             [z.get("name") or z.get("zone") or "", _fmt_num(z.get("area_sqm"), " ㎡")]
@@ -455,18 +540,98 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     if r["concept"]:
         lines.append(f"**설계 방향:** {r['concept']}\n")
 
+    # ── 배치·동선 지침 ────────────────────────────────────────────────────────
+    m = r["massing"]
+    _massing_items = []
+    if m["setback_m"] is not None:
+        _massing_items.append(f"이격거리: {m['setback_m']} m")
+    if m["height_strategy"]:
+        _massing_items.append(f"높이 전략: {m['height_strategy']}")
+    for _lst in (m["open_space"], m["parking"], m["pedestrian"],
+                 m["connection"], m["guidelines"]):
+        _massing_items.extend(_str_item(x) for x in _lst)
+    if _massing_items:
+        lines.append("### 배치·동선 지침\n")
+        for item in _massing_items:
+            lines.append(f"- {item}")
+        lines.append("")
+
+    # ── 입면·재료 지침 ────────────────────────────────────────────────────────
+    f = r["facade"]
+    _facade_items = []
+    if f["primary_materials"]:
+        lines.append("### 입면·재료 지침\n")
+        _fa_secs = [
+            ("지정 재료",     f["primary_materials"]),
+            ("금지 재료",     f["prohibited_materials"]),
+            ("색채 계획",     f["color"]),
+            ("입면 지침",     f["facade_guidelines"]),
+            ("조경·경관",     f["landscape"]),
+        ]
+        for lbl, lst in _fa_secs:
+            if lst:
+                lines.append(f"**{lbl}:**")
+                for item in lst:
+                    lines.append(f"- {_str_item(item)}")
+        lines.append("")
+    elif any(f[k] for k in ("prohibited_materials", "color", "facade_guidelines", "landscape")):
+        lines.append("### 입면·재료 지침\n")
+        for lbl, lst in [
+            ("금지 재료",   f["prohibited_materials"]),
+            ("색채 계획",   f["color"]),
+            ("입면 지침",   f["facade_guidelines"]),
+            ("조경·경관",   f["landscape"]),
+        ]:
+            for item in lst:
+                lines.append(f"- {_str_item(item)}")
+        lines.append("")
+
+    # ── 친환경·인증 요구사항 ─────────────────────────────────────────────────
+    sv = r["sustain"]
+    _has_sustain = bool(
+        sv["certifications"] or sv["renewable_pct"] is not None
+        or sv["energy_guidelines"] or sv["sustainability_reqs"]
+    )
+    if _has_sustain:
+        lines.append("### 친환경·인증 요구사항\n")
+        if sv["certifications"]:
+            cert_rows = [
+                [_str_item(c.get("name") if isinstance(c, dict) else c),
+                 _str_item(c.get("required_grade", "") if isinstance(c, dict) else "")]
+                for c in sv["certifications"]
+            ]
+            lines.append(_md_table(["인증명", "요구 등급"], cert_rows))
+            lines.append("")
+        if sv["renewable_pct"] is not None:
+            lines.append(f"**신재생에너지 최소 비율:** {sv['renewable_pct']}%\n")
+        for item in sv["energy_guidelines"] + sv["sustainability_reqs"]:
+            lines.append(f"- {_str_item(item)}")
+        lines.append("")
+
+    # ── 특수·보안 지침 ────────────────────────────────────────────────────────
+    sp = r["special"]
+    _special_items = []
+    for lst in (sp["security"], sp["accessibility"], sp["safety"], sp["special_tech"]):
+        _special_items.extend(_str_item(x) for x in lst)
+    if _special_items:
+        lines.append("### 특수·보안 지침\n")
+        for item in _special_items:
+            lines.append(f"- {item}")
+        lines.append("")
+
+    # ── 기타 설계 지침 (폴백 / 구 데이터) ───────────────────────────────────
     list_sections = [
         ("특수 요구사항", r["special_reqs"]),
-        ("설계 지침",     r["design_reqs"]),
+        ("기타 설계 지침", r["design_reqs"]),
         ("후퇴선 요건",   r["setbacks"]),
         ("재료 요건",     r["materials"]),
         ("친환경 요건",   r["sustainability"]),
         ("금지 사항",     r["prohibited"]),
         ("특별 지침",     r["special_guide"]),
     ]
-    for label, items in list_sections:
+    for lbl, items in list_sections:
         if items:
-            lines.append(f"### {label}\n")
+            lines.append(f"### {lbl}\n")
             for item in items:
                 lines.append(f"- {_str_item(item)}")
             lines.append("")
@@ -528,6 +693,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     _hdr_fill  = PatternFill("solid", fgColor="3D3D6B")   # 남색 헤더
     _sec_fill  = PatternFill("solid", fgColor="E4E4F0")   # 섹션 제목 배경
     _sub_fill  = PatternFill("solid", fgColor="F2F2FA")   # 소제목 배경
+    _grp_fill  = PatternFill("solid", fgColor="DCDCF0")   # area_table 그룹 행 배경
     _center    = Alignment(horizontal="center", vertical="center")
     _wrap_top  = Alignment(wrap_text=True, vertical="top")
 
@@ -714,7 +880,53 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             row = _write_kv(ws1, label, val, row)
     row += 1
 
-    if a["rooms"]:
+    _AT_COLS = ["구분", "기준면적(A)", "계획면적(B)", "비고"]
+
+    if a["area_table"]:
+        row = _write_subsection(ws1, "실별 면적 프로그램", row, span=4)
+        row = _write_header(ws1, _AT_COLS, row)
+        for grp in a["area_table"]:
+            if not isinstance(grp, dict):
+                continue
+            # 그룹 행: 굵게 + _grp_fill
+            c = ws1.cell(row=row, column=1, value=grp.get("group_name") or "")
+            c.font = _bold; c.fill = _grp_fill
+            c2 = ws1.cell(row=row, column=2, value=grp.get("total_area_sqm"))
+            c2.font = _bold; c2.fill = _grp_fill
+            for ci in (3, 4):
+                ws1.cell(row=row, column=ci).fill = _grp_fill
+            row += 1
+            for item in (grp.get("items") or []):
+                if not isinstance(item, dict):
+                    continue
+                c = ws1.cell(row=row, column=1, value=item.get("name") or "")
+                c.alignment = Alignment(indent=2, vertical="top")
+                ws1.cell(row=row, column=2, value=item.get("area_sqm"))
+                # column 3 = 계획면적(B) — 빈칸 (설계자 입력용)
+                ws1.cell(row=row, column=4, value=item.get("notes") or "")
+                row += 1
+                for sub in (item.get("sub_items") or []):
+                    if not isinstance(sub, dict):
+                        continue
+                    c = ws1.cell(row=row, column=1, value=sub.get("name") or "")
+                    c.alignment = Alignment(indent=4, vertical="top")
+                    ws1.cell(row=row, column=2, value=sub.get("area_sqm"))
+                    ws1.cell(row=row, column=4, value=sub.get("notes") or "")
+                    row += 1
+        row += 1
+        if a["shared_areas"]:
+            row = _write_subsection(ws1, "공용·공동 면적", row, span=4)
+            row = _write_header(ws1, _AT_COLS, row)
+            for sa in a["shared_areas"]:
+                if not isinstance(sa, dict):
+                    continue
+                ws1.cell(row=row, column=1, value=sa.get("name") or "")
+                ws1.cell(row=row, column=2, value=sa.get("area_sqm"))
+                ws1.cell(row=row, column=4, value=sa.get("notes") or "")
+                row += 1
+            row += 1
+    elif a["rooms"]:
+        # 구 경로 폴백
         row = _write_subsection(ws1, "실별 면적 프로그램", row, span=5)
         row = _write_header(ws1, ["실명", "요구면적(㎡)", "개수", "위치/층", "비고"], row)
         for rm in a["rooms"]:
@@ -731,7 +943,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             row += 1
         row += 1
 
-    if a["zones"]:
+    if not a["area_table"] and a["zones"]:
         row = _write_subsection(ws1, "존 구성", row, span=2)
         row = _write_header(ws1, ["존명", "면적(㎡)"], row)
         for z in a["zones"]:
@@ -812,31 +1024,93 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         ws3.cell(row=row, column=1, value="설계 방향").font = _bold
         c = ws3.cell(row=row, column=2, value=r["concept"])
         c.alignment = _wrap_top
-        ws3.merge_cells(
-            start_row=row, start_column=2, end_row=row, end_column=3,
-        )
+        ws3.merge_cells(start_row=row, start_column=2, end_row=row, end_column=3)
         row += 2
 
+    def _ws3_bullets(items: list, span: int = 3) -> None:
+        nonlocal row
+        for item in items:
+            c = ws3.cell(row=row, column=1, value=f"• {_str_item(item)}")
+            c.alignment = _wrap_top
+            if span > 1:
+                ws3.merge_cells(start_row=row, start_column=1,
+                                end_row=row, end_column=span)
+            row += 1
+
+    # ── 배치·동선 지침 ────────────────────────────────────────────────────────
+    m = r["massing"]
+    _m_all = []
+    if m["setback_m"] is not None:
+        _m_all.append(f"이격거리: {m['setback_m']} m")
+    if m["height_strategy"]:
+        _m_all.append(f"높이 전략: {m['height_strategy']}")
+    for _lst in (m["open_space"], m["parking"], m["pedestrian"],
+                 m["connection"], m["guidelines"]):
+        _m_all.extend(_str_item(x) for x in _lst)
+    if _m_all:
+        row = _write_subsection(ws3, "배치·동선 지침", row, span=3)
+        _ws3_bullets(_m_all)
+        row += 1
+
+    # ── 입면·재료 지침 ────────────────────────────────────────────────────────
+    f = r["facade"]
+    _f_all = [
+        *f["primary_materials"], *f["prohibited_materials"],
+        *f["color"], *f["facade_guidelines"], *f["landscape"],
+    ]
+    if _f_all:
+        row = _write_subsection(ws3, "입면·재료 지침", row, span=3)
+        _ws3_bullets(_f_all)
+        row += 1
+
+    # ── 친환경·인증 요구사항 ─────────────────────────────────────────────────
+    sv = r["sustain"]
+    _has_sv = bool(
+        sv["certifications"] or sv["renewable_pct"] is not None
+        or sv["energy_guidelines"] or sv["sustainability_reqs"]
+    )
+    if _has_sv:
+        row = _write_subsection(ws3, "친환경·인증 요구사항", row, span=3)
+        if sv["certifications"]:
+            row = _write_header(ws3, ["인증명", "요구 등급", ""], row)
+            for cert in sv["certifications"]:
+                if isinstance(cert, dict):
+                    ws3.cell(row=row, column=1, value=cert.get("name") or "")
+                    ws3.cell(row=row, column=2, value=cert.get("required_grade") or "")
+                else:
+                    ws3.cell(row=row, column=1, value=_str_item(cert))
+                row += 1
+        if sv["renewable_pct"] is not None:
+            row = _write_kv(ws3, "신재생에너지 최소 비율 (%)", sv["renewable_pct"], row)
+        _ws3_bullets(sv["energy_guidelines"] + sv["sustainability_reqs"])
+        row += 1
+
+    # ── 특수·보안 지침 ────────────────────────────────────────────────────────
+    sp = r["special"]
+    _sp_all = [
+        *sp["security"], *sp["accessibility"],
+        *sp["safety"], *sp["special_tech"],
+    ]
+    if _sp_all:
+        row = _write_subsection(ws3, "특수·보안 지침", row, span=3)
+        _ws3_bullets(_sp_all)
+        row += 1
+
+    # ── 기타 설계 지침 (폴백 / 구 데이터) ───────────────────────────────────
     list_sections = [
         ("특수 요구사항", r["special_reqs"]),
-        ("설계 지침",     r["design_reqs"]),
+        ("기타 설계 지침", r["design_reqs"]),
         ("후퇴선 요건",   r["setbacks"]),
         ("재료 요건",     r["materials"]),
         ("친환경 요건",   r["sustainability"]),
         ("금지 사항",     r["prohibited"]),
         ("특별 지침",     r["special_guide"]),
     ]
-    for label, items in list_sections:
+    for lbl, items in list_sections:
         if not items:
             continue
-        row = _write_subsection(ws3, label, row, span=3)
-        for item in items:
-            c = ws3.cell(row=row, column=1, value=f"• {_str_item(item)}")
-            c.alignment = _wrap_top
-            ws3.merge_cells(
-                start_row=row, start_column=1, end_row=row, end_column=3,
-            )
-            row += 1
+        row = _write_subsection(ws3, lbl, row, span=3)
+        _ws3_bullets(items)
         row += 1
 
     _auto_width(ws3)

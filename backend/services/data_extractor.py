@@ -415,25 +415,120 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '   "public_open_space_sqm":null,\n'
             '   "public_open_space_notes":""}\n'
             '],\n'
-            '"rooms":[{"name":"","required_area_sqm":null,"required_count":1,"floor":"","notes":""}],\n'
-            '"zones":[{"name":"","area_sqm":null}]\n'
+            '"area_table":[\n'
+            '  {"group_name":"","site_id":null,"total_area_sqm":null,\n'
+            '   "items":[\n'
+            '     {"name":"","area_sqm":null,"notes":"",\n'
+            '      "sub_items":[{"name":"","area_sqm":null,"notes":""}]}\n'
+            '   ]}\n'
+            '],\n'
+            '"shared_areas":[{"name":"","area_sqm":null,"notes":""}]\n'
             '}\n\n'
             'FIELD NOTES:\n'
-            '- sites[].zoning: list of all 지역지구 strings for this site (e.g. ["도시지역","준공업지역","공원"])\n'
+            '- sites[].zoning: list of all 지역지구 strings (e.g. ["도시지역","준공업지역"])\n'
             '- sites[].construction_type: 건축구분 (e.g. "해체 및 신축")\n'
             '- sites[].building_use: 건축용도 (e.g. "공공업무시설")\n'
-            '- sites[].facilities: list of 도입시설/시설 strings for this site\n'
-            '- sites[].public_open_space_sqm: minimum required 공개공지 area in ㎡ (null if not stated)\n'
-            '- sites[].public_open_space_notes: any additional 공개공지 conditions\n'
-            '- estimated_construction_cost: full text of 예정 공사비 (include 억/만원 unit)\n'
-            '- estimated_design_fee: full text of 예정 설계비\n'
-            '- design_period: 예정 기본 및 실시설계 기간 text'
+            '- sites[].facilities: list of 도입시설 strings for this site\n'
+            '- sites[].public_open_space_sqm: 공개공지 최소 면적 ㎡ (null if not stated)\n'
+            '- sites[].public_open_space_notes: 공개공지 추가 조건\n'
+            '- area_table[]: 실별 면적 프로그램 계층 구조\n'
+            '  • group_name: 최상위 구분 (구청사/보건소/공용 등). 단순형이면 시설명.\n'
+            '  • site_id: 해당 부지 ID ("부지1" 등). 단일 부지이면 null.\n'
+            '  • total_area_sqm: 그룹 소계 면적 (표에 합계 행 있으면 기입, 없으면 null)\n'
+            '  • items[]: 중간 구분 또는 실 목록. 없으면 빈 배열 [].\n'
+            '  • items[].sub_items[]: 세부 공간. 없으면 반드시 빈 배열 [] (null 금지)\n'
+            '  DEPTH RULES (표 구조를 보고 깊이 스스로 판단):\n'
+            '    단순형 (시설명→면적): group_name=시설명, items=[] — 또는\n'
+            '                          group_name="", items=[{name=시설명, sub_items=[]}]\n'
+            '    2단형 (영역→실→면적): group_name=영역명, items=[실목록], sub_items=[]\n'
+            '    3단형 (구분→부서→세부): group_name=구분명, items=[부서별], sub_items=[세부공간]\n'
+            '- shared_areas[]: 공용·설비·주차 등 여러 시설이 공유하는 면적\n'
+            '- estimated_construction_cost: 예정 공사비 (억/만원 단위 포함)\n'
+            '- estimated_design_fee: 예정 설계비 텍스트\n'
+            '- design_period: 예정 설계 기간 텍스트\n'
+            '- Do NOT invent values. null/[] if not visible on page.'
+        ),
+    },
+    "BRIEF_DESIGN_MASSING": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT site planning, massing and circulation guidelines from this competition brief. '
+            'Respond JSON ONLY.\n'
+            '{"building_setback_m":null,'
+            '"open_space_requirements":[],'
+            '"parking_requirements":[],'
+            '"pedestrian_requirements":[],'
+            '"connection_requirements":[],'
+            '"height_strategy":"",'
+            '"massing_guidelines":[]}'
+            '\n\nFIELD NOTES:\n'
+            '- building_setback_m: numeric setback distance from boundary (meters), null if not specified\n'
+            '- open_space_requirements[]: 공개공지·외부공간 조성 요구사항 문자열 목록\n'
+            '- parking_requirements[]: 주차 동선·진입 관련 지침 문자열 목록\n'
+            '- pedestrian_requirements[]: 보행 환경·보행로 관련 지침\n'
+            '- connection_requirements[]: 인접 건물·지하철·공공공간 연결 요건\n'
+            '- height_strategy: 높이 계획 방향 (단일 문자열, 수치 제한이 아닌 매싱 전략)\n'
+            '- massing_guidelines[]: 그 외 배치·매싱 관련 지침 문자열 목록\n'
+            '- Do NOT invent values. null/[] if not visible on page.'
+        ),
+    },
+    "BRIEF_DESIGN_FACADE": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT facade, materials and landscape guidelines from this competition brief. '
+            'Respond JSON ONLY.\n'
+            '{"primary_materials":[],'
+            '"prohibited_materials":[],'
+            '"color_requirements":[],'
+            '"facade_guidelines":[],'
+            '"landscape_requirements":[]}'
+            '\n\nFIELD NOTES:\n'
+            '- primary_materials[]: 지정 또는 권장 외장 마감재 목록\n'
+            '- prohibited_materials[]: 사용 금지 재료 목록\n'
+            '- color_requirements[]: 색채 계획 관련 지침 문자열 목록\n'
+            '- facade_guidelines[]: 입면 디자인·파사드 구성 관련 지침\n'
+            '- landscape_requirements[]: 조경·경관 관련 요구사항\n'
+            '- Do NOT invent values. null/[] if not visible on page.'
+        ),
+    },
+    "BRIEF_DESIGN_SUSTAIN": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT sustainability, energy and certification requirements from this competition brief. '
+            'Respond JSON ONLY.\n'
+            '{"required_certifications":[{"name":"","required_grade":""}],'
+            '"renewable_energy_min_pct":null,'
+            '"energy_guidelines":[],'
+            '"sustainability_requirements":[]}'
+            '\n\nFIELD NOTES:\n'
+            '- required_certifications[]: 필수 인증 목록. name=인증명(G-SEED/ZEB/LEED/BF인증 등), required_grade=요구 등급 문자열\n'
+            '- renewable_energy_min_pct: 신재생에너지 최소 의무 비율(%), null if not specified\n'
+            '- energy_guidelines[]: 에너지 절약·BEMS 등 에너지 관련 지침 문자열 목록\n'
+            '- sustainability_requirements[]: 그 외 친환경·지속가능성 요구사항\n'
+            '- Do NOT invent values. null/[] if not visible on page.'
+        ),
+    },
+    "BRIEF_DESIGN_SPECIAL": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT special, security and safety requirements from this competition brief. '
+            'Respond JSON ONLY.\n'
+            '{"security_requirements":[],'
+            '"accessibility_requirements":[],'
+            '"safety_requirements":[],'
+            '"special_technical_requirements":[]}'
+            '\n\nFIELD NOTES:\n'
+            '- security_requirements[]: 보안·CPTED·범죄예방 관련 요구사항\n'
+            '- accessibility_requirements[]: 장애인 편의·유니버설디자인·BF 관련 요구사항\n'
+            '- safety_requirements[]: 소방·내진·방재·철도보호구역 관련 안전 요구사항\n'
+            '- special_technical_requirements[]: 그 외 특수 기술 요건\n'
+            '- Do NOT invent values. null/[] if not visible on page.'
         ),
     },
     "BRIEF_DESIGN_GUIDE": {
         "priority": 1,
         "instruction": (
-            'EXTRACT design guidelines and requirements from this competition brief. '
+            'EXTRACT general design guidelines and requirements from this competition brief. '
             'Respond JSON ONLY.\n'
             '{"design_requirements":[],"height_limit_m":null,'
             '"setback_requirements":[],"materials_required":[],'
@@ -478,11 +573,15 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '\n\nFIELD NOTES:\n'
             '- total_points: integer sum of all top-level 배점/비중 values (typically 100)\n'
             '- evaluation_categories[].name: 구분 or 평가항목 label\n'
-            '- evaluation_categories[].points: 해당 구분의 배점 or 비중 (integer)\n'
+            '- evaluation_categories[].points: 배점 or 비중 값 — integer 필수. '
+            '표기 변환 규칙: "30점" → 30 / "30%" → 30 / "○ (30)" → 30 / '
+            '"0.30" → 30 (비율이면 ×100) / 셀 병합으로 빈칸이면 위 행 값 복사. '
+            '반드시 숫자로 추출 — null 반환 금지. 숫자가 보이지 않으면 0.\n'
             '- evaluation_categories[].shared_with: list of sibling category names '
             'when the cell is merged across multiple rows (empty list [] if not merged)\n'
             '- evaluation_categories[].sub_items: list of detailed criteria strings '
-            'nested under this category (항목 or 세부 내용); empty list [] if none'
+            'nested under this category (항목 or 세부 내용); empty list [] if none\n'
+            '- 컬럼명이 비중/배점/점수가 아니어도 수치 컬럼이 100점 체계면 추출할 것'
         ),
     },
     "BRIEF_SUBMISSION": {
@@ -952,14 +1051,20 @@ def _merge_brief_project_info_pages(items: list[dict]) -> dict:
         merged[key] = seen
 
     # sites[]: site_id로 매칭, 필드별 first-non-null
+    import re as _re
+    def _norm_sid(s: str) -> str:
+        """'부지1(구청·구의회)' → '부지1' : 괄호 내 설명 제거 후 공백 정리."""
+        return _re.sub(r'\s*\([^)]*\)\s*$', '', (s or "").strip()).strip()
+
     sites_by_id: dict[str, dict] = {}
     sites_order: list[str] = []
     for item in items:
         for site in (item.get("sites") or []):
-            sid = site.get("site_id") or "단일부지"
+            raw_sid = site.get("site_id") or "단일부지"
+            sid = _norm_sid(raw_sid)
             if sid not in sites_by_id:
                 sites_by_id[sid] = {f: None for f in _SITE_FIELDS}
-                sites_by_id[sid]["site_id"] = sid
+                sites_by_id[sid]["site_id"] = sid  # 정규화된 ID 저장
                 sites_order.append(sid)
             acc = sites_by_id[sid]
             for field in _SITE_FIELDS:
