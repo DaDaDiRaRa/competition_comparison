@@ -573,15 +573,16 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '\n\nFIELD NOTES:\n'
             '- total_points: integer sum of all top-level 배점/비중 values (typically 100)\n'
             '- evaluation_categories[].name: 구분 or 평가항목 label\n'
-            '- evaluation_categories[].points: 배점 or 비중 값 — integer 필수. '
+            '- evaluation_categories[].points: 배점 or 비중 값 — integer. '
             '표기 변환 규칙: "30점" → 30 / "30%" → 30 / "○ (30)" → 30 / '
-            '"0.30" → 30 (비율이면 ×100) / 셀 병합으로 빈칸이면 위 행 값 복사. '
-            '반드시 숫자로 추출 — null 반환 금지. 숫자가 보이지 않으면 0.\n'
+            '"0.30" → 30 (비율이면 ×100). '
+            '셀이 비어 있으면 병합 셀 여부 확인 후 위 행(동일 열 인접 셀) 값 복사. '
+            '실제 수치가 표에 보이지 않을 때만 null (0은 실제 0점일 때만 사용).\n'
             '- evaluation_categories[].shared_with: list of sibling category names '
             'when the cell is merged across multiple rows (empty list [] if not merged)\n'
             '- evaluation_categories[].sub_items: list of detailed criteria strings '
             'nested under this category (항목 or 세부 내용); empty list [] if none\n'
-            '- 컬럼명이 비중/배점/점수가 아니어도 수치 컬럼이 100점 체계면 추출할 것'
+            '- 컬럼명이 비중/배점/점수가 아니어도 수치 컬럼이 합계 ≈ 100이면 배점으로 추출할 것'
         ),
     },
     "BRIEF_SUBMISSION": {
@@ -1082,6 +1083,13 @@ def _merge_brief_project_info_pages(items: list[dict]) -> dict:
                     acc["facilities"] = existing
                 elif v is not None and acc.get(field) is None:
                     acc[field] = v
+
+    # 부지N 번호 키가 존재하면 fallback/설명문 orphan 제거
+    import re as _re2
+    numbered = [s for s in sites_order if _re2.match(r'부지\d+', s)]
+    if len(numbered) >= 2:
+        sites_order = numbered
+        sites_by_id = {s: sites_by_id[s] for s in numbered}
 
     merged["sites"] = [sites_by_id[sid] for sid in sites_order]
     merged["_page"] = items[0].get("_page")  # 첫 페이지 번호 보존
