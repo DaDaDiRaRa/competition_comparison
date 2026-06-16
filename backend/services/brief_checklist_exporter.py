@@ -40,6 +40,22 @@ def _first(data: dict, key: str) -> dict:
     return v if isinstance(v, dict) else {}
 
 
+def _collect(data: dict, key: str, *list_keys: str) -> dict[str, list]:
+    """다중 페이지 타입에서 list_key별 값을 모든 페이지에서 집계.
+
+    Returns {list_key: [aggregated items]} — 한 페이지뿐이어도 동일하게 동작.
+    """
+    raw = data.get(key) or []
+    if isinstance(raw, dict):
+        raw = [raw]
+    result: dict[str, list] = {lk: [] for lk in list_keys}
+    for page in raw:
+        if isinstance(page, dict):
+            for lk in list_keys:
+                result[lk].extend(page.get(lk) or [])
+    return result
+
+
 def _as_list(data: dict, key: str) -> list:
     """dict에서 키를 꺼내 항상 list로 반환. None/빈값이면 []."""
     v = data.get(key) or []
@@ -108,8 +124,20 @@ def _extract_sections(brief_data: dict) -> dict:
     dm    = _first(brief_data, "brief_design_massing")
     dfa   = _first(brief_data, "brief_design_facade")
     ds    = _first(brief_data, "brief_design_sustain")
-    dsp   = _first(brief_data, "brief_design_special")
     bpi   = _first(brief_data, "brief_project_info")
+    # BRIEF_DESIGN_* 다중 페이지 집계 — _first는 스칼라 전용, 리스트는 _collect 사용
+    _dsp = _collect(brief_data, "brief_design_special",
+                    "security_requirements", "accessibility_requirements",
+                    "safety_requirements", "special_technical_requirements")
+    _dm  = _collect(brief_data, "brief_design_massing",
+                    "open_space_requirements", "parking_requirements",
+                    "pedestrian_requirements", "connection_requirements",
+                    "massing_guidelines")
+    _dfa = _collect(brief_data, "brief_design_facade",
+                    "primary_materials", "prohibited_materials",
+                    "color_requirements", "facade_guidelines", "landscape_requirements")
+    _ds  = _collect(brief_data, "brief_design_sustain",
+                    "required_certifications", "energy_guidelines", "sustainability_requirements")
     quant = brief_data.get("_quantitative") or {}
     reqs  = brief_data.get("_requirements") or {}
 
@@ -164,6 +192,11 @@ def _extract_sections(brief_data: dict) -> dict:
         if isinstance(_bpp, dict):
             area_table.extend(_bpp.get("area_table") or [])
             shared_areas.extend(_bpp.get("shared_areas") or [])
+
+    # 개략공사비 내역서 등 공사비 그룹 제거 (면적표와 무관)
+    _COST_KW = {"공사비", "내역서", "공종", "원가", "견적"}
+    area_table = [g for g in area_table
+                  if not any(kw in (g.get("group_name") or "") for kw in _COST_KW)]
 
     # 구 경로 폴백: rooms / zones (area_table 없는 기존 데이터 호환)
     rooms = _as_list(bp, "rooms") or _as_list(at, "room_program")
@@ -220,31 +253,31 @@ def _extract_sections(brief_data: dict) -> dict:
             # 새 typed 설계 지침
             "massing": {
                 "setback_m":    dm.get("building_setback_m"),
-                "open_space":   _as_list(dm, "open_space_requirements"),
-                "parking":      _as_list(dm, "parking_requirements"),
-                "pedestrian":   _as_list(dm, "pedestrian_requirements"),
-                "connection":   _as_list(dm, "connection_requirements"),
+                "open_space":   _dm["open_space_requirements"],
+                "parking":      _dm["parking_requirements"],
+                "pedestrian":   _dm["pedestrian_requirements"],
+                "connection":   _dm["connection_requirements"],
                 "height_strategy": dm.get("height_strategy") or "",
-                "guidelines":   _as_list(dm, "massing_guidelines"),
+                "guidelines":   _dm["massing_guidelines"],
             },
             "facade": {
-                "primary_materials":   _as_list(dfa, "primary_materials"),
-                "prohibited_materials": _as_list(dfa, "prohibited_materials"),
-                "color":               _as_list(dfa, "color_requirements"),
-                "facade_guidelines":   _as_list(dfa, "facade_guidelines"),
-                "landscape":           _as_list(dfa, "landscape_requirements"),
+                "primary_materials":   _dfa["primary_materials"],
+                "prohibited_materials": _dfa["prohibited_materials"],
+                "color":               _dfa["color_requirements"],
+                "facade_guidelines":   _dfa["facade_guidelines"],
+                "landscape":           _dfa["landscape_requirements"],
             },
             "sustain": {
-                "certifications":    _as_list(ds, "required_certifications"),
+                "certifications":    _ds["required_certifications"],
                 "renewable_pct":     ds.get("renewable_energy_min_pct"),
-                "energy_guidelines": _as_list(ds, "energy_guidelines"),
-                "sustainability_reqs": _as_list(ds, "sustainability_requirements"),
+                "energy_guidelines": _ds["energy_guidelines"],
+                "sustainability_reqs": _ds["sustainability_requirements"],
             },
             "special": {
-                "security":      _as_list(dsp, "security_requirements"),
-                "accessibility": _as_list(dsp, "accessibility_requirements"),
-                "safety":        _as_list(dsp, "safety_requirements"),
-                "special_tech":  _as_list(dsp, "special_technical_requirements"),
+                "security":      _dsp["security_requirements"],
+                "accessibility": _dsp["accessibility_requirements"],
+                "safety":        _dsp["safety_requirements"],
+                "special_tech":  _dsp["special_technical_requirements"],
             },
             # 기타/폴백 (구 BRIEF_DESIGN_GUIDE 하위호환)
             "design_reqs": design_reqs, "setbacks": setbacks,

@@ -47,6 +47,8 @@ def classify_brief(pdf_path: str, label: str):
 
     bpi_pages = [item["page"] for item in page_map if item.get("primary_type") == "BRIEF_PROJECT_INFO"]
     print(f"  BRIEF_PROJECT_INFO pages: {bpi_pages if bpi_pages else '(none)'}")
+    be_pages = [item["page"] for item in page_map if item.get("primary_type") == "BRIEF_EVALUATION"]
+    print(f"  BRIEF_EVALUATION pages: {be_pages if be_pages else '(none)'}")
 
     # Print full distribution
     from collections import Counter
@@ -155,24 +157,28 @@ def extract_brief(pdf_path: str, page_map: list, label: str):
         print("\n  [KI-2] BRIEF_PROJECT_INFO: (not extracted)")
 
     # ── KI-1: BRIEF_EVALUATION 배점 합계 체크 ────────────────────────────────
-    be = _first(brief_data, "brief_evaluation")
-    if be:
+    be_raw = brief_data.get("brief_evaluation") or []
+    if isinstance(be_raw, dict):
+        be_raw = [be_raw]
+    print(f"\n  [KI-1] BRIEF_EVALUATION: {len(be_raw)}페이지 추출")
+    for pi, be in enumerate(be_raw):
+        if not isinstance(be, dict):
+            continue
         total_pts = be.get("total_points")
         cats = be.get("evaluation_categories") or []
         computed = sum(
             c.get("points") or 0 for c in cats
             if isinstance(c, dict) and isinstance(c.get("points"), (int, float))
         )
-        print(f"\n  [KI-1] BRIEF_EVALUATION:")
-        print(f"    total_points(LLM): {total_pts}  computed_sum: {computed}  "
-              f"{'OK' if 95 <= computed <= 105 else '<-- 이상 (중복 집계 의심)'}")
-        for c in cats[:5]:
+        print(f"    [p.{be.get('_page','?')}] total_points(LLM)={total_pts}  computed_sum={computed}  "
+              f"{'OK' if 95 <= computed <= 105 else 'FAIL'}")
+        for c in (cats[:5]):
             if isinstance(c, dict):
-                print(f"    {c.get('name')}: {c.get('points')}점")
+                print(f"      {c.get('name')}: {c.get('points')}점")
         if len(cats) > 5:
-            print(f"    ... ({len(cats)-5} more)")
-    else:
-        print("\n  [KI-1] BRIEF_EVALUATION: (not extracted)")
+            print(f"      ... ({len(cats)-5} more)")
+    if not be_raw:
+        print("    (not extracted)")
 
     # ── P2-3-3/4: BRIEF_DESIGN_* 추출 데이터 체크 ───────────────────────────
     print(f"\n  [P2-3] BRIEF_DESIGN_* 추출 결과:")
@@ -340,7 +346,23 @@ def main():
         print(f"  {'✓' if ok else '✗'} {t}  meta={meta}")
     assert all(t in BRIEF_PAGE_TYPES for t in _NEW_TYPES_CHECK), "일부 타입 미등록!"
 
-    # Check API key
+    # --from-json PATH: 저장된 brief_data JSON으로 xlsx/md만 재생성 (API 비용 없음)
+    # API 키 확인 전에 먼저 처리 (키 없이도 동작)
+    if "--from-json" in sys.argv:
+        idx = sys.argv.index("--from-json")
+        json_path = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else None
+        if json_path and pathlib.Path(json_path).exists():
+            print(f"\n[FROM-JSON] Loading brief_data from: {json_path}")
+            brief_data = json.loads(pathlib.Path(json_path).read_text(encoding="utf-8"))
+            label = pathlib.Path(json_path).stem.replace("p03_", "").replace("_brief", "")
+            export_xlsx(brief_data, label)
+            export_md(brief_data, label)
+            print("\n" + "="*70); print("DONE (xlsx/md only)"); print("="*70)
+            return
+        else:
+            print(f"[ERROR] --from-json requires a valid JSON path"); return
+
+    # Check API key (LLM 필요 경로만)
     api_key = settings.api_key
     if not api_key:
         print("\n!! ANTHROPIC_API_KEY not set. Classification/extraction steps require LLM.")
@@ -349,7 +371,7 @@ def main():
         _test_xlsx_synthetic()
         return
 
-    for label, pdf_path in PDFS.items():
+    for label, pdf_path in {k: v for k, v in PDFS.items() if k == "yeongdp"}.items():
         if not pathlib.Path(pdf_path).exists():
             print(f"\n[SKIP] {label} — file not found: {pdf_path}")
             continue
@@ -358,7 +380,17 @@ def main():
         if page_map is None:
             continue
 
+        if "--classify-only" in sys.argv:
+            continue  # 분류만 확인, 추출 스킵
+
         brief_data = extract_brief(pdf_path, page_map, label)
+
+        # 추출 결과 JSON 저장 — 다음 실행 시 --from-json 으로 재사용 가능
+        json_save = pathlib.Path(tempfile.gettempdir()) / f"p03_{label}_brief.json"
+        json_save.write_text(json.dumps(brief_data, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"\n  [SAVE] brief_data → {json_save}")
+        print(f"         (다음 실행 시: python tools/p0_3_validate.py --from-json {json_save})")
+
         export_xlsx(brief_data, label)
         export_md(brief_data, label)
 

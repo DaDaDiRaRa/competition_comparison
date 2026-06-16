@@ -199,9 +199,11 @@ RULES:
 - Confidence: 0.0-1.0
 - PRIORITY RULE 1 (area table): If a page contains BOTH design guidelines text AND a room-by-room area table \
 (실별 면적표 — rows are room names, columns are area/㎡), classify as BRIEF_PROGRAM — the numeric table takes priority
-- PRIORITY RULE 2 (scoring table): If a page contains a table with columns for 비중(weight), 배점(score), \
-or 점수(points) — especially a table where column values sum to ~100 — classify as BRIEF_EVALUATION even if \
-the page also contains general design guidance text. The scoring table OVERRIDES BRIEF_DESIGN_GUIDE.
+- PRIORITY RULE 2 (scoring table): If a page contains an actual 배점표 — a TABLE whose ROWS are evaluation \
+categories (구분/항목) and COLUMNS include 비중/배점/점수 with numeric values summing to ~100 — classify as \
+BRIEF_EVALUATION. The scoring table OVERRIDES BRIEF_DESIGN_GUIDE. \
+Do NOT apply this rule for: schedule tables, jury roster tables, submission checklist tables, or pages that \
+merely mention "배점" in prose without an actual numeric scoring table.
 - PRIORITY RULE 3 (project scale table): If a page has a table where ROWS are named 대지면적, 건폐율, 용적률, \
 높이(or 건축규모/연면적), and COLUMNS are sites or facility types, classify as BRIEF_PROJECT_INFO — this OVERRIDES \
 BRIEF_PROGRAM even though numbers are present. KEY: the ROW names distinguish this from BRIEF_PROGRAM \
@@ -213,31 +215,42 @@ BRIEF_PAGE_TYPES:
 - BRIEF_SITE: 대상지 현황. Site location map, aerial photo, cadastral map, site area, surrounding context. No design requirements — descriptive only.
 - BRIEF_PROGRAM: 면적 프로그램. Room-by-room area table (실별 면적표 — ROW names are space/room names like 회의실, 로비, 주차장), floor-by-floor use table, required parking count, gross/net area requirements. NOTE: if the table ROWS are metric names (대지면적, 건폐율, 용적률, 높이) rather than room names, use BRIEF_PROJECT_INFO instead.
 - BRIEF_DESIGN_MASSING: 배치·매싱·동선 지침. Site layout, setbacks, open space, pedestrian/vehicle circulation, parking access, building connections. 신호어: 배치계획, 이격거리, 세트백, 공개공지, 동선, 보행환경, 연결통로, 주차동선.
-- BRIEF_DESIGN_FACADE: 입면·재료·경관 지침. Facade design, cladding materials, color scheme, skyline, landscape. 신호어: 입면, 외장재, 마감재, 파사드, 색상, 색채, 경관, 외관디자인.
-- BRIEF_DESIGN_SUSTAIN: 친환경·에너지·인증 지침. Green building certifications (G-SEED, LEED, ZEB, BF인증), renewable energy ratio, BEMS, energy performance grade. 신호어: 친환경, 에너지절약, ZEB, G-SEED, 신재생에너지, 인증등급, BEMS, 녹색건축.
+- BRIEF_DESIGN_FACADE: 입면·재료·경관 지침. Facade design, exterior cladding materials/finishes, color/color-scheme guidelines, skyline, landscape. \
+신호어(하나라도 있으면 BRIEF_DESIGN_GUIDE보다 우선): 입면, 외장재, 마감재, 외벽, 파사드, 색상, 색채, 경관, 외관디자인, 커튼월, 금속판넬, \
+유리(외벽), 알루미늄, 목재, 석재, 루버, 차양, 외피, 창호비율, 조경기준, 주재료, 부재료, 금지재료. \
+강화조건: 사용 가능/불가 재료 목록, 색채 기준, 외장 마감 규정 중 하나라도 있으면 반드시 BRIEF_DESIGN_FACADE (BRIEF_DESIGN_GUIDE 금지).
+- BRIEF_DESIGN_SUSTAIN: 친환경·에너지·인증 지침. Green building certifications, energy requirements, renewable energy mandates. \
+신호어(하나라도 있으면 최우선 선택): G-SEED, ZEB, LEED, BEMS, BF인증, 녹색건축인증, 에너지효율등급, 에너지절약, 에너지성능, 제로에너지, \
+신재생에너지, 의무비율, 태양광, 지열, 연료전지, 친환경, 녹색건축, 인증등급, 탄소중립, 탄소저감, 에너지등급. \
+강화조건: 특정 인증(G-SEED/ZEB/LEED/BF 등) 취득 의무, 신재생에너지 비율 수치, 에너지 성능 등급 요건 중 하나라도 있으면 \
+다른 내용이 섞여도 반드시 BRIEF_DESIGN_SUSTAIN (BRIEF_DESIGN_GUIDE 금지).
 - BRIEF_DESIGN_SPECIAL: 특수·보안·안전 지침. Crime prevention (CPTED), fire safety, seismic design, universal design, disability access, railway protection zones. 신호어: 방재, CPTED, 범죄예방, 장애인, 유니버설디자인, 소방, 내진, 철도보호.
-- BRIEF_DESIGN_GUIDE: 기타 설계 지침 (폴백). General design concept/direction, prohibited items, mixed requirements not covered by the four specific design types above. Use ONLY when no single theme dominates.
+- BRIEF_DESIGN_GUIDE: 기타 설계 지침 (폴백). ONLY use when NONE of the four specific types above apply. If facade/material/color signals OR sustainability/certification signals are present, choose the specific type instead.
 - BRIEF_TECHNICAL: 기술 기준. Structural requirements, MEP specifications, fire safety, seismic standards, smart building criteria.
 - BRIEF_REGULATIONS: 법규 기준. Zoning district, building coverage ratio (건폐율), floor area ratio (용적률), height restrictions, setback rules — legal codes and ordinances.
-- BRIEF_EVALUATION: 심사 기준. Scoring table (배점표) or weighting table with columns such as 구분/항목/비중/배점/점수. \
-Jury composition, assessment criteria. KEY SIGNALS → classify as BRIEF_EVALUATION if ANY of these are true: \
-(a) table has a 비중 or 배점 column, (b) table column values sum to approximately 100, \
-(c) rows list evaluation categories with numeric weights (e.g. "설계 개념 20점"). \
-Do NOT require all signals — any one is sufficient.
+- BRIEF_EVALUATION: 심사 기준 배점표. REQUIRED: an actual TABLE whose ROWS are evaluation categories (구분/항목) \
+AND COLUMNS include 비중/배점/점수 with numeric values that together sum to approximately 100. \
+NOT BRIEF_EVALUATION if: (a) only prose description of evaluation process with no actual table, \
+(b) page is an evaluation SCHEDULE (심사 일정/일자) → BRIEF_ADMIN, \
+(c) page lists 제출 서류 with checkboxes → BRIEF_SUBMISSION, \
+(d) jury composition (심사위원 명단/구성) without a scoring table → BRIEF_ADMIN, \
+(e) table exists but rows are dates/documents/persons, not evaluation categories.
 - BRIEF_SUBMISSION: 제출 기준. Required drawing list, file format specifications (DWG/PDF/BIM), submission method, document scale requirements.
-- BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms. No design content — skip extraction.
+- BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms, jury roster. No design content — skip extraction.
 
 BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE family — decision guide:
-  • Table with 비중/배점/점수 column → BRIEF_EVALUATION (even if design text also present)
+  • Actual 배점표 table (rows=평가항목, cols=비중/배점, values sum ~100) → BRIEF_EVALUATION
+  • Prose mentions "배점" or "심사기준" but NO numeric scoring table on the page → BRIEF_ADMIN or BRIEF_DESIGN_GUIDE
   • Bullet points (•) or paragraphs describing design requirements, NO scoring table → one of the 5 BRIEF_DESIGN_* types below
   • Table present but columns are area/floor/quantity (not scoring weights) → BRIEF_PROGRAM (not BRIEF_EVALUATION)
+  • Table present but rows are dates/persons/documents → BRIEF_ADMIN or BRIEF_SUBMISSION (not BRIEF_EVALUATION)
 
-BRIEF_DESIGN sub-types — choose after ruling out BRIEF_EVALUATION and BRIEF_PROGRAM:
-  • Certification code/grade (ZEB, G-SEED, LEED, BEMS, 에너지등급) present → BRIEF_DESIGN_SUSTAIN (highest priority)
-  • Security/safety signals dominant (CPTED, 방재, 소방, 내진, 장애인편의) → BRIEF_DESIGN_SPECIAL
-  • Facade/materials/color/landscape dominant → BRIEF_DESIGN_FACADE
-  • Site layout/setback/open-space/circulation/parking dominant → BRIEF_DESIGN_MASSING
-  • Mixed or no single dominant theme → BRIEF_DESIGN_GUIDE (fallback)
+BRIEF_DESIGN sub-types — priority order (check top-down, pick FIRST that matches):
+  1. BRIEF_DESIGN_SUSTAIN: ANY of {G-SEED, ZEB, LEED, BF인증, 에너지효율등급, 신재생에너지, 태양광, 친환경인증, 에너지등급} → ALWAYS BRIEF_DESIGN_SUSTAIN, even if other content mixed in.
+  2. BRIEF_DESIGN_SPECIAL: CPTED, 방재, 소방, 내진, 장애인, 보안 dominant.
+  3. BRIEF_DESIGN_FACADE: ANY of {외장재, 마감재, 색채계획, 파사드, 커튼월, 금속판넬, 조경기준, 루버, 금지재료} → BRIEF_DESIGN_FACADE preferred over GUIDE.
+  4. BRIEF_DESIGN_MASSING: 배치, 이격거리, 동선, 공개공지, 주차동선 dominant.
+  5. BRIEF_DESIGN_GUIDE: FALLBACK ONLY — use only when 1-4 signals are ALL absent. Do NOT default to GUIDE if any specific signal exists.
 
 BRIEF_PROJECT_INFO vs BRIEF_OVERVIEW vs BRIEF_PROGRAM — decision guide:
   • Table ROWS = 대지면적, 건폐율, 용적률, 높이, 건축규모/연면적 (metric names), COLUMNS = sites or facility types → BRIEF_PROJECT_INFO (PRIORITY RULE 3 applies — overrides BRIEF_PROGRAM)
@@ -267,6 +280,10 @@ def _normalise_brief_result(raw: dict) -> dict:
     }
     if result["primary_type"] not in BRIEF_PAGE_TYPES:
         result["primary_type"] = "BRIEF_DESIGN_GUIDE"
+    # BRIEF_EVALUATION 검증: LLM이 has_scoring_table=False로 보고하면 배점표 없음 → BRIEF_ADMIN 다운그레이드
+    # (오분류 API 호출 방지 — p.94/p.117 같이 배점 관련 텍스트만 있는 페이지 제거)
+    if result["primary_type"] == "BRIEF_EVALUATION" and not result.get("has_scoring_table", False):
+        result["primary_type"] = "BRIEF_ADMIN"
     return result
 
 
