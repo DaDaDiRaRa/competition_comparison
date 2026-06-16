@@ -58,10 +58,32 @@ def _str_item(item: Any) -> str:
     return str(item) if item is not None else ""
 
 
+def _cell_safe(val: Any) -> Any:
+    """openpyxl이 허용하는 스칼라로 변환. dict/list → 문자열 (숫자 dict는 합계)."""
+    if val is None or isinstance(val, (bool, int, float, str)):
+        return val
+    if isinstance(val, dict):
+        values = list(val.values())
+        if values and all(isinstance(v, (int, float)) for v in values):
+            return sum(values)
+        return ", ".join(f"{k}: {v}" for k, v in val.items())
+    if isinstance(val, list):
+        return ", ".join(str(v) for v in val)
+    return str(val)
+
+
 def _fmt_num(val: Any, unit: str = "") -> str:
     """숫자를 천 단위 구분 포맷으로 변환. None이면 빈 문자열."""
     if val is None:
         return ""
+    if isinstance(val, dict):
+        values = list(val.values())
+        if values and all(isinstance(v, (int, float)) for v in values):
+            val = sum(values)
+        else:
+            return ", ".join(f"{k}: {v}" for k, v in val.items())
+    if isinstance(val, list):
+        return ", ".join(str(v) for v in val)
     try:
         fval = float(val)
         formatted = f"{int(fval):,}" if fval == int(fval) else f"{fval:,.1f}"
@@ -409,7 +431,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
 
     def _write_kv(ws, label: str, val: Any, row: int) -> int:
         ws.cell(row=row, column=1, value=label).font = _bold
-        ws.cell(row=row, column=2, value=val)
+        ws.cell(row=row, column=2, value=_cell_safe(val))
         return row + 1
 
     def _auto_width(ws) -> None:
