@@ -374,7 +374,17 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '- construction_period_months: 공사 기간 in months as integer (null if not stated)\n'
             '- budget_notes: list of cost basis strings (공사비 산정 기준, 포함 항목 등)\n'
             '- special_conditions: list of special condition strings (면적 허용 오차 ±5% 등)\n'
-            '- sites: one entry per site; single site → exactly one entry\n'
+            '- sites: one entry per site; if multiple sites (부지1/부지2 등) appear, '
+            'create one sites[] entry per site — do NOT merge into one entry\n'
+            'KOREAN LABEL → FIELD MAPPING (find these labels in tables on the page):\n'
+            '  "건폐율(%)" or "건폐율" → sites[].building_coverage_pct (number only, e.g. 60)\n'
+            '  "용적률(%)" or "용적률" → sites[].floor_area_ratio_pct (number only, e.g. 400)\n'
+            '  "대지면적(㎡)" or "대지면적" → sites[].site_area_sqm\n'
+            '  "건축규모" or "연면적(㎡)" or "연면적" → sites[].floor_area_sqm\n'
+            '  "높이(m)" or "최고높이" or "건축물높이" → sites[].max_height_m\n'
+            '  "공개공지(㎡)" or "공개공지면적" → sites[].open_space_sqm\n'
+            'PARENTHETICAL PREFIX RULE: values like "(완화) 460%" or "(조건부) 50m" — '
+            'extract the NUMBER only, ignore the parenthetical prefix entirely\n'
             '- Do NOT invent values. null if not visible on page.'
         ),
     },

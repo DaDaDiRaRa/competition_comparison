@@ -382,6 +382,9 @@ class ArchiveSearchIndex:
         return [self._cards[r["competition_id"]] for r in rows
                 if r["competition_id"] in self._cards]
 
+    def all_cards(self) -> list[dict]:
+        return list(self._cards.values())
+
     def close(self):
         self.conn.close()
 

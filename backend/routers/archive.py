@@ -31,7 +31,7 @@ def list_archive(facility_type: str | None = None):
     if facility_type and facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
     index = get_index()
-    cards = list(index._cards.values())
+    cards = list(index.all_cards())
     cards = _filter_cards(cards, facility_type=facility_type)
     return {"items": cards, "total": len(cards)}
 
@@ -54,7 +54,7 @@ def search_archive(body: SearchBody):
 
     # 2글자 이하: 전체 목록과 동일하게 반환
     if len(q) <= 2:
-        cards = list(index._cards.values())
+        cards = list(index.all_cards())
         cards = _filter_cards(cards, body.facility_type, body.result_filter)
         return {"items": cards, "total": len(cards), "query_interpreted": ""}
 

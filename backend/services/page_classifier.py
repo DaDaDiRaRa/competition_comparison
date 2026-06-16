@@ -234,9 +234,10 @@ NOT BRIEF_EVALUATION if: (a) only prose description of evaluation process with n
 (b) page is an evaluation SCHEDULE (심사 일정/일자) → BRIEF_ADMIN, \
 (c) page lists 제출 서류 with checkboxes → BRIEF_SUBMISSION, \
 (d) jury composition (심사위원 명단/구성) without a scoring table → BRIEF_ADMIN, \
-(e) table exists but rows are dates/documents/persons, not evaluation categories.
+(e) table exists but rows are dates/documents/persons, not evaluation categories, \
+(f) page is a participant/firm list (참여자 명단, 참가업체 목록, 공모 참여자, 등록업체) → BRIEF_ADMIN.
 - BRIEF_SUBMISSION: 제출 기준. Required drawing list, file format specifications (DWG/PDF/BIM), submission method, document scale requirements.
-- BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms, jury roster. No design content — skip extraction.
+- BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms, jury roster, participant/firm lists (참여자 명단, 참가업체 목록). No design content — skip extraction.
 
 BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE family — decision guide:
   • Actual 배점표 table (rows=평가항목, cols=비중/배점, values sum ~100) → BRIEF_EVALUATION
