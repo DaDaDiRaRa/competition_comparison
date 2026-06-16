@@ -89,6 +89,7 @@ PAGE_TYPES_META = {
 # B-plan: 숫자 면적표가 있으면 BRIEF_PROGRAM 우선; 텍스트 지침만이면 BRIEF_DESIGN_GUIDE.
 BRIEF_PAGE_TYPES = [
     "BRIEF_OVERVIEW",      # 공모개요 (목적·일정·조건 요약)
+    "BRIEF_PROJECT_INFO",  # 사업 개요 (건축 규모 수치 표·사업비·기간)
     "BRIEF_SITE",          # 대상지 현황 (위치·현황도·지적도)
     "BRIEF_PROGRAM",       # 면적 프로그램 (실별 면적표·층별 용도·주차 수량)
     "BRIEF_DESIGN_GUIDE",  # 설계 지침 (배치·높이·재료·친환경 요구 텍스트)
@@ -101,6 +102,7 @@ BRIEF_PAGE_TYPES = [
 
 BRIEF_PAGE_TYPES_META = {
     "BRIEF_OVERVIEW":     "공모개요",
+    "BRIEF_PROJECT_INFO": "사업개요",
     "BRIEF_SITE":         "대상지현황",
     "BRIEF_PROGRAM":      "면적프로그램",
     "BRIEF_DESIGN_GUIDE": "설계지침",

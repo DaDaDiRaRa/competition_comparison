@@ -197,16 +197,21 @@ TASK: Classify each provided page image from a competition brief (설계공모 �
 RULES:
 - For each image, select exactly ONE primary type from the list below
 - Confidence: 0.0-1.0
-- PRIORITY RULE 1 (area table): If a page contains BOTH design guidelines text AND a numeric area table \
-(실별 면적표, 주차 대수 등), classify as BRIEF_PROGRAM — the numeric table takes priority
+- PRIORITY RULE 1 (area table): If a page contains BOTH design guidelines text AND a room-by-room area table \
+(실별 면적표 — rows are room names, columns are area/㎡), classify as BRIEF_PROGRAM — the numeric table takes priority
 - PRIORITY RULE 2 (scoring table): If a page contains a table with columns for 비중(weight), 배점(score), \
 or 점수(points) — especially a table where column values sum to ~100 — classify as BRIEF_EVALUATION even if \
 the page also contains general design guidance text. The scoring table OVERRIDES BRIEF_DESIGN_GUIDE.
+- PRIORITY RULE 3 (project scale table): If a page has a table where ROWS are named 대지면적, 건폐율, 용적률, \
+높이(or 건축규모/연면적), and COLUMNS are sites or facility types, classify as BRIEF_PROJECT_INFO — this OVERRIDES \
+BRIEF_PROGRAM even though numbers are present. KEY: the ROW names distinguish this from BRIEF_PROGRAM \
+(BRIEF_PROGRAM has room names as rows; BRIEF_PROJECT_INFO has scale metric names as rows).
 
 BRIEF_PAGE_TYPES:
-- BRIEF_OVERVIEW: 공모개요. Purpose, schedule, eligibility, submission deadline, organizer info. Summary/introduction pages.
+- BRIEF_OVERVIEW: 공모개요. Purpose, schedule, eligibility, submission deadline, organizer info. Summary/introduction pages. NO numeric construction scale table — text/list only.
+- BRIEF_PROJECT_INFO: 사업 개요 수치표. Page with a table where ROWS are site-level scale metrics (대지면적, 건폐율, 용적률, 최고높이, 건축규모/연면적, 공개공지) and COLUMNS are sites or facility types (부지1/부지2, 어린이집/구청사/커뮤니티센터 등). Column headers may be site labels (부지1, A, B) OR facility-type names (어린이집, 공공업무시설 등) — both count. Additional signals: 예정 공사비, 설계비, 공사기간. DISTINGUISH → BRIEF_OVERVIEW (text-only purpose/background/schedule, no numeric table) / BRIEF_PROGRAM (ROW names are room/space names like 회의실·로비, not metric names like 대지면적·건폐율) / BRIEF_REGULATIONS (zoning code text without project-specific numeric table).
 - BRIEF_SITE: 대상지 현황. Site location map, aerial photo, cadastral map, site area, surrounding context. No design requirements — descriptive only.
-- BRIEF_PROGRAM: 면적 프로그램. Room-by-room area table (실별 면적표), floor-by-floor use table, required parking count, gross/net area requirements. ANY page with a numeric area breakdown table goes here, even if it also has some text guidelines.
+- BRIEF_PROGRAM: 면적 프로그램. Room-by-room area table (실별 면적표 — ROW names are space/room names like 회의실, 로비, 주차장), floor-by-floor use table, required parking count, gross/net area requirements. NOTE: if the table ROWS are metric names (대지면적, 건폐율, 용적률, 높이) rather than room names, use BRIEF_PROJECT_INFO instead.
 - BRIEF_DESIGN_GUIDE: 설계 지침. Text-based design requirements: height limits, setbacks, massing guidelines, material restrictions, sustainability requirements, concept direction. NO scoring/weighting table — bullet-point or paragraph text only. If any table with 비중/배점/점수 columns is present, use BRIEF_EVALUATION instead.
 - BRIEF_TECHNICAL: 기술 기준. Structural requirements, MEP specifications, fire safety, seismic standards, smart building criteria.
 - BRIEF_REGULATIONS: 법규 기준. Zoning district, building coverage ratio (건폐율), floor area ratio (용적률), height restrictions, setback rules — legal codes and ordinances.
@@ -222,6 +227,12 @@ BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE — decision guide:
   • Table with 비중/배점/점수 column → BRIEF_EVALUATION (even if design text also present)
   • Bullet points (•) or paragraphs describing design requirements, NO scoring table → BRIEF_DESIGN_GUIDE
   • Table present but columns are area/floor/quantity (not scoring weights) → BRIEF_PROGRAM (not BRIEF_EVALUATION)
+
+BRIEF_PROJECT_INFO vs BRIEF_OVERVIEW vs BRIEF_PROGRAM — decision guide:
+  • Table ROWS = 대지면적, 건폐율, 용적률, 높이, 건축규모/연면적 (metric names), COLUMNS = sites or facility types → BRIEF_PROJECT_INFO (PRIORITY RULE 3 applies — overrides BRIEF_PROGRAM)
+  • Text-only overview (목적·배경·일정·자격) with NO numeric table → BRIEF_OVERVIEW
+  • Table ROWS = room/space names (회의실, 로비, 주차장, 어린이집 면적 등), COLUMNS = area/㎡ values → BRIEF_PROGRAM
+  • TRICK: Column headers being facility names (어린이집, 구청사) does NOT make it BRIEF_PROGRAM — check the ROW names to decide
 
 RESPOND JSON ONLY as an array, one object per image:
 [

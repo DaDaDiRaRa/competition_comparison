@@ -105,33 +105,42 @@ def _extract_sections(brief_data: dict) -> dict:
     at    = _first(brief_data, "area_table")
     be    = _first(brief_data, "brief_evaluation")
     dg    = _first(brief_data, "brief_design_guide")
+    bpi   = _first(brief_data, "brief_project_info")
     quant = brief_data.get("_quantitative") or {}
     reqs  = brief_data.get("_requirements") or {}
 
     # ── Section 1: 면적·프로그램 ─────────────────────────────────────────────
+    # sites 배열: 새 스키마(복수 부지 지원). 구 데이터는 빈 배열.
+    sites = _as_list(bp, "sites")
+    s0 = sites[0] if sites and isinstance(sites[0], dict) else {}
+
     total_fa = (
         bp.get("total_required_floor_area_sqm")
         or at.get("total_required_area_sqm")
         or quant.get("total_floor_area_sqm")
     )
+    # 단일값: 구 top-level → sites[0] → area_table → quant 순
     site_area = (
         bp.get("site_area_sqm")
+        or s0.get("site_area_sqm")
         or at.get("site_area_sqm")
         or quant.get("site_area_sqm")
     )
     bcr = (
         bp.get("building_coverage_limit_pct")
+        or s0.get("building_coverage_limit_pct")
         or br.get("building_coverage_ratio_limit_pct")
         or at.get("building_coverage_limit_pct")
         or quant.get("building_coverage_ratio_pct")
     )
     far = (
         bp.get("floor_area_ratio_limit_pct")
+        or s0.get("floor_area_ratio_limit_pct")
         or br.get("floor_area_ratio_limit_pct")
         or at.get("floor_area_ratio_limit_pct")
         or quant.get("floor_area_ratio_pct")
     )
-    height       = br.get("height_limit_m") or dg.get("height_limit_m")
+    height       = br.get("height_limit_m") or s0.get("max_height_m") or dg.get("height_limit_m")
     floors_above = bp.get("max_floors_above") or quant.get("floors_above")
     floors_below = bp.get("max_floors_below") or quant.get("floors_below")
     parking      = (
@@ -146,6 +155,11 @@ def _extract_sections(brief_data: dict) -> dict:
 
     # 존 구성 — 새: zones[{name,area_sqm}], 구: zone_summary[{zone,area_sqm}]
     zones = _as_list(bp, "zones") or _as_list(at, "zone_summary")
+
+    # 사업비·기간 — project-wide (병합 셀로 두 부지 공통)
+    construction_cost = bp.get("estimated_construction_cost") or ""
+    design_fee        = bp.get("estimated_design_fee") or ""
+    design_period     = bp.get("design_period") or ""
 
     # ── Section 2: 심사기준 ───────────────────────────────────────────────────
     categories   = _as_list(be, "evaluation_categories")
@@ -176,6 +190,10 @@ def _extract_sections(brief_data: dict) -> dict:
             "bcr": bcr, "far": far, "height": height,
             "floors_above": floors_above, "floors_below": floors_below,
             "parking": parking, "rooms": rooms, "zones": zones,
+            "sites": sites,  # 복수 부지 raw 배열 (단일 부지면 len==1 or [])
+            "construction_cost": construction_cost,
+            "design_fee": design_fee,
+            "design_period": design_period,
         },
         "eval": {
             "rows": eval_rows, "total_points": total_points,
@@ -187,6 +205,17 @@ def _extract_sections(brief_data: dict) -> dict:
             "materials": materials, "sustainability": sustainability,
             "prohibited": prohibited, "concept": concept,
             "special_guide": special_guide,
+        },
+        "project_info": {
+            "sites": _as_list(bpi, "sites"),
+            "competition_name": bpi.get("competition_name") or "",
+            "organizer": bpi.get("organizer") or "",
+            "competition_type": bpi.get("competition_type") or "",
+            "construction_cost_100m_won": bpi.get("construction_cost_100m_won"),
+            "design_cost_100m_won": bpi.get("design_cost_100m_won"),
+            "construction_period_months": bpi.get("construction_period_months"),
+            "budget_notes": _as_list(bpi, "budget_notes"),
+            "special_conditions": _as_list(bpi, "special_conditions"),
         },
     }
 
@@ -217,6 +246,7 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     """지침서 체크리스트를 Markdown 문자열로 반환."""
     s    = _extract_sections(brief_data)
     a, e, r = s["area"], s["eval"], s["reqs"]
+    pi = s["project_info"]
     flags = sorted(
         validation.get("flags") or [],
         key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "low"), 2),
@@ -231,18 +261,127 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
 
     # ── 1. 면적·프로그램 ──────────────────────────────────────────────────────
     lines.append("## 1. 면적·프로그램 요구\n")
+
+    # ── 사업 개요 (BRIEF_PROJECT_INFO) ─────────────────────────────────────────
+    bpi_sites_md = [st for st in pi["sites"] if isinstance(st, dict)]
+    has_bpi_md = bool(bpi_sites_md or pi["competition_name"] or pi["construction_cost_100m_won"] is not None)
+    if has_bpi_md:
+        lines.append("### 사업 개요\n")
+        info_rows_md = []
+        if pi["competition_name"]:
+            info_rows_md.append(["공모명", pi["competition_name"]])
+        if pi["organizer"]:
+            info_rows_md.append(["발주처", pi["organizer"]])
+        if pi["competition_type"]:
+            info_rows_md.append(["공모유형", pi["competition_type"]])
+        if info_rows_md:
+            lines.append(_md_table(["항목", "내용"], info_rows_md))
+            lines.append("")
+        if bpi_sites_md:
+            lines.append("#### 부지별 건축개요\n")
+            bpi_site_rows_md = [
+                [
+                    st.get("site_id") or f"부지{i+1}",
+                    st.get("address") or "",
+                    st.get("zoning") or "",
+                    st.get("scope") or "",
+                    ", ".join(st.get("facilities") or []) or "",
+                    _fmt_num(st.get("site_area_sqm"), " ㎡"),
+                    _fmt_num(st.get("floor_area_sqm"), " ㎡"),
+                    _fmt_num(st.get("building_coverage_pct"), "%"),
+                    _fmt_num(st.get("floor_area_ratio_pct"), "%"),
+                    _fmt_num(st.get("max_height_m"), " m"),
+                    _fmt_num(st.get("open_space_sqm"), " ㎡"),
+                    st.get("open_space_notes") or "",
+                ]
+                for i, st in enumerate(bpi_sites_md)
+            ]
+            lines.append(_md_table(
+                ["부지ID", "위치", "용도지역/지구", "공모범위", "도입시설",
+                 "대지면적(㎡)", "연면적(㎡)", "건폐율(%)", "용적률(%)", "최고높이(m)",
+                 "공개공지(㎡)", "공개공지 조건"],
+                bpi_site_rows_md,
+            ))
+            lines.append("")
+        cost_rows_md = []
+        if pi["construction_cost_100m_won"] is not None:
+            cost_rows_md.append(["예정 공사비", _fmt_num(pi["construction_cost_100m_won"], " 억원")])
+        if pi["design_cost_100m_won"] is not None:
+            cost_rows_md.append(["예정 설계비", _fmt_num(pi["design_cost_100m_won"], " 억원")])
+        if pi["construction_period_months"] is not None:
+            cost_rows_md.append(["공사 기간", _fmt_num(pi["construction_period_months"], " 개월")])
+        if cost_rows_md:
+            lines.append("#### 사업비·기간\n")
+            lines.append(_md_table(["항목", "내용"], cost_rows_md))
+            lines.append("")
+        if pi["budget_notes"]:
+            lines.append("**예산 산정 기준:**")
+            for note in pi["budget_notes"]:
+                lines.append(f"- {_str_item(note)}")
+            lines.append("")
+        if pi["special_conditions"]:
+            lines.append("**특기사항:**")
+            for cond in pi["special_conditions"]:
+                lines.append(f"- {_str_item(cond)}")
+            lines.append("")
+
     lines.append("### 전체 규모 한도\n")
-    scale_rows = [
-        ["대지면적",    _fmt_num(a["site_area"], " ㎡")],
-        ["요구 연면적", _fmt_num(a["total_fa"], " ㎡")],
-        ["건폐율 한도", _fmt_num(a["bcr"], "%")],
-        ["용적률 한도", _fmt_num(a["far"], "%")],
-        ["높이 한도",   _fmt_num(a["height"], " m")],
-        ["지상 층수",   _fmt_num(a["floors_above"], " 층")],
-        ["지하 층수",   ("B" + _fmt_num(a["floors_below"])) if a["floors_below"] else ""],
-        ["주차 대수",   _fmt_num(a["parking"], " 대")],
-    ]
-    lines.append(_md_table(["항목", "수치"], scale_rows))
+
+    multi_sites = [s for s in a["sites"] if isinstance(s, dict)] if len(a["sites"]) > 1 else []
+    if multi_sites:
+        # 복수 부지: 부지별 상세 테이블 (지역지구·시설·공개공지 포함)
+        lines.append("#### 부지별 건축개요\n")
+        site_rows = [
+            [
+                st.get("site_id") or f"부지{i+1}",
+                st.get("address") or "",
+                ", ".join(st.get("zoning") or []) or "",
+                st.get("construction_type") or "",
+                st.get("building_use") or "",
+                ", ".join(st.get("facilities") or []) or "",
+                _fmt_num(st.get("site_area_sqm"), " ㎡"),
+                _fmt_num(st.get("floor_area_sqm"), " ㎡"),
+                _fmt_num(st.get("building_coverage_limit_pct"), "%"),
+                _fmt_num(st.get("floor_area_ratio_limit_pct"), "%"),
+                _fmt_num(st.get("max_height_m"), " m"),
+                _fmt_num(st.get("public_open_space_sqm"), " ㎡"),
+                st.get("public_open_space_notes") or "",
+            ]
+            for i, st in enumerate(multi_sites)
+        ]
+        lines.append(_md_table(
+            ["부지ID", "위치", "지역지구", "건축구분", "건축용도", "도입시설",
+             "대지면적(㎡)", "연면적(㎡)", "건폐율(%)", "용적률(%)", "높이(m)",
+             "공개공지(㎡)", "공개공지 조건"],
+            site_rows,
+        ))
+        lines.append("")
+        lines.append("#### 공통 규모\n")
+        scale_rows = [
+            ["요구 총 연면적", _fmt_num(a["total_fa"], " ㎡")],
+            ["지상 층수",      _fmt_num(a["floors_above"], " 층")],
+            ["지하 층수",      ("B" + _fmt_num(a["floors_below"])) if a["floors_below"] else ""],
+            ["주차 대수",      _fmt_num(a["parking"], " 대")],
+            ["예정 공사비",    a["construction_cost"] or ""],
+            ["예정 설계비",    a["design_fee"] or ""],
+            ["설계 기간",      a["design_period"] or ""],
+        ]
+        lines.append(_md_table(["항목", "내용"], scale_rows))
+    else:
+        scale_rows = [
+            ["대지면적",    _fmt_num(a["site_area"], " ㎡")],
+            ["요구 연면적", _fmt_num(a["total_fa"], " ㎡")],
+            ["건폐율 한도", _fmt_num(a["bcr"], "%")],
+            ["용적률 한도", _fmt_num(a["far"], "%")],
+            ["높이 한도",   _fmt_num(a["height"], " m")],
+            ["지상 층수",   _fmt_num(a["floors_above"], " 층")],
+            ["지하 층수",   ("B" + _fmt_num(a["floors_below"])) if a["floors_below"] else ""],
+            ["주차 대수",   _fmt_num(a["parking"], " 대")],
+            ["예정 공사비", a["construction_cost"] or ""],
+            ["예정 설계비", a["design_fee"] or ""],
+            ["설계 기간",   a["design_period"] or ""],
+        ]
+        lines.append(_md_table(["항목", "내용"], scale_rows))
     lines.append("")
 
     if a["rooms"]:
@@ -373,6 +512,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
 
     s    = _extract_sections(brief_data)
     a, e, r = s["area"], s["eval"], s["reqs"]
+    pi = s["project_info"]
     flags = sorted(
         validation.get("flags") or [],
         key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "low"), 2),
@@ -447,21 +587,131 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
 
     # ── Sheet 1: 면적·프로그램 ────────────────────────────────────────────────
     ws1 = wb.create_sheet("1.면적·프로그램")
-    row = _write_section_title(ws1, "1. 면적·프로그램 요구", 1, span=5)
-    row += 1  # 여백
 
-    row = _write_subsection(ws1, "전체 규모 한도", row, span=2)
-    for label, val in [
-        ("대지면적 (㎡)",    a["site_area"]),
-        ("요구 연면적 (㎡)", a["total_fa"]),
-        ("건폐율 한도 (%)",  a["bcr"]),
-        ("용적률 한도 (%)",  a["far"]),
-        ("높이 한도 (m)",    a["height"]),
-        ("지상 층수",        a["floors_above"]),
-        ("지하 층수",        a["floors_below"]),
-        ("주차 대수 (대)",   a["parking"]),
-    ]:
-        row = _write_kv(ws1, label, val, row)
+    _SITE_COLS = ["부지ID", "위치", "지역지구", "건축구분", "건축용도", "도입시설",
+                  "대지면적(㎡)", "연면적(㎡)", "건폐율(%)", "용적률(%)", "높이(m)",
+                  "공개공지(㎡)", "공개공지 조건"]
+    _BPI_SITE_COLS = ["부지ID", "위치", "용도지역/지구", "공모범위", "도입시설",
+                      "대지면적(㎡)", "연면적(㎡)", "건폐율(%)", "용적률(%)", "최고높이(m)",
+                      "공개공지(㎡)", "공개공지 조건"]
+    multi_sites = [s for s in a["sites"] if isinstance(s, dict)] if len(a["sites"]) > 1 else []
+    bpi_sites_xl = [st for st in pi["sites"] if isinstance(st, dict)]
+    has_bpi_xl = bool(bpi_sites_xl or pi["competition_name"] or pi["construction_cost_100m_won"] is not None)
+
+    _span1 = max(
+        len(_SITE_COLS) if multi_sites else 0,
+        len(_BPI_SITE_COLS) if bpi_sites_xl else 0,
+        5,
+    )
+    row = _write_section_title(ws1, "1. 면적·프로그램 요구", 1, span=_span1)
+    row += 1
+
+    # ── 사업 개요 (BRIEF_PROJECT_INFO) ────────────────────────────────────────
+    if has_bpi_xl:
+        row = _write_subsection(ws1, "사업 개요", row, span=_span1)
+        for label, val in [
+            ("공모명",   pi["competition_name"] or None),
+            ("발주처",   pi["organizer"] or None),
+            ("공모유형", pi["competition_type"] or None),
+        ]:
+            if val:
+                row = _write_kv(ws1, label, val, row)
+        if bpi_sites_xl:
+            row = _write_header(ws1, _BPI_SITE_COLS, row)
+            for i, st in enumerate(bpi_sites_xl):
+                vals = [
+                    st.get("site_id") or f"부지{i+1}",
+                    st.get("address") or "",
+                    st.get("zoning") or "",
+                    st.get("scope") or "",
+                    ", ".join(st.get("facilities") or []) or "",
+                    _cell_safe(st.get("site_area_sqm")),
+                    _cell_safe(st.get("floor_area_sqm")),
+                    _cell_safe(st.get("building_coverage_pct")),
+                    _cell_safe(st.get("floor_area_ratio_pct")),
+                    _cell_safe(st.get("max_height_m")),
+                    _cell_safe(st.get("open_space_sqm")),
+                    st.get("open_space_notes") or "",
+                ]
+                for ci, v in enumerate(vals, 1):
+                    c = ws1.cell(row=row, column=ci, value=v)
+                    c.alignment = _wrap_top
+                row += 1
+        for label, val in [
+            ("예정 공사비 (억원)", pi["construction_cost_100m_won"]),
+            ("예정 설계비 (억원)", pi["design_cost_100m_won"]),
+            ("공사 기간 (개월)",  pi["construction_period_months"]),
+        ]:
+            if val is not None:
+                row = _write_kv(ws1, label, val, row)
+        for title, items in [
+            ("예산 산정 기준", pi["budget_notes"]),
+            ("특기사항",       pi["special_conditions"]),
+        ]:
+            if items:
+                row = _write_subsection(ws1, title, row, span=2)
+                for item in items:
+                    c = ws1.cell(row=row, column=1, value=f"• {_str_item(item)}")
+                    c.alignment = _wrap_top
+                    ws1.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+                    row += 1
+        row += 1
+
+    # ── 전체 규모 한도 / 부지별 건축개요 ─────────────────────────────────────
+    if multi_sites:
+        # 복수 부지: 부지별 상세 테이블
+        row = _write_subsection(ws1, "부지별 건축개요", row, span=len(_SITE_COLS))
+        row = _write_header(ws1, _SITE_COLS, row)
+        for i, st in enumerate(multi_sites):
+            zoning_str = ", ".join(st.get("zoning") or []) or ""
+            fac_str    = ", ".join(st.get("facilities") or []) or ""
+            vals = [
+                st.get("site_id") or f"부지{i+1}",
+                st.get("address") or "",
+                zoning_str,
+                st.get("construction_type") or "",
+                st.get("building_use") or "",
+                fac_str,
+                _cell_safe(st.get("site_area_sqm")),
+                _cell_safe(st.get("floor_area_sqm")),
+                _cell_safe(st.get("building_coverage_limit_pct")),
+                _cell_safe(st.get("floor_area_ratio_limit_pct")),
+                _cell_safe(st.get("max_height_m")),
+                _cell_safe(st.get("public_open_space_sqm")),
+                st.get("public_open_space_notes") or "",
+            ]
+            for ci, v in enumerate(vals, 1):
+                c = ws1.cell(row=row, column=ci, value=v)
+                c.alignment = _wrap_top
+            row += 1
+        row += 1
+        row = _write_subsection(ws1, "공통 규모", row, span=2)
+        for label, val in [
+            ("요구 총 연면적 (㎡)", a["total_fa"]),
+            ("지상 층수",           a["floors_above"]),
+            ("지하 층수",           a["floors_below"]),
+            ("주차 대수 (대)",      a["parking"]),
+            ("예정 공사비",         a["construction_cost"] or None),
+            ("예정 설계비",         a["design_fee"] or None),
+            ("설계 기간",           a["design_period"] or None),
+        ]:
+            row = _write_kv(ws1, label, val, row)
+    else:
+        row = _write_subsection(ws1, "전체 규모 한도", row, span=2)
+        for label, val in [
+            ("대지면적 (㎡)",    a["site_area"]),
+            ("요구 연면적 (㎡)", a["total_fa"]),
+            ("건폐율 한도 (%)",  a["bcr"]),
+            ("용적률 한도 (%)",  a["far"]),
+            ("높이 한도 (m)",    a["height"]),
+            ("지상 층수",        a["floors_above"]),
+            ("지하 층수",        a["floors_below"]),
+            ("주차 대수 (대)",   a["parking"]),
+            ("예정 공사비",      a["construction_cost"] or None),
+            ("예정 설계비",      a["design_fee"] or None),
+            ("설계 기간",        a["design_period"] or None),
+        ]:
+            row = _write_kv(ws1, label, val, row)
     row += 1
 
     if a["rooms"]:

@@ -346,6 +346,38 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '"brief_summary":""}'
         ),
     },
+    "BRIEF_PROJECT_INFO": {
+        "priority": 1,
+        "instruction": (
+            'EXTRACT project overview data from this competition brief page. '
+            'Respond JSON ONLY.\n'
+            '{\n'
+            '"competition_name":"","organizer":"","competition_type":"",\n'
+            '"sites":[\n'
+            '  {"site_id":"","address":"","zoning":"","scope":"","facilities":[],\n'
+            '   "site_area_sqm":null,"floor_area_sqm":null,\n'
+            '   "building_coverage_pct":null,"floor_area_ratio_pct":null,\n'
+            '   "max_height_m":null,"open_space_sqm":null,"open_space_notes":""}\n'
+            '],\n'
+            '"construction_cost_100m_won":null,"design_cost_100m_won":null,\n'
+            '"construction_period_months":null,\n'
+            '"budget_notes":[],"special_conditions":[]\n'
+            '}\n\n'
+            'FIELD NOTES:\n'
+            '- site_id: use label from brief exactly (부지1/부지2, A/B, 단일부지, etc.); '
+            'if no label given use "단일부지"\n'
+            '- zoning: 용도지역·지구 as a single string (e.g. "제2종 일반주거지역")\n'
+            '- scope: 공모범위·건축구분 (e.g. "신축", "해체 및 신축", "리모델링")\n'
+            '- facilities: list of 도입시설 strings for this site\n'
+            '- construction_cost_100m_won: 예정 공사비 in 억원 as number (null if not stated)\n'
+            '- design_cost_100m_won: 예정 설계비 in 억원 as number (null if not stated)\n'
+            '- construction_period_months: 공사 기간 in months as integer (null if not stated)\n'
+            '- budget_notes: list of cost basis strings (공사비 산정 기준, 포함 항목 등)\n'
+            '- special_conditions: list of special condition strings (면적 허용 오차 ±5% 등)\n'
+            '- sites: one entry per site; single site → exactly one entry\n'
+            '- Do NOT invent values. null if not visible on page.'
+        ),
+    },
     "BRIEF_SITE": {
         "priority": 2,
         "instruction": (
@@ -360,12 +392,42 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
         "instruction": (
             'EXTRACT required program and area from this competition brief. '
             'Respond JSON ONLY. Use exact numbers if visible, null if not visible.\n'
-            '{"total_required_floor_area_sqm":null,"site_area_sqm":null,'
-            '"building_coverage_limit_pct":null,"floor_area_ratio_limit_pct":null,'
-            '"max_floors_above":null,"max_floors_below":null,"required_parking":null,'
-            '"rooms":[{"name":"","required_area_sqm":null,"required_count":1,'
-            '"floor":"","notes":""}],'
-            '"zones":[{"name":"","area_sqm":null}]}'
+            'If multiple sites (부지) appear, list each in the "sites" array; '
+            'for a single site use exactly one entry.\n'
+            '{\n'
+            '"total_required_floor_area_sqm":null,\n'
+            '"max_floors_above":null,"max_floors_below":null,"required_parking":null,\n'
+            '"estimated_construction_cost":"",\n'
+            '"estimated_design_fee":"",\n'
+            '"design_period":"",\n'
+            '"sites":[\n'
+            '  {"site_id":"부지1",\n'
+            '   "address":"",\n'
+            '   "zoning":[],\n'
+            '   "construction_type":"",\n'
+            '   "building_use":"",\n'
+            '   "facilities":[],\n'
+            '   "site_area_sqm":null,\n'
+            '   "floor_area_sqm":null,\n'
+            '   "building_coverage_limit_pct":null,\n'
+            '   "floor_area_ratio_limit_pct":null,\n'
+            '   "max_height_m":null,\n'
+            '   "public_open_space_sqm":null,\n'
+            '   "public_open_space_notes":""}\n'
+            '],\n'
+            '"rooms":[{"name":"","required_area_sqm":null,"required_count":1,"floor":"","notes":""}],\n'
+            '"zones":[{"name":"","area_sqm":null}]\n'
+            '}\n\n'
+            'FIELD NOTES:\n'
+            '- sites[].zoning: list of all 지역지구 strings for this site (e.g. ["도시지역","준공업지역","공원"])\n'
+            '- sites[].construction_type: 건축구분 (e.g. "해체 및 신축")\n'
+            '- sites[].building_use: 건축용도 (e.g. "공공업무시설")\n'
+            '- sites[].facilities: list of 도입시설/시설 strings for this site\n'
+            '- sites[].public_open_space_sqm: minimum required 공개공지 area in ㎡ (null if not stated)\n'
+            '- sites[].public_open_space_notes: any additional 공개공지 conditions\n'
+            '- estimated_construction_cost: full text of 예정 공사비 (include 억/만원 unit)\n'
+            '- estimated_design_fee: full text of 예정 설계비\n'
+            '- design_period: 예정 기본 및 실시설계 기간 text'
         ),
     },
     "BRIEF_DESIGN_GUIDE": {
@@ -488,6 +550,7 @@ DIGITAL_TEXT_EXCLUDE_TYPES = {
     "AREA_TABLE", "TECHNICAL", "INCENTIVE_TABLE",
     "BUSINESS_VIABILITY", "AREA_INCREASE",
     "BRIEF_PROGRAM", "BRIEF_REGULATIONS", "BRIEF_EVALUATION",
+    "BRIEF_PROJECT_INFO",
 }
 
 # 추출 스킵 임계: priority가 이 값 이상이면 Claude 호출 생략 (토큰 절감)
@@ -845,6 +908,81 @@ def should_extract(page_type: str, priority_limit: int = 2) -> bool:
     return cfg["priority"] <= priority_limit
 
 
+def _merge_brief_project_info_pages(items: list[dict]) -> dict:
+    """여러 BRIEF_PROJECT_INFO 페이지 추출 결과를 단일 dict로 통합.
+
+    동일 지침서에서 p.4(위치·용도지구 표)와 p.5(대지면적·건폐율·용적률 수치 표)처럼
+    정성 데이터와 정량 데이터가 다른 페이지에 흩어져 있을 때 사용.
+    - 상위 scalar 필드: first-non-null wins
+    - sites[]: site_id로 매칭 후 필드별 first-non-null wins
+    - 리스트 필드(budget_notes, special_conditions): 순서 유지 합집합
+    """
+    _SITE_FIELDS = [
+        "site_id", "address", "zoning", "scope", "facilities",
+        "site_area_sqm", "floor_area_sqm",
+        "building_coverage_pct", "floor_area_ratio_pct",
+        "max_height_m", "open_space_sqm", "open_space_notes",
+    ]
+    _TOP_SCALARS = ["competition_name", "organizer", "competition_type",
+                    "construction_cost_100m_won", "design_cost_100m_won",
+                    "construction_period_months"]
+    _TOP_LISTS = ["budget_notes", "special_conditions"]
+
+    merged: dict = {}
+
+    # 상위 scalar: first-non-null
+    for key in _TOP_SCALARS:
+        for item in items:
+            v = item.get(key)
+            if v is not None:
+                merged[key] = v
+                break
+        else:
+            merged[key] = None
+
+    # 상위 list: 순서 유지 합집합
+    for key in _TOP_LISTS:
+        seen: list = []
+        seen_set: set = set()
+        for item in items:
+            for v in (item.get(key) or []):
+                if v not in seen_set:
+                    seen.append(v)
+                    seen_set.add(v)
+        merged[key] = seen
+
+    # sites[]: site_id로 매칭, 필드별 first-non-null
+    sites_by_id: dict[str, dict] = {}
+    sites_order: list[str] = []
+    for item in items:
+        for site in (item.get("sites") or []):
+            sid = site.get("site_id") or "단일부지"
+            if sid not in sites_by_id:
+                sites_by_id[sid] = {f: None for f in _SITE_FIELDS}
+                sites_by_id[sid]["site_id"] = sid
+                sites_order.append(sid)
+            acc = sites_by_id[sid]
+            for field in _SITE_FIELDS:
+                if field == "site_id":
+                    continue
+                v = site.get(field)
+                if field == "facilities":
+                    # 시설 목록: 합집합 (순서 유지)
+                    existing = acc.get("facilities") or []
+                    existing_set = set(existing)
+                    for fac in (v or []):
+                        if fac not in existing_set:
+                            existing.append(fac)
+                            existing_set.add(fac)
+                    acc["facilities"] = existing
+                elif v is not None and acc.get(field) is None:
+                    acc[field] = v
+
+    merged["sites"] = [sites_by_id[sid] for sid in sites_order]
+    merged["_page"] = items[0].get("_page")  # 첫 페이지 번호 보존
+    return merged
+
+
 def merge_extracted_data(
     page_classifications: list[dict],
     extractions: list[dict],
@@ -885,6 +1023,13 @@ def merge_extracted_data(
         key = pt.lower()
         items = bucket["combined_data"]
         result[key] = items[0] if len(items) == 1 else items
+
+    # BRIEF_PROJECT_INFO 다중 페이지 deep-merge:
+    # pages with qualitative data (address/zoning) and numeric data (area/bcr/far)
+    # are separate pages → merge sites[] by site_id, first-non-null wins per field.
+    bpi_raw = result.get("brief_project_info")
+    if isinstance(bpi_raw, list) and len(bpi_raw) > 1:
+        result["brief_project_info"] = _merge_brief_project_info_pages(bpi_raw)
 
     # 정량 데이터: AREA_TABLE 우선, SITE_PLAN 보완
     # AREA_TABLE은 타일 추출로 가장 신뢰도 높음
@@ -936,6 +1081,24 @@ def merge_extracted_data(
             continue
         for src, dst in _brief_remap.items():
             v = entry.get(src)
+            if v is not None and dst not in quant:
+                quant[dst] = v
+
+    # sites[0] 대표값 보완 — 복수 부지 공모에서 top-level 단일값이 null일 때 사용
+    _sites_remap = {
+        "site_area_sqm":              "site_area_sqm",
+        "building_coverage_limit_pct":"building_coverage_ratio_pct",
+        "floor_area_ratio_limit_pct": "floor_area_ratio_pct",
+    }
+    for entry in bp_list:
+        if not isinstance(entry, dict):
+            continue
+        sites = entry.get("sites") or []
+        if not sites or not isinstance(sites[0], dict):
+            continue
+        s0 = sites[0]
+        for src, dst in _sites_remap.items():
+            v = s0.get(src)
             if v is not None and dst not in quant:
                 quant[dst] = v
 
