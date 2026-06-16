@@ -12,6 +12,7 @@ data_extractor.py — PDF 페이지별 설계 데이터 추출
 
 import asyncio
 import base64
+import io
 import json
 from pathlib import Path
 
@@ -587,12 +588,14 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '표기 변환 규칙: "30점" → 30 / "30%" → 30 / "○ (30)" → 30 / '
             '"0.30" → 30 (비율이면 ×100). '
             '실제 수치가 표에 보이지 않을 때만 null (0은 실제 0점일 때만 사용).\n'
-            '- 병합 셀 처리 (중요): 배점 셀이 여러 행에 걸쳐 있으면 → '
-            '대표 구분(첫 번째 행)에만 배점을 기입하고 나머지 행은 points=null로 기입. '
-            '병합 값을 여러 행에 복사하면 합계가 100을 초과하므로 절대 금지. '
-            '하위 세부항목은 evaluation_categories 에 추가하지 말고 sub_items 에 기입.\n'
-            '- 검증: sum(evaluation_categories[].points where points is not null) == total_points. '
-            '합계가 total_points를 초과하면 병합 셀 중복 집계이므로 수정할 것.\n'
+            '- 병합 셀 처리 (중요): 비중 컬럼의 숫자가 여러 행에 걸친 병합 셀로 표시된 경우, '
+            '해당 숫자는 그 셀에 포함된 모든 구분이 공유하는 비중이다. '
+            '예: 배치계획+공간계획이 하나의 40 셀로 묶여 있으면 그룹 전체 비중이 40이고 각각 20씩이 아님. '
+            'shared_with 배열에 함께 묶인 구분명을 기록하고 '
+            'points는 그룹 대표(첫 번째) 항목에만 기록, 나머지는 null. '
+            '하위 세부항목은 evaluation_categories에 추가하지 말고 sub_items에 기입.\n'
+            '- 검증: sum(evaluation_categories[].points where points is not null) ≈ total_points(±5). '
+            '합계가 total_points를 크게 초과하면 병합 셀 중복 집계이므로 반드시 수정할 것.\n'
             '- evaluation_categories[].shared_with: list of sibling category names '
             'when the cell is merged across multiple rows (empty list [] if not merged)\n'
             '- evaluation_categories[].sub_items: list of detailed criteria strings '
@@ -712,6 +715,25 @@ def _call_claude(content: list, max_tokens: int = 4000) -> str:
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],
     )
+
+
+# ── BRIEF_EVALUATION 다중 페이지 수직 스택 ────────────────────────────────────
+def _stack_images_vertically(images_bytes: list[bytes]) -> bytes:
+    """여러 PNG bytes를 수직으로 이어붙여 단일 PNG bytes 반환."""
+    from PIL import Image
+    imgs = [Image.open(io.BytesIO(b)) for b in images_bytes]
+    max_w = max(img.width for img in imgs)
+    total_h = sum(img.height for img in imgs)
+    canvas = Image.new("RGB", (max_w, total_h), (255, 255, 255))
+    y = 0
+    for img in imgs:
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        canvas.paste(img, (0, y))
+        y += img.height
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 # ── 개별 페이지 추출 ──────────────────────────────────────────────────────────
@@ -906,9 +928,40 @@ async def extract_pdf(
             if pt in TILE_PAGE_TYPES and not is_brief and conf >= CONFIDENCE_DOWNGRADE_THRESHOLD:
                 tile_page_nums.add(pg)
 
+    # ── BRIEF_EVALUATION 다중 페이지 스택 추출 (수정 1·2·3) ──────────────────
+    # is_brief=True이고 BRIEF_EVALUATION 페이지가 2개 이상이면
+    # 해당 페이지 이미지를 수직으로 이어붙여 LLM에 한 번만 전달.
+    pages_by_num: dict[int, bytes] = {pnum: img for img, pnum in all_pages}
+    eval_page_nums: list[int] = sorted(
+        pg for pg, pt in type_by_page.items() if pt == "BRIEF_EVALUATION"
+    ) if is_brief else []
+    precomputed_eval: dict | None = None
+
+    if is_brief and len(eval_page_nums) >= 2:
+        eval_imgs = [pages_by_num[pg] for pg in eval_page_nums if pg in pages_by_num]
+        stacked_img = _stack_images_vertically(eval_imgs)
+        _eval_prompt_cfg = EXTRACTION_PROMPTS_BRIEF["BRIEF_EVALUATION"]
+        precomputed_eval = _extract_page_sync(
+            stacked_img, eval_page_nums[0], "BRIEF_EVALUATION", _eval_prompt_cfg
+        )
+        # 수정 3: points_sum_warning — null 제외 합계가 95~105 범위 밖이면 경고
+        _cats = precomputed_eval.get("data", {}).get("evaluation_categories") or []
+        _pts_sum = sum(c["points"] for c in _cats if isinstance(c.get("points"), (int, float)))
+        if _pts_sum > 0 and not (95 <= _pts_sum <= 105):
+            precomputed_eval["data"]["points_sum_warning"] = True
+        precomputed_eval["_stacked_pages"] = eval_page_nums
+
+    stacked_eval_set: set[int] = set(eval_page_nums) if precomputed_eval else set()
+
     sem = asyncio.Semaphore(4)
 
     async def extract_one(img_bytes: bytes, page_num: int) -> dict:
+        # BRIEF_EVALUATION 스택 결과: 첫 페이지는 미리 계산된 결과, 나머지는 빈 마커
+        if page_num in stacked_eval_set:
+            if page_num == eval_page_nums[0]:
+                return precomputed_eval
+            return {"page": page_num, "type": "BRIEF_EVALUATION", "data": {}, "_merged": True}
+
         page_type = type_by_page.get(page_num, "CONCEPT")
         confidence = confidence_by_page.get(page_num, 1.0)
 

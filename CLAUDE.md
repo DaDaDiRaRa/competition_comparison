@@ -373,7 +373,7 @@ Test with curl or Postman by uploading files to:
 - **MyProject 연동:** `_myprojects/` 하위도 스캔. `search_keywords`, `narrative`, `memo` 필드 FTS5 인덱스 포함.
 - **auto_meta:** `deep_analyze()`가 `auto_meta` 추출 → `update_project_meta()`로 `_meta.json` 머지 (비어있는 키만 채움).
 - **프론트:** `ArchiveMode.jsx` (검색창+카드 그리드) + `ArchiveCard.jsx` + `ArchiveDetail.jsx` (슬라이드오버). `AxisAccordion` 컴포넌트로 평가축 행별 독립 펼침 상태.
-- **Known Issue (🟡):** `routers/archive.py:34,57`에서 `index._cards.values()` 직접 접근 중. `all_cards() → list[dict]` 공개 메서드 추가 권장.
+- `all_cards() → list[dict]` 공개 메서드로 `_cards` 사설 속성 캡슐화 완료.
 
 ## Rubric 시스템 (config.py)
 
@@ -389,13 +389,7 @@ Test with curl or Postman by uploading files to:
 
 ## Known Issues — TODO
 
-우선순위 표시: 🟡 = 중복·캡슐화 / 🟢 = 엣지 케이스.
-
-### 🟡 중복 / 캡슐화
-
-1. **`ArchiveSearchIndex` 사설 속성 직접 접근**
-   - `routers/archive.py:34, 57` — `index._cards.values()` 직접 호출 (underscore-prefixed)
-   - 수정안: `ArchiveSearchIndex.all_cards() -> list[dict]` 공개 메서드 추가
+우선순위 표시: 🟢 = 엣지 케이스.
 
 ### 🟢 엣지 케이스
 
@@ -404,12 +398,7 @@ Test with curl or Postman by uploading files to:
    - 원인: HWP→PDF 변환 시 병합셀 구조 붕괴로 동일 배점이 여러 행에 중복 집계되는 것으로 추정
    - 수정안: `data_extractor.py` BRIEF_EVALUATION 추출 프롬프트에 "배점 합계 ≈ 100이 되도록 병합셀 중복 제거" 룰 추가, 또는 후처리로 `total_points > 110`이면 경고 flag
 
-2. **`BRIEF_PROJECT_INFO` 건폐율·용적률 수치 추출 실패**
-   - 분류는 정상(영등포 p.5 감지) 但 `building_coverage_pct`, `floor_area_ratio_pct`, `site_area_sqm`, `max_height_m`이 null로 추출됨
-   - 원인: 다중 페이지 deep-merge(`_merge_brief_project_info_pages`) 추가 후에도 LLM이 수치 표에서 해당 필드를 schema 키명으로 매핑하지 못함 — "건폐율 60%" → `building_coverage_pct: 60` 변환 실패 추정
-   - 수정안: 추출 프롬프트 FIELD NOTES에 "건폐율(%) → `building_coverage_pct`", "용적률(%) → `floor_area_ratio_pct`", "대지면적(㎡) → `site_area_sqm`", "건축규모/연면적 → `floor_area_sqm`" 매핑 명시; "(완화) 460%" 같은 괄호 접두사 무시 룰 추가
-
-3. **`/run-single` 재실행 시 `_meta.json`의 `submissions` 리스트 초기화**
+2. **`/run-single` 재실행 시 `_meta.json`의 `submissions` 리스트 초기화**
    - `routers/accumulate.py:676-679` → `save_project_meta(...)`는 항상 `meta["submissions"] = []`로 시작
    - 같은 `project_number + competition_name`으로 두 번째 회사 등록 시 첫 회사의 메타 엔트리가 사라짐 (submission JSON 파일은 디스크에 고아로 남음)
    - MyProjectMode는 1프로젝트=1제출물 전제라 통상 발생 안 함. 다회사 추가는 `/add-submission` 사용
