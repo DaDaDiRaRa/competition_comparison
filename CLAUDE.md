@@ -55,7 +55,7 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
    - `POST /upload/start` → `upload_id` 발급, `/tmp/cc_uploads/{upload_id}/`에 청크 누적
    - `POST /upload/chunk/{upload_id}` — 25MB 단위 청크 (총 600MB 상한)
    - `POST /upload/finish/{upload_id}` — 청크 조립 → `file_ref` 반환. 파이프라인 엔드포인트(accumulate/diagnose)는 multipart 대신 이 `file_ref`를 받아 /tmp에서 직접 읽음
-   - `POST /upload/cleanup/{upload_id}` — 파이프라인 완료 후 임시 파일 삭제
+   - `DELETE /upload/cleanup/{upload_id}` — 파이프라인 완료 후 임시 파일 삭제
 
 6. **`routers/archive.py`** - 아카이브 자연어 검색 (FTS5 in-memory SQLite, `GET /list` + `POST /search` + `GET /{ft}/{cid}`)
 
@@ -84,7 +84,7 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
   - **`has_scoring_table=False` 강등:** `_normalise_brief_result()`에서 LLM이 `has_scoring_table=False`를 반환하면 BRIEF_EVALUATION → BRIEF_ADMIN으로 강등. 참여자 명단·등록업체 목록(표 있으나 배점 없음)의 오분류 방지.
   - **BRIEF_ADMIN 조건 (f):** "참여자 명단·참가업체 목록·설계공모 참여자·등록업체" 페이지는 표 유무와 무관하게 BRIEF_ADMIN. BRIEF_EVALUATION NOT 조건에 명시.
 - `services/data_extractor.py` - Extracts structured design data from pages; `merge_extracted_data()` returns `_quantitative` dict at top level
-  - `DIGITAL_TEXT_EXCLUDE_TYPES` — `{"AREA_TABLE","TECHNICAL","INCENTIVE_TABLE","BUSINESS_VIABILITY","AREA_INCREASE","BRIEF_PROGRAM","BRIEF_REGULATIONS","BRIEF_EVALUATION"}`. 이 타입들은 fitz.get_text() Tier 0을 건너뛰고 타일-비전 경로로 처리. `BRIEF_EVALUATION` 추가 이유: HWP→PDF 변환 시 병합 셀 구조 붕괴 → 구분/항목/비중 관계 오독 위험.
+  - `DIGITAL_TEXT_EXCLUDE_TYPES` — `{"AREA_TABLE","TECHNICAL","INCENTIVE_TABLE","BUSINESS_VIABILITY","AREA_INCREASE","BRIEF_PROGRAM","BRIEF_REGULATIONS","BRIEF_EVALUATION","BRIEF_PROJECT_INFO"}`. 이 타입들은 fitz.get_text() Tier 0을 건너뛰고 타일-비전 경로로 처리. `BRIEF_EVALUATION` / `BRIEF_PROJECT_INFO` 추가 이유: HWP→PDF 변환 시 병합 셀 구조 붕괴 → 구분/항목/비중 관계 오독 위험.
   - `BRIEF_EVALUATION` 추출 스키마: `evaluation_categories[].sub_items`(구분 하위 세부항목 문자열 배열) + `evaluation_categories[].shared_with`(병합 셀로 배점이 공유된 형제 구분 이름 목록) 추가. `total_points`는 배점 합계(통상 100).
   - **BRIEF_EVALUATION 다중 페이지 스태킹:** `extract_pdf(is_brief=True)` 진입 시 BRIEF_EVALUATION 페이지가 2개 이상이면 `_stack_images_vertically()` (PIL)로 세로 이어붙임 → LLM에 1회 전달. `precomputed_eval`에 결과 저장, 나머지 페이지는 `{"data": {}, "_merged": True}` 반환. 병합 셀이 페이지 경계를 넘어도 표 구조를 한 번에 파악 가능.
   - **BRIEF_EVALUATION 스태킹 폴백:** 스태킹 추출 후 non-null points 합계(`_pts_sum`)가 0이면 스태킹 결과 폐기(`precomputed_eval = None`) → `stacked_eval_set` 비워짐 → 각 페이지 개별 추출. 연속되지 않은 페이지(예: p.21 + p.117)가 분류되어 스태킹됐을 때 LLM 혼동 방지.
@@ -93,6 +93,9 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
   - **`_image_block()` — JPEG 마법 바이트 감지:** `img_bytes[:3] == b'\xff\xd8\xff'`이면 `media_type: "image/jpeg"`, 아니면 `"image/png"`. `safe_encode_image()`에 올바른 `fmt` 전달. 포맷 불일치는 또 다른 400 오류 원인.
   - **`points_sum_warning`:** 스태킹 후 `null`이 아닌 `points` 합계가 95~105 범위를 벗어나면 `precomputed_eval["data"]["points_sum_warning"] = True` 플래그 추가. `brief_checklist_exporter`가 경고로 노출.
   - **BRIEF_PROJECT_INFO FIELD NOTES:** 한국어 표현 → 스키마 키 명시 매핑 추가 (`건폐율(%)` → `building_coverage_pct`, `용적률(%)` → `floor_area_ratio_pct`, `대지면적(㎡)` → `site_area_sqm`, `건축규모/연면적(㎡)` → `floor_area_sqm`, `높이(m)` → `max_height_m`, `공개공지(㎡)` → `open_space_sqm`). 괄호 접두사(`(완화) 460%`) → 숫자만 추출 룰, 부지 복수 → `sites` 배열 분리 룰.
+  - **토큰 절감 라우팅 (제안서용):**
+    - `OCR_FIRST_TYPES = {"AREA_TABLE","TECHNICAL","SUSTAINABILITY","BUSINESS_VIABILITY","AREA_INCREASE","COMPANY_PORTFOLIO","CONSTRUCTION_PLAN"}` — PaddleOCR(로컬·무료)로 텍스트 읽고 Haiku로 구조화. Sonnet+이미지 대비 페이지당 ~90% 비용 절감. `OCR_MIN_CHARS = 80` 미만이면 자동 vision fallback.
+    - `SKIP_PAGE_TYPES = {"COVER","RENDERING_EXT","RENDERING_INT"}` + `SKIP_PRIORITY_THRESHOLD = 3` — 비교분석 기여도 낮은 페이지 자동 스킵. 복원하려면 `settings.extraction_priority_limit = 3`.
 - `services/llm_client.py` - Claude API 호출 래퍼 (`call_messages()`). `system` 인자는 `str | list` 모두 지원 (캐시 블록 전달용). 응답 `usage`의 `cache_creation_input_tokens` / `cache_read_input_tokens`를 로그 출력
 - `services/comparator.py` - Compares proposals via **2-pass blind-reveal**:
   - **Pass 1 (블라인드 채점):** `_anonymize_submissions()`이 회사명을 `A안/B안/C안...`으로 치환하고 `result` 라벨 제거 → `_make_blind_static()` 프롬프트로 LLM이 결과를 모른 채 점수·강약점·`blind_ranking` 생성. `max_tokens=32000`
@@ -144,7 +147,7 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
 
 ### Frontend (React + Vite)
 
-Located in `frontend/` (repo root), the app has six main tabs:
+Located in `frontend/` (repo root), the app has seven main tabs (정의: `App.jsx::TABS`):
 
 1. **MyProjectMode** - 내 프로젝트 등록 (단일 제출물 + 결과 기록)
 2. **AccumulateMode** - PDF에서 JSON 추출만 담당
@@ -154,9 +157,12 @@ Located in `frontend/` (repo root), the app has six main tabs:
 4. **DiagnoseMode** - Analyzes new submissions
    - 진단 완료 후 "진단 리포트 열기" 링크 버튼 표시 (`report_filename` SSE 이벤트 수신 시)
    - `pattern` 상태를 `DiagnosisResult`에 prop으로 전달 → 정량 비교 바 렌더링
-5. **ArchiveMode** - 아카이브 자연어 검색 (검색창 + 카드 그리드 + 슬라이드오버 상세)
-6. **SettingsPanel** - Configuration + PatternViewer
+5. **SettingsPanel** - Configuration + PatternViewer
    - 하단에 `PatternViewer` 컴포넌트 포함 (시설유형별 당선/낙선 패턴 통계 시각화)
+6. **ArchiveMode** - 아카이브 자연어 검색 (검색창 + 카드 그리드 + 슬라이드오버 상세)
+7. **BriefMode** - 지침서 단독 분석 UI (`POST /api/brief/analyze`)
+   - 지침서 PDF 업로드 → SSE 진행 → 분석 완료 시 md/xlsx 다운로드 링크 + 검증 경고 요약 표시
+   - `routers/brief.py`와 짝을 이루는 유일한 프론트 모드
 
 **Key Components:**
 
@@ -258,7 +264,7 @@ Test with curl or Postman by uploading files to:
 **Brief Pipeline (지침서 단독 분석 — `POST /api/brief/analyze`):**
 
 1. Upload brief PDF (multipart 또는 `/api/upload` `file_ref`)
-2. `classify_all_pages_brief()` → 9개 BRIEF_* 타입으로 분류
+2. `classify_all_pages_brief()` → 14개 BRIEF_* 타입으로 분류 (`config.py::BRIEF_PAGE_TYPES`)
 3. `extract_pdf(pdf_path, page_map, is_brief=True)` → `merge_extracted_data()` → `brief_data`
 4. `extract_brief_requirements(brief_data, facility_type)` → `brief_data["_requirements"]`
 5. `validate_brief(brief_data, requirements)` → `brief_data["validation"]` (flags / summary)
@@ -278,7 +284,7 @@ Test with curl or Postman by uploading files to:
 
 ## Configuration Files
 
-**`app_settings.json`** (auto-created in backend directory):
+**`app_settings.json`** (저장 위치: 개발 모드 → `backend/app_settings.json` / PyInstaller `frozen` 모드 → `~/.competition-analyzer/app_settings.json`. `config.py::_resolve_settings_file()` 참조):
 
 ```json
 {
@@ -394,7 +400,7 @@ Test with curl or Postman by uploading files to:
 **3-A/B/C/D 모두 완료 (2026-06-12~15).**
 
 - **단일 소스:** `build_axis_rubric_block(facility_type, axes_keys=None)` — comparator·myproject_analyzer 공통 사용.
-- **구조:** 각 axis에 `description`(1줄) + `signals`(4~5개) + `rubric`(A~E 정의). `FACILITY_AXIS_OVERRIDES[facility_type][axis_key]`로 `signals_extra` + `rubric_hint` 추가.
+- **구조:** 각 axis에 `label_ko` + `label_dash`(차트용 대시 형식) + `description`(1줄) + `icon` + `signals`(4~5개) + `rubric`(A~E 정의). `FACILITY_AXIS_OVERRIDES[facility_type][axis_key]`로 `signals_extra` + `rubric_hint` 추가.
 - **14개 시설유형 override 시드 완료** (시설당 평균 2축, 총 30+ 엔트리). **임원·실무진 검토 후 보정 필요** — 현재는 일반 건축 지식 기반 초안.
 - **`grade_justification` 자기검증:** 3개 분석 스키마(MyProject/비교/진단) 모두 `"신호 X/Y개 충족 → <등급> 기준 행과 일치"` 형식. 기존 데이터(필드 없음)는 UI 박스 미표시.
 - **`RUBRIC_VERSION = "v1"`** (`config.py`): `axis_rubric_for()` 반환 + `_comparison.json`/`_deep.json`/`diagnosis.json` 저장 파일에 자동 기록. 개정 시 상수만 올리면 전파됨.
