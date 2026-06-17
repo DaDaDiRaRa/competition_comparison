@@ -417,47 +417,41 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '"estimated_design_fee":"",\n'
             '"design_period":"",\n'
             '"sites":[\n'
-            '  {"site_id":"부지1",\n'
-            '   "address":"",\n'
-            '   "zoning":[],\n'
-            '   "construction_type":"",\n'
-            '   "building_use":"",\n'
-            '   "facilities":[],\n'
-            '   "site_area_sqm":null,\n'
-            '   "floor_area_sqm":null,\n'
-            '   "building_coverage_limit_pct":null,\n'
-            '   "floor_area_ratio_limit_pct":null,\n'
-            '   "max_height_m":null,\n'
-            '   "public_open_space_sqm":null,\n'
-            '   "public_open_space_notes":""}\n'
+            '  {"site_id":"부지1","address":"","zoning":[],"construction_type":"",\n'
+            '   "building_use":"","facilities":[],"site_area_sqm":null,\n'
+            '   "floor_area_sqm":null,"building_coverage_limit_pct":null,\n'
+            '   "floor_area_ratio_limit_pct":null,"max_height_m":null,\n'
+            '   "public_open_space_sqm":null,"public_open_space_notes":""}\n'
             '],\n'
-            '"area_table":[\n'
-            '  {"group_name":"","site_id":null,"total_area_sqm":null,\n'
-            '   "items":[\n'
-            '     {"name":"","area_sqm":null,"notes":"",\n'
-            '      "sub_items":[{"name":"","area_sqm":null,"notes":""}]}\n'
-            '   ]}\n'
+            '"area_rows":[\n'
+            '  {"row_type":"space","name":"","area":null,"subtotal_area":null,\n'
+            '   "is_subtotal":false,"note":"","dept":""}\n'
             '],\n'
             '"shared_areas":[{"name":"","area_sqm":null,"notes":""}]\n'
             '}\n\n'
             'FIELD NOTES:\n'
-            '- sites[].zoning: list of all 지역지구 strings (e.g. ["도시지역","준공업지역"])\n'
+            '- sites[].zoning: list of all 지역지구 strings\n'
             '- sites[].construction_type: 건축구분 (e.g. "해체 및 신축")\n'
-            '- sites[].building_use: 건축용도 (e.g. "공공업무시설")\n'
+            '- sites[].building_use: 건축용도\n'
             '- sites[].facilities: list of 도입시설 strings for this site\n'
             '- sites[].public_open_space_sqm: 공개공지 최소 면적 ㎡ (null if not stated)\n'
             '- sites[].public_open_space_notes: 공개공지 추가 조건\n'
-            '- area_table[]: 실별 면적 프로그램 계층 구조\n'
-            '  • group_name: 최상위 구분 (구청사/보건소/공용 등). 단순형이면 시설명.\n'
-            '  • site_id: 해당 부지 ID ("부지1" 등). 단일 부지이면 null.\n'
-            '  • total_area_sqm: 그룹 소계 면적 (표에 합계 행 있으면 기입, 없으면 null)\n'
-            '  • items[]: 중간 구분 또는 실 목록. 없으면 빈 배열 [].\n'
-            '  • items[].sub_items[]: 세부 공간. 없으면 반드시 빈 배열 [] (null 금지)\n'
-            '  DEPTH RULES (표 구조를 보고 깊이 스스로 판단):\n'
-            '    단순형 (시설명→면적): group_name=시설명, items=[] — 또는\n'
-            '                          group_name="", items=[{name=시설명, sub_items=[]}]\n'
-            '    2단형 (영역→실→면적): group_name=영역명, items=[실목록], sub_items=[]\n'
-            '    3단형 (구분→부서→세부): group_name=구분명, items=[부서별], sub_items=[세부공간]\n'
+            '- area_rows[]: 면적 프로그램 표의 각 행을 flat 리스트로 추출 '
+            '(계층 재구성은 코드가 담당 — LLM은 각 행의 종류만 판단).\n'
+            '  row_type 기준 (들여쓰기·폰트 크기·굵기 등으로 판단):\n'
+            '    "site_total" — 부지 합계·총 합계 행 (표 최상위)\n'
+            '    "facility"   — 구청·보건소·어린이집 등 시설 단위\n'
+            '    "bureau"     — 직무공간·행정국·구민이용공간 등 국/대영역 단위\n'
+            '    "division"   — 이무과·복지정책과 등 과/중간영역 단위\n'
+            '    "space"      — 사무공간·비화창고 등 실제 세부공간 (표 최하위)\n'
+            '  area: 왼쪽 컬럼 면적(세부공간 실면적, ㎡). 표에 없으면 null.\n'
+            '  subtotal_area: 오른쪽 컬럼 면적(과·국·시설 합계, ㎡). 없으면 null.\n'
+            '  is_subtotal: true = 소계·합계·그룹 레이블 행(직접 사용 공간 없음).\n'
+            '    조건: 이름에 "합계"·"소계"·"①②③" 포함, 또는 하위 공간 없는 그룹 헤더.\n'
+            '  note: 배치 조건·특기사항 등 비고 컬럼 텍스트.\n'
+            '  dept: 소관부서 컬럼 값. 컬럼 없으면 "".\n'
+            '  중요: 소계·합계 행의 면적은 subtotal_area에만 기록, area=null.\n'
+            '        소계 행을 area_rows에 포함하되 is_subtotal=true 표시.\n'
             '- shared_areas[]: 공용·설비·주차 등 여러 시설이 공유하는 면적\n'
             '- estimated_construction_cost: 예정 공사비 (억/만원 단위 포함)\n'
             '- estimated_design_fee: 예정 설계비 텍스트\n'
@@ -949,9 +943,10 @@ async def extract_pdf(
         # 스택 이미지 전용 추가 지침: 페이지 경계를 넘는 병합 셀 인식 강화
         _stacked_note = (
             f'\n[주의: 이 이미지는 {len(eval_imgs)}개 연속 페이지를 수직으로 이어붙인 것입니다. '
-            '페이지 경계를 가로질러 표 행이 이어질 수 있습니다. '
-            '배점/비중 값이 보이지 않거나 null인 항목은 바로 위 항목 병합 셀의 연속일 가능성이 높습니다 '
-            '— 그 경우 shared_with에 상위 항목명을 기록하고 points를 null로 두십시오.]'
+            '표가 페이지 경계에서 잘려 이어지는 경우, 다음 페이지 첫 행부터 같은 표의 연속으로 인식하라. '
+            '병합 셀 배점은 해당 셀에 포함된 모든 구분 항목이 공유하며, '
+            'shared_with 배열에 형제 항목명을 기록하고 '
+            'points는 그룹 첫 항목에만, 나머지는 null로 설정하라.]'
         )
         _eval_prompt_cfg = {
             **_base_cfg,
@@ -969,6 +964,63 @@ async def extract_pdf(
 
     stacked_eval_set: set[int] = set(eval_page_nums) if precomputed_eval else set()
 
+    # ── BRIEF_PROGRAM 다중 페이지 스택 추출 ──────────────────────────────────────
+    # 면적표가 연속 페이지에 걸칠 때 5페이지씩 청크로 이어붙여 한 번에 추출.
+    # area_rows flat 방식이므로 청크 결과를 단순 extend()로 병합.
+    _PROG_CHUNK = 5   # 청크당 최대 페이지 수
+
+    prog_page_nums: list[int] = sorted(
+        pg for pg, pt in type_by_page.items() if pt == "BRIEF_PROGRAM"
+    ) if is_brief else []
+    precomputed_program: dict | None = None
+
+    if is_brief and len(prog_page_nums) >= 2:
+        _prog_base_cfg = EXTRACTION_PROMPTS_BRIEF["BRIEF_PROGRAM"]
+        _prog_chunks = [
+            prog_page_nums[i:i + _PROG_CHUNK]
+            for i in range(0, len(prog_page_nums), _PROG_CHUNK)
+        ]
+        _merged_rows: list = []
+        _first_data: dict = {}
+
+        for _ci, _chunk in enumerate(_prog_chunks):
+            _chunk_imgs = [pages_by_num[pg] for pg in _chunk if pg in pages_by_num]
+            _stacked = _stack_images_vertically(_chunk_imgs)
+            _n_total = len(_prog_chunks)
+
+            if _n_total > 1:
+                if _ci == 0:
+                    _note = (
+                        f'\n[이 이미지는 {_n_total}개 청크 중 1번째입니다. '
+                        '요약 필드(sites, total_required_floor_area_sqm 등)는 여기서만 채우고, '
+                        'area_rows는 이 페이지들에 해당하는 행만 추출하세요.]'
+                    )
+                else:
+                    _note = (
+                        f'\n[이 이미지는 {_n_total}개 청크 중 {_ci+1}번째입니다. '
+                        '면적표가 이어지므로 area_rows만 채우고 '
+                        'sites 등 요약 필드는 비워두세요.]'
+                    )
+                _cfg = {**_prog_base_cfg, "instruction": _prog_base_cfg["instruction"] + _note}
+            else:
+                _cfg = _prog_base_cfg
+
+            _res = _extract_page_sync(_stacked, _chunk[0], "BRIEF_PROGRAM", _cfg)
+            _data = _res.get("data") or {}
+            if _ci == 0:
+                _first_data = {k: v for k, v in _data.items() if k != "area_rows"}
+            _merged_rows.extend(_data.get("area_rows") or [])
+
+        _first_data["area_rows"] = _merged_rows
+        precomputed_program = {
+            "page": prog_page_nums[0],
+            "type": "BRIEF_PROGRAM",
+            "data": _first_data,
+            "_stacked_pages": prog_page_nums,
+        }
+
+    stacked_prog_set: set[int] = set(prog_page_nums) if precomputed_program else set()
+
     sem = asyncio.Semaphore(4)
 
     async def extract_one(img_bytes: bytes, page_num: int) -> dict:
@@ -977,6 +1029,12 @@ async def extract_pdf(
             if page_num == eval_page_nums[0]:
                 return precomputed_eval
             return {"page": page_num, "type": "BRIEF_EVALUATION", "data": {}, "_merged": True}
+
+        # BRIEF_PROGRAM 스택 결과: 동일 패턴
+        if page_num in stacked_prog_set:
+            if page_num == prog_page_nums[0]:
+                return precomputed_program
+            return {"page": page_num, "type": "BRIEF_PROGRAM", "data": {}, "_merged": True}
 
         page_type = type_by_page.get(page_num, "CONCEPT")
         confidence = confidence_by_page.get(page_num, 1.0)

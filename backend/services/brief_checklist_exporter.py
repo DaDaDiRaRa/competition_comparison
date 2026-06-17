@@ -198,16 +198,17 @@ def _extract_sections(brief_data: dict) -> dict:
         or quant.get("parking_count")
     )
 
-    # 계층 면적표 — ALL brief_program 페이지의 area_table 합산
-    # (BRIEF_PROGRAM이 여러 페이지면 각 페이지의 group이 다를 수 있어 concat)
+    # 계층 면적표 — ALL brief_program 페이지의 area_table / area_rows 합산
     _bp_all = brief_data.get("brief_program") or []
     if isinstance(_bp_all, dict):
         _bp_all = [_bp_all]
     area_table: list = []
+    area_rows: list = []   # 신규 flat 방식
     shared_areas: list = []
     for _bpp in _bp_all:
         if isinstance(_bpp, dict):
             area_table.extend(_bpp.get("area_table") or [])
+            area_rows.extend(_bpp.get("area_rows") or [])
             shared_areas.extend(_bpp.get("shared_areas") or [])
 
     # 개략공사비 내역서 등 공사비 그룹 제거 (면적표와 무관)
@@ -254,6 +255,7 @@ def _extract_sections(brief_data: dict) -> dict:
             "bcr": bcr, "far": far, "height": height,
             "floors_above": floors_above, "floors_below": floors_below,
             "parking": parking,
+            "area_rows": area_rows,                                    # 신규 flat 방식
             "area_table": area_table, "shared_areas": shared_areas,  # 새 계층 구조
             "rooms": rooms, "zones": zones,                           # 구 경로 폴백
             "sites": sites,  # 복수 부지 raw 배열 (단일 부지면 len==1 or [])
@@ -890,7 +892,14 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
 
     _AT_COLS = ["구분", "기준면적(A)", "계획면적(B)", "비고"]
 
-    if a["area_table"]:
+    if a["area_rows"]:
+        # 상세 면적표는 Sheet 5에 렌더링 — 여기엔 참조 안내만 표시
+        c_note = ws1.cell(row=row, column=1,
+                          value="※ 상세 면적 프로그램은 시트 5 「면적표상세」 참조")
+        c_note.font = Font(italic=True, color="444444")
+        ws1.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+        row += 1
+    elif a["area_table"]:
         row = _write_subsection(ws1, "실별 면적 프로그램", row, span=4)
         row = _write_header(ws1, _AT_COLS, row)
         for grp in a["area_table"]:
@@ -967,7 +976,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             row += 1
         row = _sep(ws1, row)
 
-    if not a["area_table"] and a["zones"]:
+    if not a["area_rows"] and not a["area_table"] and a["zones"]:
         row = _write_subsection(ws1, "존 구성", row, span=2)
         row = _write_header(ws1, ["존명", "면적(㎡)"], row)
         for z in a["zones"]:
@@ -993,7 +1002,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
 
     # ── Sheet 2: 심사기준 ─────────────────────────────────────────────────────
     ws2 = wb.create_sheet("2.심사기준")
-    _S2_SPAN = 4  # 항목명 | 배점 | 공유 | 세부기준
+    _S2_SPAN = 3  # 구분 | 세부기준 | 배점
     row = _write_section_title(ws2, "2. 심사기준 (배점표)", 1, span=_S2_SPAN)
     row += 1
     ws2.freeze_panes = "A3"
@@ -1008,85 +1017,102 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     row = _sep(ws2, row)
 
     if e["rows"]:
-        row = _write_header(ws2, ["항목명", "배점", "공유 배점", "세부 기준"], row)
+        row = _write_header(ws2, ["구분", "세부기준", "배점"], row)
         running_total: float = 0.0
-        for ev in e["rows"]:
-            if not isinstance(ev, dict):
-                c = ws2.cell(row=row, column=1, value=_str_item(ev))
-                ws2.merge_cells(start_row=row, start_column=1,
-                                end_row=row, end_column=_S2_SPAN)
-                row += 1
+
+        def _build_groups(rows: list) -> list:
+            """pts != null이면 그룹 리더, null이면 직전 그룹에 편입."""
+            groups: list = []
+            current: list = []
+            for ev in rows:
+                if not isinstance(ev, dict):
+                    if current:
+                        groups.append(current); current = []
+                    groups.append([ev]); continue
+                if ev.get("points") is not None:
+                    if current:
+                        groups.append(current)
+                    current = [ev]
+                elif current:
+                    current.append(ev)
+                else:
+                    current = [ev]
+            if current:
+                groups.append(current)
+            return groups
+
+        for group in _build_groups(e["rows"]):
+            # 비-dict 항목: 전 열 병합 단일 행
+            if not any(isinstance(ev, dict) for ev in group):
+                for ev in group:
+                    c = ws2.cell(row=row, column=1, value=_str_item(ev))
+                    ws2.merge_cells(start_row=row, start_column=1,
+                                    end_row=row, end_column=_S2_SPAN)
+                    row += 1
                 continue
 
-            name      = ev.get("name") or ""
-            pts       = ev.get("points")
-            shared    = ev.get("shared_with") or []
-            sub_items = ev.get("sub_items") or []
-            desc      = ev.get("description") or ""
-            has_pts   = pts is not None
+            group_cats     = [ev for ev in group if isinstance(ev, dict)]
+            cat_row_counts = [max(1, len(ev.get("sub_items") or [])) for ev in group_cats]
+            group_total    = sum(cat_row_counts)
+            leader_pts     = group_cats[0].get("points") if group_cats else None
 
-            # 세부 기준 목록 — sub_items 없으면 description을 단일 행으로
-            detail_rows = sub_items if sub_items else ([desc] if desc else [""])
-            n_rows = len(detail_rows)
-
-            # ── Col 1: 항목명 — n_rows 행 세로 병합 ────────────────────────
-            c1 = ws2.cell(row=row, column=1, value=name)
-            if has_pts:
-                c1.font = _bold
-                c1.fill = _grp_fill
-            c1.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            c1.border = _border_thin
-            if n_rows > 1:
-                ws2.merge_cells(start_row=row, start_column=1,
-                                end_row=row + n_rows - 1, end_column=1)
-
-            # ── Col 2: 배점 — n_rows 행 세로 병합 ──────────────────────────
-            c2 = ws2.cell(row=row, column=2, value=pts)
-            if has_pts:
-                c2.font = _bold
-                c2.fill = _grp_fill
-            c2.alignment = _center
-            if isinstance(pts, (int, float)):
-                c2.number_format = _NUM_FMT
-            c2.border = _border_thin
-            if n_rows > 1:
-                ws2.merge_cells(start_row=row, start_column=2,
-                                end_row=row + n_rows - 1, end_column=2)
-
-            # ── Col 3: 공유배점 — n_rows 행 세로 병합 ───────────────────────
-            shared_text = ("↳ " + ", ".join(shared) + "와 배점 공유") if shared else ""
-            c3 = ws2.cell(row=row, column=3, value=shared_text)
-            c3.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-            c3.border = _border_thin
-            if n_rows > 1:
+            # ── Col C (배점): 그룹 전체 행 병합 ─────────────────────────
+            c_pts = ws2.cell(row=row, column=3, value=leader_pts)
+            if leader_pts is not None:
+                c_pts.font = _bold
+                c_pts.fill = _grp_fill
+                if isinstance(leader_pts, (int, float)):
+                    c_pts.number_format = _NUM_FMT
+            c_pts.alignment = _center
+            c_pts.border = _border_thin
+            if group_total > 1:
                 ws2.merge_cells(start_row=row, start_column=3,
-                                end_row=row + n_rows - 1, end_column=3)
+                                end_row=row + group_total - 1, end_column=3)
 
-            # ── Col 4: 세부 기준 — 각 항목 개별 행 ─────────────────────────
-            for i, sub in enumerate(detail_rows):
-                text = _str_item(sub)
-                if text and not text.startswith("•"):
-                    text = f"• {text}"
-                c4 = ws2.cell(row=row + i, column=4, value=text)
-                c4.alignment = _wrap_top
-                c4.border = _border_thin
+            if isinstance(leader_pts, (int, float)):
+                running_total += leader_pts
 
-            if isinstance(pts, (int, float)):
-                running_total += pts
-            row += n_rows
+            cat_start = row
+            for ev, n_cat in zip(group_cats, cat_row_counts):
+                name   = ev.get("name") or ""
+                subs   = ev.get("sub_items") or []
+                desc   = ev.get("description") or ""
+                detail = subs if subs else ([desc] if desc else [""])
+
+                # ── Col A (구분): 카테고리 내 행 병합 ──────────────────
+                c1 = ws2.cell(row=cat_start, column=1, value=name)
+                c1.font = _bold
+                if leader_pts is not None:
+                    c1.fill = _grp_fill
+                c1.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                c1.border = _border_thin
+                if n_cat > 1:
+                    ws2.merge_cells(start_row=cat_start, start_column=1,
+                                    end_row=cat_start + n_cat - 1, end_column=1)
+
+                # ── Col B (세부기준): 각 항목 개별 행 ──────────────────
+                for i, sub in enumerate(detail):
+                    text = _str_item(sub)
+                    if text and not text.startswith("•"):
+                        text = f"• {text}"
+                    c2 = ws2.cell(row=cat_start + i, column=2, value=text)
+                    c2.alignment = _wrap_top
+                    c2.border = _border_thin
+
+                cat_start += n_cat
+
+            row += group_total
 
         # 합계 행 — points_sum_warning 시 주황색 경고 강조
         _sum_fill = _warn_fill if e["points_sum_warning"] else _grp_fill
         c_tot = ws2.cell(row=row, column=1, value="합  계")
         c_tot.font = _bold; c_tot.fill = _sum_fill; c_tot.border = _border_thin
-        c_sum = ws2.cell(row=row, column=2,
+        ws2.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+        c_sum = ws2.cell(row=row, column=3,
                          value=running_total if running_total else None)
         c_sum.font = _bold; c_sum.fill = _sum_fill
         c_sum.alignment = _center; c_sum.number_format = _NUM_FMT
         c_sum.border = _border_thin
-        for ci in (3, 4):
-            ct = ws2.cell(row=row, column=ci)
-            ct.fill = _sum_fill; ct.border = _border_thin
         row += 2
 
     if e["disqualify"]:
@@ -1098,10 +1124,9 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                             end_row=row, end_column=_S2_SPAN)
             row += 1
 
-    ws2.column_dimensions["A"].width = 28
-    ws2.column_dimensions["B"].width = 8
-    ws2.column_dimensions["C"].width = 22
-    ws2.column_dimensions["D"].width = 55
+    ws2.column_dimensions["A"].width = 20  # 구분명
+    ws2.column_dimensions["B"].width = 55  # 세부기준
+    ws2.column_dimensions["C"].width = 10  # 배점
 
     # ── Sheet 3: 요구사항·필수조건 ────────────────────────────────────────────
     ws3 = wb.create_sheet("3.요구사항")
@@ -1315,6 +1340,112 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     ws4.column_dimensions["B"].width = 20
     ws4.column_dimensions["C"].width = 60
     ws4.column_dimensions["D"].width = 20
+
+    # ── Sheet 5: 면적표 상세 (area_rows flat 방식) ─────────────────────────────
+    _ROW_TYPE_LEVEL = {"site_total": 0, "facility": 1, "bureau": 2, "division": 3, "space": 4}
+    _LEVEL_LABEL    = {0: "부지", 1: "시설", 2: "영역", 3: "과", 4: "세부"}
+    _LEVEL_FILL_HEX = {0: "2F4F4F", 1: "4A7C8C", 2: "B8D4DC", 3: "E8F4F8", 4: None}
+    _LEVEL_WHITE    = {0, 1}   # dark fill → white text
+
+    area_rows = a["area_rows"]
+    if area_rows:
+        has_dept   = any(r_row.get("dept") for r_row in area_rows if isinstance(r_row, dict))
+        n_cols_s5  = 7 if has_dept else 6
+        s5_headers = ["레벨", "공간명", "기준면적(㎡)", "계획면적(㎡)", "비율(%)", "참고사항"]
+        if has_dept:
+            s5_headers.append("소관부서")
+
+        ws5  = wb.create_sheet("5.면적표상세")
+        row5 = _write_section_title(ws5, "5. 면적표 상세 프로그램", 1, span=n_cols_s5)
+        row5 += 1
+        ws5.freeze_panes  = "A3"
+        ws5.print_title_rows = "1:2"
+
+        row5 = _write_header(ws5, s5_headers, row5)
+
+        for ar in area_rows:
+            if not isinstance(ar, dict):
+                continue
+            rt      = ar.get("row_type") or "space"
+            level   = _ROW_TYPE_LEVEL.get(rt, 4)
+            lbl     = _LEVEL_LABEL.get(level, "")
+            fill_hex = _LEVEL_FILL_HEX.get(level)
+            lvl_fill = PatternFill("solid", fgColor=fill_hex) if fill_hex else None
+            is_white = level in _LEVEL_WHITE
+            is_sub   = bool(ar.get("is_subtotal"))
+
+            indent       = level * 2
+            name         = ar.get("name") or ""
+            area_val_raw = ar.get("area") if ar.get("area") is not None else ar.get("subtotal_area")
+            area_val     = _cell_safe(area_val_raw)
+            ratio        = ar.get("ratio_pct")
+
+            def _lv_font(**kw):
+                """빌더: 레벨별 기본 폰트."""
+                if is_white:
+                    return Font(bold=True, color="FFFFFF", **kw)
+                if is_sub:
+                    return Font(bold=True, italic=True, **kw)
+                return Font(**kw) if kw else None
+
+            def _apply(cell, value=None, alignment=None, num_fmt=None):
+                if value is not None:
+                    cell.value = value
+                if lvl_fill:
+                    cell.fill = lvl_fill
+                f = _lv_font()
+                if f:
+                    cell.font = f
+                if alignment:
+                    cell.alignment = alignment
+                elif is_white:
+                    cell.alignment = _center
+                if num_fmt:
+                    cell.number_format = num_fmt
+
+            # Col A: 레벨명
+            _apply(ws5.cell(row=row5, column=1), value=lbl, alignment=_center)
+
+            # Col B: 공간명 (들여쓰기)
+            name_display = ("　" * indent) + name  # full-width space for indent
+            _apply(ws5.cell(row=row5, column=2), value=name_display,
+                   alignment=Alignment(vertical="top", wrap_text=True))
+
+            # Col C: 기준면적
+            _apply(ws5.cell(row=row5, column=3), value=area_val,
+                   alignment=_center if is_white else _num_right,
+                   num_fmt=_NUM_FMT if isinstance(area_val_raw, (int, float)) else None)
+
+            # Col D: 계획면적 (빈칸 — 설계자 입력용)
+            _apply(ws5.cell(row=row5, column=4), alignment=_num_right, num_fmt=_NUM_FMT)
+
+            # Col E: 비율
+            ratio_cell = ws5.cell(row=row5, column=5)
+            _apply(ratio_cell, value=_cell_safe(ratio), alignment=_num_right)
+            if isinstance(ratio, (int, float)):
+                ratio_cell.number_format = "0.0"
+
+            # Col F: 참고사항
+            _apply(ws5.cell(row=row5, column=6),
+                   value=ar.get("notes") or "",
+                   alignment=_wrap_top)
+
+            # Col G: 소관부서 (optional)
+            if has_dept:
+                _apply(ws5.cell(row=row5, column=7),
+                       value=ar.get("dept") or "",
+                       alignment=_wrap_top)
+
+            row5 += 1
+
+        ws5.column_dimensions["A"].width = 8
+        ws5.column_dimensions["B"].width = 40
+        ws5.column_dimensions["C"].width = 15
+        ws5.column_dimensions["D"].width = 15
+        ws5.column_dimensions["E"].width = 10
+        ws5.column_dimensions["F"].width = 30
+        if has_dept:
+            ws5.column_dimensions["G"].width = 15
 
     buf = io.BytesIO()
     wb.save(buf)
