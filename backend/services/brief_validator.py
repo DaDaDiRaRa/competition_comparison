@@ -167,12 +167,28 @@ def _check_omission(brief_data: dict, requirements: dict) -> list[dict]:
     br    = _first(brief_data, "brief_regulations")
     at    = _first(brief_data, "area_table")
 
+    # brief_project_info의 sites[]에서 첫 non-null 값 추출 (부지가 여러 개면 하나만 있어도 인정)
+    # 키 이름이 brief_program과 다름: building_coverage_pct / floor_area_ratio_pct / floor_area_sqm
+    bpi = _first(brief_data, "brief_project_info")
+    bpi_sites = (bpi.get("sites") or []) if isinstance(bpi, dict) else []
+    def _first_site_val(key: str):
+        for s in bpi_sites:
+            if isinstance(s, dict) and s.get(key) is not None:
+                return s.get(key)
+        return None
+    bpi_summary = {
+        "floor_area_sqm":         _first_site_val("floor_area_sqm"),
+        "building_coverage_pct":  _first_site_val("building_coverage_pct"),
+        "floor_area_ratio_pct":   _first_site_val("floor_area_ratio_pct"),
+    }
+
     # 연면적
     if not _any_nonnull(
         (quant, "total_floor_area_sqm"),
         (bp,    "total_required_floor_area_sqm"),
         (at,    "total_required_area_sqm"),
         (at,    "total_required_floor_area_sqm"),
+        (bpi_summary, "floor_area_sqm"),
     ):
         flags.append(_flag(
             "omission", "high",
@@ -186,6 +202,7 @@ def _check_omission(brief_data: dict, requirements: dict) -> list[dict]:
         (bp,    "building_coverage_limit_pct"),
         (br,    "building_coverage_ratio_limit_pct"),
         (at,    "building_coverage_limit_pct"),
+        (bpi_summary, "building_coverage_pct"),
     ):
         flags.append(_flag(
             "omission", "medium",
@@ -199,6 +216,7 @@ def _check_omission(brief_data: dict, requirements: dict) -> list[dict]:
         (bp,    "floor_area_ratio_limit_pct"),
         (br,    "floor_area_ratio_limit_pct"),
         (at,    "floor_area_ratio_limit_pct"),
+        (bpi_summary, "floor_area_ratio_pct"),
     ):
         flags.append(_flag(
             "omission", "medium",

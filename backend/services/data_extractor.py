@@ -768,8 +768,12 @@ def _extract_page_sync(
         _image_block(img_bytes),
         {"type": "text", "text": prompt_cfg["instruction"]},
     ]
+    # 표가 빽빽한 페이지(면적 프로그램·배점표)는 행이 많아 출력 토큰 많이 필요.
+    # 예: BRIEF_PROGRAM 단일 페이지 50행 × ~70 tokens/행 ≈ 3500. 안전 마진 8000.
+    # 그 외 페이지는 2000으로 충분 (텍스트 요약 위주).
+    max_out = 8000 if page_type in {"BRIEF_PROGRAM", "BRIEF_EVALUATION"} else 2000
     try:
-        raw = _call_claude(content, max_tokens=2000)
+        raw = _call_claude(content, max_tokens=max_out)
         data = parse_json_response(raw)
     except Exception as e:
         data = {"error": str(e)}
@@ -953,10 +957,24 @@ async def extract_pdf(
     eval_page_nums: list[int] = sorted(
         pg for pg, pt in type_by_page.items() if pt == "BRIEF_EVALUATION"
     ) if is_brief else []
+
+    # 인접 페이지 합류: EVAL 페이지의 직후(N+1)가 BRIEF_SUBMISSION/BRIEF_DESIGN_GUIDE이면
+    # 스태킹 입력에 포함. 배점표가 페이지 경계를 넘어 다음 페이지 상단에 꼬리 행이
+    # 있는 케이스 회수 (예: 영등포구 p.18 배점표 → p.19 "창의성 및 공공성" 마지막 행).
+    # 원래 분류는 변경하지 않음 — EVAL 스태킹 입력에만 추가.
+    eval_stack_pages: list[int] = list(eval_page_nums)
+    if is_brief and eval_page_nums:
+        _adj_types = {"BRIEF_SUBMISSION", "BRIEF_DESIGN_GUIDE"}
+        for _pg in eval_page_nums:
+            _next = _pg + 1
+            if type_by_page.get(_next) in _adj_types and _next not in eval_stack_pages:
+                eval_stack_pages.append(_next)
+        eval_stack_pages.sort()
+
     precomputed_eval: dict | None = None
 
-    if is_brief and len(eval_page_nums) >= 2:
-        eval_imgs = [pages_by_num[pg] for pg in eval_page_nums if pg in pages_by_num]
+    if is_brief and len(eval_stack_pages) >= 2:
+        eval_imgs = [pages_by_num[pg] for pg in eval_stack_pages if pg in pages_by_num]
         stacked_img = _stack_images_vertically(eval_imgs)
         _base_cfg = EXTRACTION_PROMPTS_BRIEF["BRIEF_EVALUATION"]
         # 스택 이미지 전용 추가 지침: 페이지 경계를 넘는 병합 셀 인식 강화
@@ -972,7 +990,7 @@ async def extract_pdf(
             "instruction": _base_cfg["instruction"] + _stacked_note,
         }
         precomputed_eval = _extract_page_sync(
-            stacked_img, eval_page_nums[0], "BRIEF_EVALUATION", _eval_prompt_cfg
+            stacked_img, eval_stack_pages[0], "BRIEF_EVALUATION", _eval_prompt_cfg
         )
         # 수정 3: points_sum_warning — null 제외 합계가 95~105 범위 밖이면 경고
         _cats = precomputed_eval.get("data", {}).get("evaluation_categories") or []
@@ -984,81 +1002,30 @@ async def extract_pdf(
         if _pts_sum == 0:
             precomputed_eval = None
         else:
-            precomputed_eval["_stacked_pages"] = eval_page_nums
+            precomputed_eval["_stacked_pages"] = eval_stack_pages
 
-    stacked_eval_set: set[int] = set(eval_page_nums) if precomputed_eval else set()
+    stacked_eval_set: set[int] = set(eval_stack_pages) if precomputed_eval else set()
 
-    # ── BRIEF_PROGRAM 다중 페이지 스택 추출 ──────────────────────────────────────
-    # 면적표가 연속 페이지에 걸칠 때 5페이지씩 청크로 이어붙여 한 번에 추출.
-    # area_rows flat 방식이므로 청크 결과를 단순 extend()로 병합.
-    _PROG_CHUNK = 5   # 청크당 최대 페이지 수
-
+    # ── BRIEF_PROGRAM: 페이지별 개별 추출 (스태킹 폐지) ───────────────────────────
+    # 스태킹 전략은 3중 악재로 area_rows가 null로 채워지는 문제:
+    #   1) 비연속 페이지 묶음 (chunk 0 = [11,16,22,33,35]처럼 흩어진 페이지)
+    #   2) 7500px 다운스케일 → 페이지당 ~1500px → 표 안 숫자 판독 어려움
+    #   3) max_tokens=2000은 5페이지×20~30행 = 100+ 행 출력에 부족 → truncation
+    # 단일 페이지 150 DPI 추출이 숫자 정확도·토큰 효율 모두 우월.
+    # 각 BRIEF_PROGRAM 페이지는 extract_one()의 일반 경로로 처리됨.
     prog_page_nums: list[int] = sorted(
         pg for pg, pt in type_by_page.items() if pt == "BRIEF_PROGRAM"
     ) if is_brief else []
     precomputed_program: dict | None = None
-
-    if is_brief and len(prog_page_nums) >= 2:
-        _prog_base_cfg = EXTRACTION_PROMPTS_BRIEF["BRIEF_PROGRAM"]
-        _prog_chunks = [
-            prog_page_nums[i:i + _PROG_CHUNK]
-            for i in range(0, len(prog_page_nums), _PROG_CHUNK)
-        ]
-        _merged_rows: list = []
-        _first_data: dict = {}
-
-        for _ci, _chunk in enumerate(_prog_chunks):
-            _chunk_imgs = [pages_by_num[pg] for pg in _chunk if pg in pages_by_num]
-            _stacked = _stack_images_vertically(_chunk_imgs)
-            _n_total = len(_prog_chunks)
-
-            if _n_total > 1:
-                if _ci == 0:
-                    _note = (
-                        f'\n[이 이미지는 {_n_total}개 청크 중 1번째입니다. '
-                        '요약 필드(sites, total_required_floor_area_sqm 등)는 여기서만 채우고, '
-                        'area_rows는 이 페이지들에 해당하는 행만 추출하세요.]'
-                    )
-                else:
-                    _note = (
-                        f'\n[이 이미지는 {_n_total}개 청크 중 {_ci+1}번째입니다. '
-                        '면적표가 이어지므로 area_rows만 채우고 '
-                        'sites 등 요약 필드는 비워두세요.]'
-                    )
-                _cfg = {**_prog_base_cfg, "instruction": _prog_base_cfg["instruction"] + _note}
-            else:
-                _cfg = _prog_base_cfg
-
-            _res = _extract_page_sync(_stacked, _chunk[0], "BRIEF_PROGRAM", _cfg)
-            _data = _res.get("data") or {}
-            if _ci == 0:
-                _first_data = {k: v for k, v in _data.items() if k != "area_rows"}
-            _merged_rows.extend(_data.get("area_rows") or [])
-
-        # 전체 청크 에러(area_rows 0개 + 첫 청크 error key) → 개별 페이지 추출 폴백
-        if not _merged_rows and "error" in _first_data:
-            logger.warning(
-                "BRIEF_PROGRAM stacking 실패 (%d 청크 전부 에러) → 페이지별 개별 추출로 폴백",
-                len(_prog_chunks),
-            )
-            precomputed_program = None
-        else:
-            _first_data["area_rows"] = _merged_rows
-            precomputed_program = {
-                "page": prog_page_nums[0],
-                "type": "BRIEF_PROGRAM",
-                "data": _first_data,
-                "_stacked_pages": prog_page_nums,
-            }
-
-    stacked_prog_set: set[int] = set(prog_page_nums) if precomputed_program else set()
+    stacked_prog_set: set[int] = set()
 
     sem = asyncio.Semaphore(4)
 
     async def extract_one(img_bytes: bytes, page_num: int) -> dict:
         # BRIEF_EVALUATION 스택 결과: 첫 페이지는 미리 계산된 결과, 나머지는 빈 마커
+        # (eval_stack_pages는 EVAL 원본 + 인접 합류 페이지 — D 수정 참조)
         if page_num in stacked_eval_set:
-            if page_num == eval_page_nums[0]:
+            if page_num == eval_stack_pages[0]:
                 return precomputed_eval
             return {"page": page_num, "type": "BRIEF_EVALUATION", "data": {}, "_merged": True}
 

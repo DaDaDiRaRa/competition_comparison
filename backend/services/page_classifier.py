@@ -281,9 +281,18 @@ def _normalise_brief_result(raw: dict) -> dict:
     }
     if result["primary_type"] not in BRIEF_PAGE_TYPES:
         result["primary_type"] = "BRIEF_DESIGN_GUIDE"
-    # BRIEF_EVALUATION 검증: LLM이 has_scoring_table=False로 보고하면 배점표 없음 → BRIEF_ADMIN 다운그레이드
-    # (오분류 API 호출 방지 — p.94/p.117 같이 배점 관련 텍스트만 있는 페이지 제거)
-    if result["primary_type"] == "BRIEF_EVALUATION" and not result.get("has_scoring_table", False):
+    # 배점표 분류 보정 (양방향):
+    # ① 승격: LLM이 has_scoring_table=True로 보고했는데 primary_type이 BRIEF_EVALUATION이 아니면
+    #         PRIORITY RULE 2 위반 → 강제 EVAL 승격. 영등포구 사례 p.18 케이스.
+    #         (단, BRIEF_PROGRAM은 면적표가 있는 페이지라 예외 — 면적표 우선)
+    # ② 강등: LLM이 has_scoring_table=False인데 BRIEF_EVALUATION이면 배점표 없음 → BRIEF_ADMIN.
+    #         오분류 API 호출 방지 — p.21/p.117 같이 배점 관련 텍스트만 있는 페이지 제거.
+    if (
+        result.get("has_scoring_table", False)
+        and result["primary_type"] not in ("BRIEF_EVALUATION", "BRIEF_PROGRAM")
+    ):
+        result["primary_type"] = "BRIEF_EVALUATION"
+    elif result["primary_type"] == "BRIEF_EVALUATION" and not result.get("has_scoring_table", False):
         result["primary_type"] = "BRIEF_ADMIN"
     return result
 
