@@ -431,6 +431,26 @@ Test with curl or Postman by uploading files to:
    - **재발 조건:** `_extract_sections()`를 `_first(brief_evaluation)`으로 되돌리면 재발.
    - **미해결 엣지:** 실제 배점표가 p.19 같은 BRIEF_SUBMISSION 오분류 페이지에 있는 경우 — 분류기 수정 없이는 해결 불가. 재분석 후에도 심사기준이 비면 `_brief.json`의 `page_map`에서 BRIEF_SUBMISSION 페이지의 `has_scoring_table` 필드를 확인할 것.
 
+1. **BRIEF_EVALUATION 환각 심사기준 (오분류 → 스태킹 → LLM 환각)**
+   - **증상:** 청사 공모(facility_type=`public`)에서 추출된 `evaluation_categories.sub_items`에 "본 연구원의 특성", "연구원의 전체성" 등 PDF에 존재하지 않는 문구. 배점 합계는 100점으로 맞아 떨어져 `_check_points_mismatch`로는 검출 불가.
+   - **원인 사슬:**
+     1. **B1 (분류 오분류):** Haiku 분류기가 `[서식 19] 참가자 소명서`(별첨), `결과 발표`, `시상금 내역` 같은 행정 페이지를 `BRIEF_EVALUATION + has_scoring_table=true`로 잘못 분류
+     2. **B2 (스태킹):** 실제 심사기준 페이지(p.18~19)와 오분류된 별첨/결과 페이지(p.21, p.117)가 함께 스태킹돼 한 이미지로 합쳐짐
+     3. **B3 (환각):** Sonnet 추출기가 혼란 + 학습 데이터 패턴(과거 연구원 공모)으로 fill-in → "연구원" 평가항목 환각. 100점 합계도 자동 맞춤
+   - **현재 상태: FIXED (2026-06-17)** — 3중 방어:
+     - **B1a:** `page_classifier.py::BRIEF_CLASSIFY_PROMPT`에 BRIEF_EVALUATION NOT 조건 (g)~(j) 추가 (결과 발표·시상금·서식·별첨·부록·소명서 헤더 → BRIEF_ADMIN). 헤더 키워드 명시.
+     - **B1b:** 분류기 응답 스키마에 `page_header_text` 필드 추가 + `_normalise_brief_result()`에 `_NOT_EVAL_HEADER_PATTERNS` 정규식 후처리. LLM이 EVAL로 잘못 답해도 헤더 패턴 매칭 시 BRIEF_ADMIN으로 강등.
+     - **B3:** `config.py::FACILITY_CONFLICT_KEYWORDS` 14개 시설유형 매핑(public→연구원/병원/공장/리조트 등) + `brief_validator.py::_check_facility_keyword_conflict()` — `evaluation_categories.name`/`sub_items`에 충돌 키워드 등장 시 `severity=high` 플래그.
+   - **재발 조건:**
+     - `BRIEF_CLASSIFY_PROMPT`에서 (g)~(j) NOT 조건이나 `page_header_text` 필드를 제거 → B1a/B1b 무력화
+     - `_normalise_brief_result()`의 `_NOT_EVAL_HEADER_PATTERNS` 강등 블록 제거
+     - `FACILITY_CONFLICT_KEYWORDS`에서 시설유형 항목 제거 또는 `_check_facility_keyword_conflict`를 `validate_brief()`에서 호출 제거
+   - **하드코딩 금지 원칙:** 페이지 번호는 절대 하드코딩 안 함 — 모든 룰이 헤더 텍스트 또는 시설유형 키워드 기반.
+   - **진단 방법:**
+     1. `_brief.json`의 `page_map`에서 각 페이지 `page_header_text` 확인 → "결과 발표"/"시상금"/"[서식"/"별첨"/"소명서" 포함 페이지가 BRIEF_EVALUATION이면 분류 오류
+     2. `_brief.json.validation.flags`에 `facility_keyword_conflict` 플래그가 보이면 PDF와 대조 필수
+     3. 발견 시 `app_settings.json`의 `model_id_classify`가 최신 Haiku인지 확인 후 재분석
+
 ---
 
 ### 🔴 운영 주의 — GCP 재배포 누락

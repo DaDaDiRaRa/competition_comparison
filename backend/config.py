@@ -720,6 +720,41 @@ FACILITY_AXIS_OVERRIDES: dict[str, dict[str, dict]] = {
     },
 }
 
+# ── 시설유형 충돌 키워드 (LLM 환각 검증) ──────────────────────────────────────
+# 지침서 추출 결과(예: brief_evaluation.evaluation_categories[*].sub_items)에
+# 시설유형과 충돌하는 키워드가 나오면 LLM 환각 가능성 — brief_validator에서 경고.
+#
+# 영등포구 청사(public) 케이스: 페이지 18 심사기준이 정상 추출되어야 하는데
+# LLM이 "본 연구원의 특성에 맞는...", "연구원의 전체성 표현" 같은
+# 학습 데이터의 연구원 공모 패턴을 환각으로 섞어넣음. 청사 공모에 "연구원"
+# 단어가 평가항목에 나올 수 없으므로 충돌 키워드로 감지 가능.
+#
+# 값은 정규식 패턴 문자열. 한국어 단어 경계가 모호하므로 부분 일치(\b 미사용).
+# 경계 모호 단어("학교"가 "유학교"에 매치 등)는 명확한 형태로 좁힘.
+FACILITY_CONFLICT_KEYWORDS: dict[str, list[str]] = {
+    "public":         ["연구원", "연구소", "병원", "공장", "산업단지", "리조트", "오피스텔", "백화점"],
+    "residential":    ["청사", "연구원", "병원", "공장", "학교", "호텔"],
+    "office":         ["청사", "연구원", "병원", "학교", "호텔"],
+    "transport":      ["청사", "연구원", "병원", "공장", "학교", "호텔"],
+    "commercial":     ["청사", "연구원", "병원", "공장", "학교"],
+    "cultural":       ["청사", "연구원", "병원", "공장"],
+    "hospitality":    ["청사", "연구원", "병원", "공장"],
+    "education":      ["청사", "병원", "공장", "호텔", "백화점"],
+    "industrial":     ["청사", "연구원", "병원", "학교", "호텔"],
+    "medical":        ["청사", "연구원", "공장", "학교", "호텔"],
+    "reconstruction": ["청사", "연구원", "공장", "학교", "호텔"],
+    "alternative":    ["청사", "연구원", "공장", "학교", "호텔"],
+    # masterplan / mixed_use 는 거의 모든 시설을 포함할 수 있어 충돌 키워드 없음
+    "masterplan":     [],
+    "mixed_use":      [],
+}
+
+
+def facility_conflict_keywords(facility_type: str) -> list[str]:
+    """시설유형에 충돌하는 키워드 목록 (없으면 빈 리스트)."""
+    return FACILITY_CONFLICT_KEYWORDS.get(facility_type, [])
+
+
 # ── Rubric 버전 관리 ──────────────────────────────────────────────────────────
 # rubric 개정 시 버전을 올리고 아래에 변경 이력을 남긴다.
 # comparison.json / deep.json / diagnosis.json에 rubric_version 필드로 기록되어

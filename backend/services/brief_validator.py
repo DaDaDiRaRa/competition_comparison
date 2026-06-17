@@ -21,6 +21,8 @@ TODO v2 (LLM 판단 필요):
 """
 from __future__ import annotations
 
+from config import facility_conflict_keywords
+
 # ── 상수 ──────────────────────────────────────────────────────────────────────
 _CONFIDENCE_LOW = 0.55      # 이 미만이면 low_confidence 플래그
 _AREA_TOLERANCE = 0.12      # 12% 이내 오차는 허용 (공용면적·구조체 allowance)
@@ -33,6 +35,7 @@ _CHECKED_RULES = [
     "omission",
     "area_cross_check",
     "low_confidence",
+    "facility_keyword_conflict",
     # TODO v2: "semantic_conflict",
 ]
 
@@ -283,6 +286,58 @@ def _check_area_cross(brief_data: dict) -> list[dict]:
     return flags
 
 
+def _check_facility_keyword_conflict(brief_data: dict) -> list[dict]:
+    """시설유형과 충돌하는 키워드가 brief_evaluation에 나오면 LLM 환각 경고.
+
+    영등포구 청사(public) 사례: page 18 평가항목 sub_items에 "본 연구원의 특성",
+    "연구원의 전체성" 같은 학습 데이터 환각이 섞임. 청사 공모에 평가기준이
+    "연구원" 단어를 포함할 수 없으므로 충돌로 감지.
+
+    검사 범위: brief_evaluation.evaluation_categories[*]의 name + sub_items.
+    competition_name이나 sites.facilities 같은 메타 필드는 검사하지 않음
+    (실제로 다른 시설을 가리키는 정상 표현일 수 있음).
+    """
+    flags: list[dict] = []
+    facility_type = (brief_data.get("_brief_meta") or {}).get("facility_type", "")
+    keywords = facility_conflict_keywords(facility_type)
+    if not keywords:
+        return flags
+
+    be = _first(brief_data, "brief_evaluation")
+    categories = [c for c in be.get("evaluation_categories", []) if isinstance(c, dict)]
+    if not categories:
+        return flags
+
+    # category name + sub_items 텍스트만 모음 — 평가기준에 나오면 환각 가능성
+    texts: list[tuple[str, str]] = []  # (text, location)
+    for idx, cat in enumerate(categories):
+        name = cat.get("name") or ""
+        if name:
+            texts.append((name, f"brief_evaluation.evaluation_categories[{idx}].name"))
+        for si_idx, si in enumerate(cat.get("sub_items") or []):
+            if isinstance(si, str) and si:
+                texts.append((si, f"brief_evaluation.evaluation_categories[{idx}].sub_items[{si_idx}]"))
+
+    # 키워드별 매치 집계 — 같은 키워드 여러 번 매치돼도 한 번만 경고
+    matched: dict[str, list[str]] = {}  # keyword → [snippet1, snippet2, ...]
+    for text, location in texts:
+        for kw in keywords:
+            if kw in text:
+                matched.setdefault(kw, []).append(text[:40])
+                break  # 한 텍스트당 첫 키워드만 (중복 경고 방지)
+
+    for kw, snippets in matched.items():
+        flags.append(_flag(
+            "facility_keyword_conflict", "high",
+            f"시설유형 '{facility_type}'과 충돌하는 키워드 '{kw}' 발견 — "
+            f"LLM 환각 의심. 예: \"{snippets[0]}...\" "
+            f"(총 {len(snippets)}건). 심사기준 추출 결과를 PDF와 대조 권장.",
+            "brief_evaluation.evaluation_categories",
+        ))
+
+    return flags
+
+
 def _check_low_confidence(brief_data: dict) -> list[dict]:
     """page_map 분류 신뢰도 낮은 페이지 검출."""
     flags: list[dict] = []
@@ -329,6 +384,7 @@ def validate_brief(brief_data: dict, requirements: dict) -> dict:
     flags.extend(_check_duplicate(requirements))
     flags.extend(_check_omission(brief_data, requirements))
     flags.extend(_check_area_cross(brief_data))
+    flags.extend(_check_facility_keyword_conflict(brief_data))
     flags.extend(_check_low_confidence(brief_data))
 
     summary = {"high": 0, "medium": 0, "low": 0}

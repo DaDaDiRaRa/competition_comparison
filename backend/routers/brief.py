@@ -222,6 +222,13 @@ async def analyze_brief(
             yield sse({"type": "done", "step": "brief_reqs", "_timestamp": ts})
 
             # ── 4. 검증 (결정론적, LLM 없음) ───────────────────────────────
+            # validate_brief()가 facility_type을 사용하므로 _brief_meta를 먼저 설정
+            brief_data["_brief_meta"] = {
+                "brief_id":      brief_id,
+                "facility_type": facility_type,
+                "brief_name":    brief_name.strip() or "",
+                "analyzed_at":   time.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
             yield sse({
                 "type": "stage", "stage": "validate",
                 "msg": "지침서 검증 중", "_timestamp": ts,
@@ -246,14 +253,6 @@ async def analyze_brief(
                 "msg": "결과 저장 중 (JSON · MD · xlsx)", "_timestamp": ts,
             })
             briefs_dir = _briefs_dir()
-
-            # 목록 API 파싱용 메타 — _brief.json 내부에 포함
-            brief_data["_brief_meta"] = {
-                "brief_id":      brief_id,
-                "facility_type": facility_type,
-                "brief_name":    brief_name.strip() or "",
-                "analyzed_at":   time.strftime("%Y-%m-%dT%H:%M:%S"),
-            }
 
             json_path  = briefs_dir / f"{brief_id}.json"
             md_path    = briefs_dir / f"{brief_id}.md"

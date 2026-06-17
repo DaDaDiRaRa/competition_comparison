@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import re
 from pathlib import Path
 
 from config import settings, PAGE_TYPES, BRIEF_PAGE_TYPES
@@ -228,14 +229,20 @@ BRIEF_PAGE_TYPES:
 - BRIEF_DESIGN_GUIDE: 기타 설계 지침 (폴백). ONLY use when NONE of the four specific types above apply. If facade/material/color signals OR sustainability/certification signals are present, choose the specific type instead.
 - BRIEF_TECHNICAL: 기술 기준. Structural requirements, MEP specifications, fire safety, seismic standards, smart building criteria.
 - BRIEF_REGULATIONS: 법규 기준. Zoning district, building coverage ratio (건폐율), floor area ratio (용적률), height restrictions, setback rules — legal codes and ordinances.
-- BRIEF_EVALUATION: 심사 기준 배점표. REQUIRED: an actual TABLE whose ROWS are evaluation categories (구분/항목) \
+- BRIEF_EVALUATION: 심사 기준 배점표. REQUIRED (ALL must hold): \
+(1) page header/title contains explicit evaluation keyword such as "심사기준", "심사평가", "평가항목", "심사 주안점", "배점표" — NOT just any page that happens to have numbers, \
+(2) an actual TABLE whose ROWS are evaluation categories (구분/항목 like 배치계획, 공간계획, 기술계획, 디자인, 공공성, etc.) \
 AND COLUMNS include 비중/배점/점수 with numeric values that together sum to approximately 100. \
 NOT BRIEF_EVALUATION if: (a) only prose description of evaluation process with no actual table, \
 (b) page is an evaluation SCHEDULE (심사 일정/일자) → BRIEF_ADMIN, \
 (c) page lists 제출 서류 with checkboxes → BRIEF_SUBMISSION, \
 (d) jury composition (심사위원 명단/구성) without a scoring table → BRIEF_ADMIN, \
 (e) table exists but rows are dates/documents/persons, not evaluation categories, \
-(f) page is a participant/firm list (참여자 명단, 참가업체 목록, 공모 참여자, 등록업체) → BRIEF_ADMIN.
+(f) page is a participant/firm list (참여자 명단, 참가업체 목록, 공모 참여자, 등록업체) → BRIEF_ADMIN, \
+(g) page header contains "결과 발표", "결과 공고", "시상식", "시상금", "보상비", "입상작", "당선작" → BRIEF_ADMIN (results/awards section, not scoring criteria), \
+(h) page header contains "[서식", "별첨", "부록", "Appendix", "Form", "참가자 소명서", "검토 의견서", "확인서", "동의서", "지원서" → BRIEF_ADMIN (appendix form, even if it has a table), \
+(i) table exists but columns are 평가항목/세부사항/검토의견/소명의견 (review opinion columns, not scoring weights) → BRIEF_ADMIN (review form, not evaluation criteria), \
+(j) page is a section heading or table-of-contents fragment with no real scoring table → use the section's content type or BRIEF_ADMIN.
 - BRIEF_SUBMISSION: 제출 기준. Required drawing list, file format specifications (DWG/PDF/BIM), submission method, document scale requirements.
 - BRIEF_ADMIN: 행정 절차. Q&A schedule, contact information, amendment notices, administrative forms, jury roster, participant/firm lists (참여자 명단, 참가업체 목록). No design content — skip extraction.
 
@@ -261,10 +268,41 @@ BRIEF_PROJECT_INFO vs BRIEF_OVERVIEW vs BRIEF_PROGRAM — decision guide:
 
 RESPOND JSON ONLY as an array, one object per image:
 [
-  {"page":1,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_scoring_table":false,"has_text_guidelines":true},
-  {"page":2,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_scoring_table":true,"has_text_guidelines":false}
+  {"page":1,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_scoring_table":false,"has_text_guidelines":true,"page_header_text":""},
+  {"page":2,"type":"BRIEF_PAGE_TYPE","confidence":0.0,"has_area_table":false,"has_scoring_table":true,"has_text_guidelines":false,"page_header_text":""}
 ]
-has_scoring_table: true if the page has a table with 비중/배점/점수 columns or values summing to ~100."""
+has_scoring_table: true if the page has a table with 비중/배점/점수 columns or values summing to ~100.
+page_header_text: the page's main heading/title text, at most 60 characters. Examples: "심사기준", "[표 06] 심사평가 주안점", "17. 설계공모 결과 발표", "[서식 19] 기술분야검토 결과 참가자 소명서", "5. 사업개요". Used to disambiguate ambiguous pages — be precise, copy the actual text shown at the top of the page."""
+
+
+# 헤더 텍스트로 BRIEF_EVALUATION 오분류를 차단하는 키워드 목록.
+# 페이지 번호 무관 — 헤더에 이 키워드가 있으면 EVAL이 아닌 행정/제출 페이지.
+# 영등포구 케이스: p.21 "17. 설계공모 결과 발표", p.117 "[서식 19] ... 참가자 소명서"가
+# 모두 has_scoring_table=true로 잘못 분류돼 환각의 근본 원인이 됨.
+_NOT_EVAL_HEADER_PATTERNS = [
+    re.compile(p) for p in (
+        r"결과\s*발표",        # "설계공모 결과 발표"
+        r"결과\s*공고",        # "심사 결과 공고"
+        r"시상\s*식",          # "시상식"
+        r"시상금|시상\s*내역",  # "시상금", "시상 내역"
+        r"보상비",             # "입상작 및 보상비"
+        r"입상작",             # "입상작 선정"
+        r"당선작",             # "당선작 발표"
+        r"\[\s*서식",          # "[서식 19]"
+        r"별\s*첨",            # "별첨"
+        r"부\s*록",            # "부록"
+        r"\bAppendix\b",
+        r"\bForm\b",
+        r"소\s*명\s*서",        # "참가자 소명서"
+        r"검토\s*의견서",       # "전문위원 검토 의견서"
+        r"확인\s*서",          # "참가확인서"
+        r"동의\s*서",          # "정보활용 동의서"
+        r"신청\s*서",          # "참가신청서"
+        r"지원\s*서",          # "지원서"
+        r"공\s*고\b",          # "공고"
+        r"공고\s*문",          # "공고문"
+    )
+]
 
 
 def _normalise_brief_result(raw: dict) -> dict:
@@ -278,6 +316,7 @@ def _normalise_brief_result(raw: dict) -> dict:
         "has_rendering": raw.get("has_rendering", False),
         "has_table": raw.get("has_area_table", raw.get("has_table", False)),
         "has_scoring_table": raw.get("has_scoring_table", False),
+        "page_header_text": (raw.get("page_header_text") or "").strip(),
     }
     if result["primary_type"] not in BRIEF_PAGE_TYPES:
         result["primary_type"] = "BRIEF_DESIGN_GUIDE"
@@ -294,6 +333,15 @@ def _normalise_brief_result(raw: dict) -> dict:
         result["primary_type"] = "BRIEF_EVALUATION"
     elif result["primary_type"] == "BRIEF_EVALUATION" and not result.get("has_scoring_table", False):
         result["primary_type"] = "BRIEF_ADMIN"
+    # ③ 헤더 키워드 강등 (B1b): BRIEF_EVALUATION으로 분류됐어도 페이지 헤더에
+    #    결과발표/시상비/별첨/서식/소명서 등 NOT 키워드가 있으면 BRIEF_ADMIN으로 강등.
+    #    LLM이 has_scoring_table=true로 잘못 보고해도 헤더 텍스트로 안전망 발동.
+    #    페이지 번호 하드코딩 없음 — 헤더 텍스트만 검사.
+    if result["primary_type"] == "BRIEF_EVALUATION" and result["page_header_text"]:
+        header = result["page_header_text"]
+        if any(p.search(header) for p in _NOT_EVAL_HEADER_PATTERNS):
+            result["primary_type"] = "BRIEF_ADMIN"
+            result["has_scoring_table"] = False
     return result
 
 
