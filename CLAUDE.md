@@ -411,9 +411,11 @@ Test with curl or Postman by uploading files to:
 
 1. **BRIEF_PROGRAM 스태킹 이미지 크기 한도 (400 Bad Request)**
    - **증상:** `_brief.json`의 `brief_program[0].error` = "Client error '400 Bad Request'", `area_rows: []`. Sheet 5 "면적표상세" 미생성, `## 2. 면적 프로그램` 공백.
-   - **원인:** `_stack_images_vertically()`가 PNG를 반환하면 5페이지 기준 7~10MB → Anthropic 5MB 한도 초과.
-   - **현재 상태: FIXED** — JPEG(quality=85) 출력으로 변경. `_image_block()`에 JPEG 마법 바이트 감지 추가.
-   - **재발 조건:** `_stack_images_vertically()` 포맷을 PNG로 되돌리거나, `_image_block()`의 포맷 감지 코드를 제거하면 즉시 재발.
+   - **원인(1):** `_stack_images_vertically()`가 PNG를 반환하면 5페이지 기준 7~10MB → Anthropic 5MB 한도 초과.
+   - **원인(2):** JPEG 변환 후에도 **픽셀 한도 초과** 가능 — Anthropic API는 한 변이 8192px를 초과하면 400 반환. A4 portrait 5페이지 at 150 DPI = 1240×8770px → 초과. `_STACK_MAX_DIM = 7500` 제한으로 수정.
+   - **원인(3):** 스태킹 실패 시 **에러 폴백 없음** — `precomputed_program`이 에러 포함 상태로 세팅되어 35개 페이지 전부 개별 추출이 차단됨. 에러 시 `precomputed_program = None` → 개별 추출로 폴백 추가.
+   - **현재 상태: FIXED (2026-06-17)** — ① JPEG 출력 + ② 7500px 픽셀 한도 + ③ 에러 시 per-page 폴백. `safe_encode_image()`의 `fitz.Pixmap(io.BytesIO(...))` → `fitz.Pixmap(bytes)` BytesIO 버그도 수정.
+   - **재발 조건:** `_stack_images_vertically()` 포맷을 PNG로 되돌리거나, `_STACK_MAX_DIM` 제한을 제거하거나, 폴백 로직(`precomputed_program = None`)을 제거하면 재발.
    - **진단 방법:** 재발 시 GCS `_briefs/*.json`에서 `brief_program[0]` 확인 → `"error": "400"` 여부.
 
 1. **BRIEF_EVALUATION 비연속 페이지 스태킹 → 심사기준 누락**
