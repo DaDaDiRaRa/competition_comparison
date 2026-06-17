@@ -694,7 +694,9 @@ def _b64(img_bytes: bytes) -> str:
 
 
 def _image_block(img_bytes: bytes) -> dict:
-    safe_bytes, fmt = safe_encode_image(img_bytes, fmt="png")
+    # JPEG magic bytes: FF D8 FF — 스태킹 이미지처럼 JPEG로 들어오면 올바른 fmt 전달
+    input_fmt = "jpeg" if img_bytes[:3] == b'\xff\xd8\xff' else "png"
+    safe_bytes, fmt = safe_encode_image(img_bytes, fmt=input_fmt)
     return {
         "type": "image",
         "source": {
@@ -731,7 +733,7 @@ def _stack_images_vertically(images_bytes: list[bytes]) -> bytes:
         canvas.paste(img, (0, y))
         y += img.height
     buf = io.BytesIO()
-    canvas.save(buf, format="PNG")
+    canvas.save(buf, format="JPEG", quality=85, optimize=True)
     return buf.getvalue()
 
 
