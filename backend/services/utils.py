@@ -332,7 +332,7 @@ def safe_encode_image(img_bytes: bytes, fmt: str = "png", max_bytes: int = 4_500
 
     import fitz
 
-    pix = fitz.Pixmap(io.BytesIO(img_bytes))
+    pix = fitz.Pixmap(img_bytes)
 
     jpeg_bytes = pix.tobytes("jpeg", jpg_quality=85)
     if len(jpeg_bytes) <= max_bytes:

@@ -13,12 +13,15 @@ data_extractor.py — PDF 페이지별 설계 데이터 추출
 import asyncio
 import base64
 import io
+import logging
 import json
 from pathlib import Path
 
 from config import settings, axes_keys_for
 from services.llm_client import call_messages
 from services.utils import get_page_text, ocr_page, parse_json_response, rasterize_pdf, rasterize_page_tiled, safe_encode_image
+
+logger = logging.getLogger(__name__)
 
 _BRIEF_REQ_SYSTEM = (
     "You are an architectural competition brief analyst. "
@@ -719,8 +722,14 @@ def _call_claude(content: list, max_tokens: int = 4000) -> str:
 
 
 # ── BRIEF_EVALUATION 다중 페이지 수직 스택 ────────────────────────────────────
+_STACK_MAX_DIM = 7500  # Anthropic API 8192px 한도보다 여유 있게 제한
+
 def _stack_images_vertically(images_bytes: list[bytes]) -> bytes:
-    """여러 PNG bytes를 수직으로 이어붙여 단일 PNG bytes 반환."""
+    """여러 이미지를 수직으로 이어붙여 JPEG bytes 반환.
+
+    Anthropic API 는 한 변이 8192px를 초과하는 이미지를 거부(400)한다.
+    스택 후 최장 변이 _STACK_MAX_DIM을 초과하면 비율 유지 축소.
+    """
     from PIL import Image
     imgs = [Image.open(io.BytesIO(b)) for b in images_bytes]
     max_w = max(img.width for img in imgs)
@@ -732,6 +741,14 @@ def _stack_images_vertically(images_bytes: list[bytes]) -> bytes:
             img = img.convert("RGB")
         canvas.paste(img, (0, y))
         y += img.height
+    # Anthropic 픽셀 한도 초과 방지
+    longest = max(canvas.width, canvas.height)
+    if longest > _STACK_MAX_DIM:
+        scale = _STACK_MAX_DIM / longest
+        canvas = canvas.resize(
+            (int(canvas.width * scale), int(canvas.height * scale)),
+            Image.LANCZOS,
+        )
     buf = io.BytesIO()
     canvas.save(buf, format="JPEG", quality=85, optimize=True)
     return buf.getvalue()
@@ -1018,13 +1035,21 @@ async def extract_pdf(
                 _first_data = {k: v for k, v in _data.items() if k != "area_rows"}
             _merged_rows.extend(_data.get("area_rows") or [])
 
-        _first_data["area_rows"] = _merged_rows
-        precomputed_program = {
-            "page": prog_page_nums[0],
-            "type": "BRIEF_PROGRAM",
-            "data": _first_data,
-            "_stacked_pages": prog_page_nums,
-        }
+        # 전체 청크 에러(area_rows 0개 + 첫 청크 error key) → 개별 페이지 추출 폴백
+        if not _merged_rows and "error" in _first_data:
+            logger.warning(
+                "BRIEF_PROGRAM stacking 실패 (%d 청크 전부 에러) → 페이지별 개별 추출로 폴백",
+                len(_prog_chunks),
+            )
+            precomputed_program = None
+        else:
+            _first_data["area_rows"] = _merged_rows
+            precomputed_program = {
+                "page": prog_page_nums[0],
+                "type": "BRIEF_PROGRAM",
+                "data": _first_data,
+                "_stacked_pages": prog_page_nums,
+            }
 
     stacked_prog_set: set[int] = set(prog_page_nums) if precomputed_program else set()
 
