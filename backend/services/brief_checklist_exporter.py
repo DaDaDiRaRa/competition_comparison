@@ -428,7 +428,31 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     # ══════════════════════════════════════════════════════════════════════════
     L.append("\n## 2. 면적 프로그램")
 
-    if a["area_table"]:
+    _LEVEL_INDENT_MD = {"site_total": 0, "facility": 1, "bureau": 2, "division": 3, "space": 4}
+    _LEVEL_LABEL_MD  = {0: "부지", 1: "시설", 2: "영역", 3: "과", 4: "세부"}
+
+    if a["area_rows"]:
+        for ar in a["area_rows"]:
+            if not isinstance(ar, dict):
+                continue
+            rt      = ar.get("row_type") or "space"
+            level   = _LEVEL_INDENT_MD.get(rt, 4)
+            lbl     = _LEVEL_LABEL_MD.get(level, "")
+            indent  = "  " * level
+            name    = ar.get("name") or ""
+            area_raw = ar.get("area") if ar.get("area") is not None else ar.get("subtotal_area")
+            area_str = _v(area_raw, " ㎡") if area_raw is not None else ""
+            notes   = ar.get("notes") or ""
+            dept    = ar.get("dept") or ""
+            sub_flag = " [소계]" if ar.get("is_subtotal") else ""
+            extra   = ""
+            if notes:
+                extra += f"  # {notes}"
+            if dept:
+                extra += f"  소관:{dept}"
+            L.append(f"{indent}- [{lbl}] {name}: {area_str}{sub_flag}{extra}")
+
+    elif a["area_table"]:
         for grp in a["area_table"]:
             if not isinstance(grp, dict):
                 continue
