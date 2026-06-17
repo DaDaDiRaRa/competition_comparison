@@ -335,7 +335,7 @@ Test with curl or Postman by uploading files to:
 - **Report Generation Rule:** `report_generator.py`, `submission_report_generator.py`, `diagnosis_report_generator.py` 모두 Claude API 호출 금지. 기존 데이터를 HTML로 렌더링만.
 - **Prompt Templating Rule:** `comparator.py` prompt templates use `.replace("{key}", value)` — JSON braces would cause `KeyError` with `.format()`.
 - **DPI Settings:** Classify 72 DPI (Haiku, fast), extract 120 DPI (Sonnet). 150→120 변경으로 이미지 토큰 약 36% 절감, OCR 품질 유지선.
-- **Model split:** 분류는 `model_id_classify`(기본 `claude-haiku-4-5-20251001`), 추출/비교/진단은 `model_id`(기본 `claude-sonnet-4-6`). 분류는 단순 라벨링이라 Haiku로 비용·속도 최적화.
+- **Model split:** 분류·추출·비교·진단 모두 `claude-sonnet-4-6`. **분류기는 2026-06-18 Sonnet으로 통일** — Haiku 4.5가 페이지 헤더 텍스트를 일반화/환각하는 케이스 발견(영등포구 청사 케이스: p.18 헤더를 "[표 06] 심사평가 주안점" 대신 "배점 표"로 일반화 → 헤더 기반 후처리 강등 무력화). Sonnet 분류 비용은 페이지당 ~$0.004로 분류 오류로 인한 토큰 손실보다 작음.
 - **CORS:** Vite dev server (5173) and localhost:3000 allowed.
 - **File Naming:** Components PascalCase. API paths kebab-case.
 - **Page Types:** 27개 — 일반 20개 + 재건축 전용 7개(`BUSINESS_VIABILITY`, `AREA_INCREASE`, `VIEW_ANALYSIS`, `COMMUNITY_PROGRAM`, `COMPANY_PORTFOLIO`, `CONSTRUCTION_PLAN`, `UNIT_PLAN_PENTHOUSE`). `PAGE_TYPES_META`에 전체 한국어명 정의.
@@ -437,14 +437,19 @@ Test with curl or Postman by uploading files to:
      1. **B1 (분류 오분류):** Haiku 분류기가 `[서식 19] 참가자 소명서`(별첨), `결과 발표`, `시상금 내역` 같은 행정 페이지를 `BRIEF_EVALUATION + has_scoring_table=true`로 잘못 분류
      2. **B2 (스태킹):** 실제 심사기준 페이지(p.18~19)와 오분류된 별첨/결과 페이지(p.21, p.117)가 함께 스태킹돼 한 이미지로 합쳐짐
      3. **B3 (환각):** Sonnet 추출기가 혼란 + 학습 데이터 패턴(과거 연구원 공모)으로 fill-in → "연구원" 평가항목 환각. 100점 합계도 자동 맞춤
-   - **현재 상태: FIXED (2026-06-17)** — 3중 방어:
-     - **B1a:** `page_classifier.py::BRIEF_CLASSIFY_PROMPT`에 BRIEF_EVALUATION NOT 조건 (g)~(j) 추가 (결과 발표·시상금·서식·별첨·부록·소명서 헤더 → BRIEF_ADMIN). 헤더 키워드 명시.
-     - **B1b:** 분류기 응답 스키마에 `page_header_text` 필드 추가 + `_normalise_brief_result()`에 `_NOT_EVAL_HEADER_PATTERNS` 정규식 후처리. LLM이 EVAL로 잘못 답해도 헤더 패턴 매칭 시 BRIEF_ADMIN으로 강등.
+   - **현재 상태: FIXED (2026-06-17 ~ 2026-06-18)** — 5중 방어:
+     - **B1a:** `page_classifier.py::BRIEF_CLASSIFY_PROMPT`에 BRIEF_EVALUATION NOT 조건 (g)~(j) 추가 (결과 발표·시상금·**상품 및 내용**·서식·별첨·부록·소명서 헤더 → BRIEF_ADMIN). 헤더 키워드 명시.
+     - **B1b:** 분류기 응답 스키마에 `page_header_text` 필드 추가 + `_normalise_brief_result()`에 `_NOT_EVAL_HEADER_PATTERNS` 정규식 후처리 (`상품 및 내용`, `상품` 단독 패턴 포함). LLM이 EVAL로 잘못 답해도 헤더 패턴 매칭 시 BRIEF_ADMIN으로 강등.
+     - **B1c (2026-06-18):** `config.py::MODEL_ID_CLASSIFY`를 Haiku → Sonnet으로 변경. Haiku가 페이지 헤더 텍스트를 일반화/환각하여 B1b의 헤더 후처리가 무력화되는 케이스 발견 (영등포구 청사: p.18 헤더 "[표 06] 심사평가 주안점" 대신 "배점 표"로 일반화). Sonnet은 헤더를 원문 그대로 반환.
      - **B3:** `config.py::FACILITY_CONFLICT_KEYWORDS` 14개 시설유형 매핑(public→연구원/병원/공장/리조트 등) + `brief_validator.py::_check_facility_keyword_conflict()` — `evaluation_categories.name`/`sub_items`에 충돌 키워드 등장 시 `severity=high` 플래그.
+     - **B4 (2026-06-18):** `data_extractor.py::BRIEF_EVALUATION` 추출 프롬프트에 환각 금지 가드 추가. 이미지에 명시되지 않은 카테고리 추출 금지, 흐릴 때 빈 결과 반환 룰, 시설 충돌 키워드 발견 시 카테고리 추출 중단 룰. 추출 단계의 마지막 안전망.
    - **재발 조건:**
      - `BRIEF_CLASSIFY_PROMPT`에서 (g)~(j) NOT 조건이나 `page_header_text` 필드를 제거 → B1a/B1b 무력화
      - `_normalise_brief_result()`의 `_NOT_EVAL_HEADER_PATTERNS` 강등 블록 제거
+     - `_NOT_EVAL_HEADER_PATTERNS`에서 `상품 및 내용`/`상품` 패턴 제거 → p.22 같은 상품 표 재오분류
+     - `MODEL_ID_CLASSIFY`를 Haiku로 되돌리면 헤더 환각으로 B1b 후처리 무력화 → 재발
      - `FACILITY_CONFLICT_KEYWORDS`에서 시설유형 항목 제거 또는 `_check_facility_keyword_conflict`를 `validate_brief()`에서 호출 제거
+     - `data_extractor.py::BRIEF_EVALUATION` 프롬프트의 "환각 금지 (CRITICAL)" 블록 제거 → 추출 단계 안전망 사라짐
    - **하드코딩 금지 원칙:** 페이지 번호는 절대 하드코딩 안 함 — 모든 룰이 헤더 텍스트 또는 시설유형 키워드 기반.
    - **진단 방법:**
      1. `_brief.json`의 `page_map`에서 각 페이지 `page_header_text` 확인 → "결과 발표"/"시상금"/"[서식"/"별첨"/"소명서" 포함 페이지가 BRIEF_EVALUATION이면 분류 오류

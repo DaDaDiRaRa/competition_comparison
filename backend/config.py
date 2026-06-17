@@ -837,7 +837,11 @@ COMPARISON_AXES_META = COMPARISON_AXES_BY_GROUP["redev"]
 COMPARISON_AXES = list(COMPARISON_AXES_META.keys())
 
 MODEL_ID = "claude-sonnet-4-6"
-MODEL_ID_CLASSIFY = "claude-haiku-4-5-20251001"  # 분류는 단순 작업 → Haiku로 비용/속도 최적화
+# 분류 모델: Sonnet으로 통일. Haiku는 페이지 헤더 텍스트를 환각하는 케이스 다수 발견
+# (영등포구 청사 케이스 — Haiku가 p.18 헤더를 "[표 06] 심사평가 주안점" 대신 "배점 표"로 일반화
+# → 헤더 기반 후처리 강등 무력화 → BRIEF_EVALUATION 환각 카테고리 추출).
+# 비용 증가는 페이지당 ~$0.004로 미미하며, 분류 오류로 인한 토큰 손실보다 작음.
+MODEL_ID_CLASSIFY = "claude-sonnet-4-6"
 
 RASTER_DPI_CLASSIFY = 72
 RASTER_DPI_EXTRACT = 120  # 150→120 (이미지 토큰 36% 절감, 도면 OCR 품질 유지선)

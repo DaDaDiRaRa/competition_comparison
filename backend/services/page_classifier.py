@@ -239,7 +239,7 @@ NOT BRIEF_EVALUATION if: (a) only prose description of evaluation process with n
 (d) jury composition (심사위원 명단/구성) without a scoring table → BRIEF_ADMIN, \
 (e) table exists but rows are dates/documents/persons, not evaluation categories, \
 (f) page is a participant/firm list (참여자 명단, 참가업체 목록, 공모 참여자, 등록업체) → BRIEF_ADMIN, \
-(g) page header contains "결과 발표", "결과 공고", "시상식", "시상금", "보상비", "입상작", "당선작" → BRIEF_ADMIN (results/awards section, not scoring criteria), \
+(g) page header contains "결과 발표", "결과 공고", "시상식", "시상금", "보상비", "입상작", "당선작", "상품 및 내용", "상품", "시상 내역" → BRIEF_ADMIN (results/awards/prizes section, not scoring criteria — even if a table is present with monetary amounts that look like scores), \
 (h) page header contains "[서식", "별첨", "부록", "Appendix", "Form", "참가자 소명서", "검토 의견서", "확인서", "동의서", "지원서" → BRIEF_ADMIN (appendix form, even if it has a table), \
 (i) table exists but columns are 평가항목/세부사항/검토의견/소명의견 (review opinion columns, not scoring weights) → BRIEF_ADMIN (review form, not evaluation criteria), \
 (j) page is a section heading or table-of-contents fragment with no real scoring table → use the section's content type or BRIEF_ADMIN.
@@ -288,6 +288,10 @@ _NOT_EVAL_HEADER_PATTERNS = [
         r"보상비",             # "입상작 및 보상비"
         r"입상작",             # "입상작 선정"
         r"당선작",             # "당선작 발표"
+        # 상품/시상 표 — 영등포구 케이스 p.22 "[표 08] 상품 및 내용" 차단용.
+        # "상품"은 수상자 지급 내역(상금·상장)을 가리키며 평가 배점표가 아님.
+        r"상품\s*및\s*내용",   # "[표 08] 상품 및 내용"
+        r"\b상\s*품\b",        # "상품" 단독
         r"\[\s*서식",          # "[서식 19]"
         r"별\s*첨",            # "별첨"
         r"부\s*록",            # "부록"

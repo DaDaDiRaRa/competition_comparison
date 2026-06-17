@@ -602,7 +602,15 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             'when the cell is merged across multiple rows (empty list [] if not merged)\n'
             '- evaluation_categories[].sub_items: list of detailed criteria strings '
             'nested under this category (항목 or 세부 내용); empty list [] if none\n'
-            '- 컬럼명이 비중/배점/점수가 아니어도 수치 컬럼이 합계 ≈ 100이면 배점으로 추출할 것'
+            '- 컬럼명이 비중/배점/점수가 아니어도 수치 컬럼이 합계 ≈ 100이면 배점으로 추출할 것\n'
+            '\n** 환각 금지 (CRITICAL) **\n'
+            '- 이미지에 명시적으로 보이는 텍스트만 추출할 것. 학습 데이터의 유사 공모 패턴으로 카테고리/항목을 채우지 말 것.\n'
+            '- 페이지가 흐리거나 일부만 보여 카테고리를 읽을 수 없으면 evaluation_categories=[] 와 total_points=null로 반환하고, '
+            'disqualification_criteria 첫 항목에 "이미지에서 평가 카테고리를 명확히 식별할 수 없음"이라고 기록할 것.\n'
+            '- 다음 페이지 헤더가 이미지에 보이면 그 페이지는 평가표가 아니므로 카테고리를 추출하지 말 것: '
+            '"결과 발표", "상품 및 내용", "시상", "보상비", "[서식", "별첨", "부록", "소명서", "공고문".\n'
+            '- 카테고리명에 시설 유형 충돌 키워드 (이 공모와 무관한 시설명 — 예: 청사 공모인데 "연구원", "병원", "공장" 등)가 '
+            '보이면 환각 가능성이 매우 높으므로 해당 카테고리는 추출하지 말 것. PDF 텍스트와 정확히 일치하는지 한 번 더 확인.'
         ),
     },
     "BRIEF_SUBMISSION": {
