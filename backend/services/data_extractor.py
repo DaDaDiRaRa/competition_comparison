@@ -945,7 +945,18 @@ async def extract_pdf(
     if is_brief and len(eval_page_nums) >= 2:
         eval_imgs = [pages_by_num[pg] for pg in eval_page_nums if pg in pages_by_num]
         stacked_img = _stack_images_vertically(eval_imgs)
-        _eval_prompt_cfg = EXTRACTION_PROMPTS_BRIEF["BRIEF_EVALUATION"]
+        _base_cfg = EXTRACTION_PROMPTS_BRIEF["BRIEF_EVALUATION"]
+        # 스택 이미지 전용 추가 지침: 페이지 경계를 넘는 병합 셀 인식 강화
+        _stacked_note = (
+            f'\n[주의: 이 이미지는 {len(eval_imgs)}개 연속 페이지를 수직으로 이어붙인 것입니다. '
+            '페이지 경계를 가로질러 표 행이 이어질 수 있습니다. '
+            '배점/비중 값이 보이지 않거나 null인 항목은 바로 위 항목 병합 셀의 연속일 가능성이 높습니다 '
+            '— 그 경우 shared_with에 상위 항목명을 기록하고 points를 null로 두십시오.]'
+        )
+        _eval_prompt_cfg = {
+            **_base_cfg,
+            "instruction": _base_cfg["instruction"] + _stacked_note,
+        }
         precomputed_eval = _extract_page_sync(
             stacked_img, eval_page_nums[0], "BRIEF_EVALUATION", _eval_prompt_cfg
         )

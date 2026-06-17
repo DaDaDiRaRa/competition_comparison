@@ -1023,44 +1023,57 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             shared    = ev.get("shared_with") or []
             sub_items = ev.get("sub_items") or []
             desc      = ev.get("description") or ""
+            has_pts   = pts is not None
 
-            # ── 카테고리 행 ────────────────────────────────────────────────
-            has_pts = pts is not None
+            # 세부 기준 목록 — sub_items 없으면 description을 단일 행으로
+            detail_rows = sub_items if sub_items else ([desc] if desc else [""])
+            n_rows = len(detail_rows)
+
+            # ── Col 1: 항목명 — n_rows 행 세로 병합 ────────────────────────
             c1 = ws2.cell(row=row, column=1, value=name)
             if has_pts:
                 c1.font = _bold
                 c1.fill = _grp_fill
+            c1.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
             c1.border = _border_thin
+            if n_rows > 1:
+                ws2.merge_cells(start_row=row, start_column=1,
+                                end_row=row + n_rows - 1, end_column=1)
+
+            # ── Col 2: 배점 — n_rows 행 세로 병합 ──────────────────────────
             c2 = ws2.cell(row=row, column=2, value=pts)
             if has_pts:
                 c2.font = _bold
                 c2.fill = _grp_fill
-                c2.alignment = _center
+            c2.alignment = _center
+            if isinstance(pts, (int, float)):
                 c2.number_format = _NUM_FMT
             c2.border = _border_thin
+            if n_rows > 1:
+                ws2.merge_cells(start_row=row, start_column=2,
+                                end_row=row + n_rows - 1, end_column=2)
 
+            # ── Col 3: 공유배점 — n_rows 행 세로 병합 ───────────────────────
             shared_text = ("↳ " + ", ".join(shared) + "와 배점 공유") if shared else ""
             c3 = ws2.cell(row=row, column=3, value=shared_text)
+            c3.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
             c3.border = _border_thin
+            if n_rows > 1:
+                ws2.merge_cells(start_row=row, start_column=3,
+                                end_row=row + n_rows - 1, end_column=3)
 
-            # 첫 sub_item 또는 description을 col 4에
-            first_sub = (f"• {_str_item(sub_items[0])}" if sub_items
-                         else (desc or ""))
-            c4 = ws2.cell(row=row, column=4, value=first_sub)
-            c4.alignment = _wrap_top; c4.border = _border_thin
+            # ── Col 4: 세부 기준 — 각 항목 개별 행 ─────────────────────────
+            for i, sub in enumerate(detail_rows):
+                text = _str_item(sub)
+                if text and not text.startswith("•"):
+                    text = f"• {text}"
+                c4 = ws2.cell(row=row + i, column=4, value=text)
+                c4.alignment = _wrap_top
+                c4.border = _border_thin
 
             if isinstance(pts, (int, float)):
                 running_total += pts
-            row += 1
-
-            # ── 나머지 sub_items: col 4에 계속 ────────────────────────────
-            for sub in sub_items[1:]:
-                c = ws2.cell(row=row, column=4, value=f"• {_str_item(sub)}")
-                c.alignment = _wrap_top; c.border = _border_thin
-                ws2.cell(row=row, column=1).border = _border_thin
-                ws2.cell(row=row, column=2).border = _border_thin
-                ws2.cell(row=row, column=3).border = _border_thin
-                row += 1
+            row += n_rows
 
         # 합계 행 — points_sum_warning 시 주황색 경고 강조
         _sum_fill = _warn_fill if e["points_sum_warning"] else _grp_fill
