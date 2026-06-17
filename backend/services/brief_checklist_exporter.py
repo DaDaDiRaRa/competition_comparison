@@ -158,12 +158,28 @@ def _extract_sections(brief_data: dict) -> dict:
         or at.get("site_area_sqm")
         or quant.get("site_area_sqm")
     )
+    # BRIEF_PROJECT_INFO sites 폴백 — 복수 부지면 "부지1: 60% / 부지2: 50%" 형식
+    _bpi_sites = _as_list(bpi, "sites")
+
+    def _bpi_pct(field: str):
+        vals = [
+            (st.get("site_id") or f"부지{i+1}", st.get(field))
+            for i, st in enumerate(_bpi_sites)
+            if isinstance(st, dict) and st.get(field) is not None
+        ]
+        if not vals:
+            return None
+        if len(vals) == 1:
+            return vals[0][1]
+        return " / ".join(f"{sid}: {v}%" for sid, v in vals)
+
     bcr = (
         bp.get("building_coverage_limit_pct")
         or s0.get("building_coverage_limit_pct")
         or br.get("building_coverage_ratio_limit_pct")
         or at.get("building_coverage_limit_pct")
         or quant.get("building_coverage_ratio_pct")
+        or _bpi_pct("building_coverage_pct")
     )
     far = (
         bp.get("floor_area_ratio_limit_pct")
@@ -171,6 +187,7 @@ def _extract_sections(brief_data: dict) -> dict:
         or br.get("floor_area_ratio_limit_pct")
         or at.get("floor_area_ratio_limit_pct")
         or quant.get("floor_area_ratio_pct")
+        or _bpi_pct("floor_area_ratio_pct")
     )
     height       = br.get("height_limit_m") or s0.get("max_height_m") or dg.get("height_limit_m")
     floors_above = bp.get("max_floors_above") or quant.get("floors_above")
@@ -247,6 +264,7 @@ def _extract_sections(brief_data: dict) -> dict:
         "eval": {
             "rows": eval_rows, "total_points": total_points,
             "eval_method": eval_method, "jury": jury, "disqualify": disqualify,
+            "points_sum_warning": bool(be.get("points_sum_warning")),
         },
         "reqs": {
             "requirements": requirements, "special_reqs": special_reqs,
@@ -304,13 +322,15 @@ def _extract_sections(brief_data: dict) -> dict:
 # null 필드도 "(없음)" 명시 → downstream 프로그램이 "누락"과 "미존재"를 구별 가능.
 
 def _v(val: Any, unit: str = "") -> str:
-    """값을 문자열로. None/빈값이면 '(없음)'."""
+    """값을 문자열로. None/빈값이면 '(없음)'. 이미 unit으로 끝나면 중복 추가 안 함."""
     if val is None or val == "" or val == []:
         return "(없음)"
     if isinstance(val, list):
         return ", ".join(str(x) for x in val) or "(없음)"
     s = str(val)
-    return (s + unit) if unit and s != "(없음)" else s
+    if not unit or s == "(없음)" or s.endswith(unit):
+        return s
+    return s + unit
 
 
 def to_markdown(brief_data: dict, validation: dict) -> str:
@@ -637,7 +657,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     """지침서 체크리스트를 Excel(.xlsx) bytes로 반환. 4개 시트."""
     try:
         import openpyxl
-        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
         from openpyxl.utils import get_column_letter
     except ImportError as exc:
         raise RuntimeError(
@@ -672,6 +692,16 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         "medium": PatternFill("solid", fgColor="FFF3CD"),
         "low":    PatternFill("solid", fgColor="D9EDF7"),
     }
+    _warn_fill   = PatternFill("solid", fgColor="FF9900")  # 배점 합계 경고
+    _thin        = Side(style="thin")
+    _border_thin = Border(left=_thin, right=_thin, top=_thin, bottom=_thin)
+    _num_right   = Alignment(horizontal="right", vertical="top")
+    _NUM_FMT     = "#,##0.##"
+
+    def _sep(ws, r: int) -> int:
+        """구분 빈 행 높이를 8pt로 설정하고 다음 행 번호 반환."""
+        ws.row_dimensions[r].height = 8
+        return r + 1
 
     def _write_section_title(ws, title: str, row: int, span: int = 4) -> int:
         c = ws.cell(row=row, column=1, value=title)
@@ -705,10 +735,15 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             c.alignment = _center
         return row + 1
 
-    def _write_kv(ws, label: str, val: Any, row: int, val_end_col: int = 2) -> int:
+    def _write_kv(ws, label: str, val: Any, row: int, val_end_col: int = 2, num_format: str = "") -> int:
         ws.cell(row=row, column=1, value=label).font = _bold
-        c = ws.cell(row=row, column=2, value=_cell_safe(val))
-        c.alignment = _wrap_top
+        raw = _cell_safe(val)
+        c = ws.cell(row=row, column=2, value=raw)
+        if num_format and isinstance(raw, (int, float)):
+            c.number_format = num_format
+            c.alignment = _num_right
+        else:
+            c.alignment = _wrap_top
         if val_end_col > 2:
             ws.merge_cells(start_row=row, start_column=2,
                            end_row=row, end_column=val_end_col)
@@ -731,73 +766,68 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     _SITE_COLS = ["부지ID", "위치", "지역지구", "건축구분", "건축용도", "도입시설",
                   "대지면적(㎡)", "연면적(㎡)", "건폐율(%)", "용적률(%)", "높이(m)",
                   "공개공지(㎡)", "공개공지 조건"]
-    _BPI_SITE_COLS = ["부지ID", "위치", "용도지역/지구", "공모범위", "도입시설",
-                      "대지면적(㎡)", "연면적(㎡)", "건폐율(%)", "용적률(%)", "최고높이(m)",
-                      "공개공지(㎡)", "공개공지 조건"]
     multi_sites = [s for s in a["sites"] if isinstance(s, dict)] if len(a["sites"]) > 1 else []
     bpi_sites_xl = [st for st in pi["sites"] if isinstance(st, dict)]
     has_bpi_xl = bool(bpi_sites_xl or pi["competition_name"] or pi["construction_cost_100m_won"] is not None)
 
-    _span1 = max(
-        len(_SITE_COLS) if multi_sites else 0,
-        len(_BPI_SITE_COLS) if bpi_sites_xl else 0,
-        5,
-    )
+    # BPI 부지는 KV 블록(4열)으로 표시 — BRIEF_PROGRAM 복수부지 테이블이 있으면 그 열수 사용
+    _span1 = max(len(_SITE_COLS) if multi_sites else 0, 4)
     row = _write_section_title(ws1, "1. 면적·프로그램 요구", 1, span=_span1)
     row += 1
 
     # ── 사업 개요 (BRIEF_PROJECT_INFO) ────────────────────────────────────────
     ws1.freeze_panes = "A3"
+    ws1.print_title_rows = "1:2"
 
     if has_bpi_xl:
         row = _write_subsection(ws1, "사업 개요", row, span=_span1)
+        if pi["competition_name"]:
+            row = _write_kv(ws1, "공모명", pi["competition_name"], row, val_end_col=4)
+            ws1.cell(row=row - 1, column=2).font = Font(bold=True, size=12)
         for label, val in [
-            ("공모명",   pi["competition_name"] or None),
             ("발주처",   pi["organizer"] or None),
             ("공모유형", pi["competition_type"] or None),
         ]:
             if val:
                 row = _write_kv(ws1, label, val, row, val_end_col=4)
-        if bpi_sites_xl:
-            row = _write_header(ws1, _BPI_SITE_COLS, row)
-            for i, st in enumerate(bpi_sites_xl):
-                vals = [
-                    st.get("site_id") or f"부지{i+1}",
-                    st.get("address") or "",
-                    st.get("zoning") or "",
-                    st.get("scope") or "",
-                    ", ".join(st.get("facilities") or []) or "",
-                    _cell_safe(st.get("site_area_sqm")),
-                    _cell_safe(st.get("floor_area_sqm")),
-                    _cell_safe(st.get("building_coverage_pct")),
-                    _cell_safe(st.get("floor_area_ratio_pct")),
-                    _cell_safe(st.get("max_height_m")),
-                    _cell_safe(st.get("open_space_sqm")),
-                    st.get("open_space_notes") or "",
-                ]
-                for ci, v in enumerate(vals, 1):
-                    c = ws1.cell(row=row, column=ci, value=v)
-                    c.alignment = _wrap_top
-                row += 1
+        for i, st in enumerate(bpi_sites_xl):
+            sid = st.get("site_id") or f"부지{i+1}"
+            row = _write_subsection(ws1, sid, row, span=4)
+            for label, val in [
+                ("위치",          st.get("address") or None),
+                ("용도지역/지구", st.get("zoning") or None),
+                ("공모범위",      st.get("scope") or None),
+                ("도입시설",      ", ".join(st.get("facilities") or []) or None),
+                ("대지면적(㎡)", _cell_safe(st.get("site_area_sqm"))),
+                ("연면적(㎡)",   _cell_safe(st.get("floor_area_sqm"))),
+                ("건폐율(%)",    _cell_safe(st.get("building_coverage_pct"))),
+                ("용적률(%)",    _cell_safe(st.get("floor_area_ratio_pct"))),
+                ("최고높이(m)",  _cell_safe(st.get("max_height_m"))),
+                ("공개공지(㎡)", _cell_safe(st.get("open_space_sqm"))),
+                ("공개공지 조건", st.get("open_space_notes") or None),
+            ]:
+                if val is not None and val != "":
+                    row = _write_kv(ws1, label, val, row, val_end_col=4)
+            row += 1
         for label, val in [
             ("예정 공사비 (억원)", pi["construction_cost_100m_won"]),
             ("예정 설계비 (억원)", pi["design_cost_100m_won"]),
             ("공사 기간 (개월)",  pi["construction_period_months"]),
         ]:
             if val is not None:
-                row = _write_kv(ws1, label, val, row, val_end_col=4)
+                row = _write_kv(ws1, label, val, row, val_end_col=4, num_format=_NUM_FMT)
         for title, items in [
             ("예산 산정 기준", pi["budget_notes"]),
             ("특기사항",       pi["special_conditions"]),
         ]:
             if items:
-                row = _write_subsection(ws1, title, row, span=2)
+                row = _write_subsection(ws1, title, row, span=4)
                 for item in items:
                     c = ws1.cell(row=row, column=1, value=f"• {_str_item(item)}")
                     c.alignment = _wrap_top
-                    ws1.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
+                    ws1.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
                     row += 1
-        row += 1
+        row = _sep(ws1, row)
 
     # ── 전체 규모 한도 / 부지별 건축개요 ─────────────────────────────────────
     if multi_sites:
@@ -826,10 +856,12 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                 c = ws1.cell(row=row, column=ci, value=v)
                 c.alignment = _wrap_top
             row += 1
-        row += 1
+        row = _sep(ws1, row)
         row = _write_subsection(ws1, "공통 규모", row, span=4)
         for label, val in [
             ("요구 총 연면적 (㎡)", a["total_fa"]),
+            ("건폐율 한도 (%)",     a["bcr"]),
+            ("용적률 한도 (%)",     a["far"]),
             ("지상 층수",           a["floors_above"]),
             ("지하 층수",           a["floors_below"]),
             ("주차 대수 (대)",      a["parking"]),
@@ -837,7 +869,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             ("예정 설계비",         a["design_fee"] or None),
             ("설계 기간",           a["design_period"] or None),
         ]:
-            row = _write_kv(ws1, label, val, row, val_end_col=4)
+            row = _write_kv(ws1, label, val, row, val_end_col=4, num_format=_NUM_FMT)
     else:
         row = _write_subsection(ws1, "전체 규모 한도", row, span=4)
         for label, val in [
@@ -853,8 +885,8 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             ("예정 설계비",      a["design_fee"] or None),
             ("설계 기간",        a["design_period"] or None),
         ]:
-            row = _write_kv(ws1, label, val, row, val_end_col=4)
-    row += 1
+            row = _write_kv(ws1, label, val, row, val_end_col=4, num_format=_NUM_FMT)
+    row = _sep(ws1, row)
 
     _AT_COLS = ["구분", "기준면적(A)", "계획면적(B)", "비고"]
 
@@ -864,43 +896,59 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         for grp in a["area_table"]:
             if not isinstance(grp, dict):
                 continue
-            # 그룹 행: 굵게 + _grp_fill
+            # 그룹 행: 굵게 + _grp_fill + 테두리
             c = ws1.cell(row=row, column=1, value=grp.get("group_name") or "")
-            c.font = _bold; c.fill = _grp_fill
+            c.font = _bold; c.fill = _grp_fill; c.border = _border_thin
             c2 = ws1.cell(row=row, column=2, value=grp.get("total_area_sqm"))
-            c2.font = _bold; c2.fill = _grp_fill
+            c2.font = _bold; c2.fill = _grp_fill; c2.alignment = _num_right
+            c2.number_format = _NUM_FMT; c2.border = _border_thin
             for ci in (3, 4):
-                ws1.cell(row=row, column=ci).fill = _grp_fill
+                ct = ws1.cell(row=row, column=ci)
+                ct.fill = _grp_fill; ct.border = _border_thin
             row += 1
             for item in (grp.get("items") or []):
                 if not isinstance(item, dict):
                     continue
                 c = ws1.cell(row=row, column=1, value=item.get("name") or "")
                 c.alignment = Alignment(indent=2, vertical="top")
-                ws1.cell(row=row, column=2, value=item.get("area_sqm"))
+                c.border = _border_thin
+                c2 = ws1.cell(row=row, column=2, value=item.get("area_sqm"))
+                c2.alignment = _num_right; c2.number_format = _NUM_FMT; c2.border = _border_thin
                 # column 3 = 계획면적(B) — 빈칸 (설계자 입력용)
-                ws1.cell(row=row, column=4, value=item.get("notes") or "")
+                c3 = ws1.cell(row=row, column=3)
+                c3.alignment = _num_right; c3.number_format = _NUM_FMT; c3.border = _border_thin
+                c4 = ws1.cell(row=row, column=4, value=item.get("notes") or "")
+                c4.border = _border_thin
                 row += 1
                 for sub in (item.get("sub_items") or []):
                     if not isinstance(sub, dict):
                         continue
                     c = ws1.cell(row=row, column=1, value=sub.get("name") or "")
                     c.alignment = Alignment(indent=4, vertical="top")
-                    ws1.cell(row=row, column=2, value=sub.get("area_sqm"))
-                    ws1.cell(row=row, column=4, value=sub.get("notes") or "")
+                    c.border = _border_thin
+                    c2 = ws1.cell(row=row, column=2, value=sub.get("area_sqm"))
+                    c2.alignment = _num_right; c2.number_format = _NUM_FMT; c2.border = _border_thin
+                    c3 = ws1.cell(row=row, column=3)
+                    c3.alignment = _num_right; c3.number_format = _NUM_FMT; c3.border = _border_thin
+                    c4 = ws1.cell(row=row, column=4, value=sub.get("notes") or "")
+                    c4.border = _border_thin
                     row += 1
-        row += 1
+        row = _sep(ws1, row)
         if a["shared_areas"]:
             row = _write_subsection(ws1, "공용·공동 면적", row, span=4)
             row = _write_header(ws1, _AT_COLS, row)
             for sa in a["shared_areas"]:
                 if not isinstance(sa, dict):
                     continue
-                ws1.cell(row=row, column=1, value=sa.get("name") or "")
-                ws1.cell(row=row, column=2, value=sa.get("area_sqm"))
-                ws1.cell(row=row, column=4, value=sa.get("notes") or "")
+                c1 = ws1.cell(row=row, column=1, value=sa.get("name") or "")
+                c1.border = _border_thin
+                c2 = ws1.cell(row=row, column=2, value=sa.get("area_sqm"))
+                c2.alignment = _num_right; c2.number_format = _NUM_FMT; c2.border = _border_thin
+                c3 = ws1.cell(row=row, column=3); c3.border = _border_thin
+                c4 = ws1.cell(row=row, column=4, value=sa.get("notes") or "")
+                c4.border = _border_thin
                 row += 1
-            row += 1
+            row = _sep(ws1, row)
     elif a["rooms"]:
         # 구 경로 폴백
         row = _write_subsection(ws1, "실별 면적 프로그램", row, span=5)
@@ -917,7 +965,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             ws1.cell(row=row, column=4, value=rm.get("floor") or "")
             ws1.cell(row=row, column=5, value=rm.get("notes") or "")
             row += 1
-        row += 1
+        row = _sep(ws1, row)
 
     if not a["area_table"] and a["zones"]:
         row = _write_subsection(ws1, "존 구성", row, span=2)
@@ -927,7 +975,21 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             ws1.cell(row=row, column=2, value=z.get("area_sqm"))
             row += 1
 
-    _auto_width(ws1)
+    # Sheet 1 열 너비: A(레이블)=16, B(값)=55 고정 — 면적표·KV 블록 기준
+    ws1.column_dimensions["A"].width = 16
+    ws1.column_dimensions["B"].width = 55
+    ws1.column_dimensions["C"].width = 14
+    ws1.column_dimensions["D"].width = 14
+    # BRIEF_PROGRAM 복수부지 테이블(E열 이후)만 자동 조정
+    for col in ws1.columns:
+        letter = get_column_letter(col[0].column)
+        if letter in ("A", "B", "C", "D"):
+            continue
+        max_len = max(
+            (len(str(cell.value)) for cell in col if cell.value is not None),
+            default=6,
+        )
+        ws1.column_dimensions[letter].width = max(min(max_len + 4, 40), 10)
 
     # ── Sheet 2: 심사기준 ─────────────────────────────────────────────────────
     ws2 = wb.create_sheet("2.심사기준")
@@ -935,14 +997,15 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     row = _write_section_title(ws2, "2. 심사기준 (배점표)", 1, span=_S2_SPAN)
     row += 1
     ws2.freeze_panes = "A3"
+    ws2.print_title_rows = "1:2"
 
     for label, val in [
         ("총 배점",    e["total_points"]),
         ("평가 방법",  e["eval_method"] or None),
         ("심사단 구성", e["jury"] or None),
     ]:
-        row = _write_kv(ws2, label, val, row, val_end_col=_S2_SPAN)
-    row += 1
+        row = _write_kv(ws2, label, val, row, val_end_col=_S2_SPAN, num_format=_NUM_FMT)
+    row = _sep(ws2, row)
 
     if e["rows"]:
         row = _write_header(ws2, ["항목명", "배점", "공유 배점", "세부 기준"], row)
@@ -967,20 +1030,24 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             if has_pts:
                 c1.font = _bold
                 c1.fill = _grp_fill
+            c1.border = _border_thin
             c2 = ws2.cell(row=row, column=2, value=pts)
             if has_pts:
                 c2.font = _bold
                 c2.fill = _grp_fill
                 c2.alignment = _center
+                c2.number_format = _NUM_FMT
+            c2.border = _border_thin
 
             shared_text = ("↳ " + ", ".join(shared) + "와 배점 공유") if shared else ""
-            ws2.cell(row=row, column=3, value=shared_text)
+            c3 = ws2.cell(row=row, column=3, value=shared_text)
+            c3.border = _border_thin
 
             # 첫 sub_item 또는 description을 col 4에
             first_sub = (f"• {_str_item(sub_items[0])}" if sub_items
                          else (desc or ""))
             c4 = ws2.cell(row=row, column=4, value=first_sub)
-            c4.alignment = _wrap_top
+            c4.alignment = _wrap_top; c4.border = _border_thin
 
             if isinstance(pts, (int, float)):
                 running_total += pts
@@ -989,16 +1056,24 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             # ── 나머지 sub_items: col 4에 계속 ────────────────────────────
             for sub in sub_items[1:]:
                 c = ws2.cell(row=row, column=4, value=f"• {_str_item(sub)}")
-                c.alignment = _wrap_top
+                c.alignment = _wrap_top; c.border = _border_thin
+                ws2.cell(row=row, column=1).border = _border_thin
+                ws2.cell(row=row, column=2).border = _border_thin
+                ws2.cell(row=row, column=3).border = _border_thin
                 row += 1
 
-        # 합계 행
-        ws2.cell(row=row, column=1, value="합  계").font = _bold
+        # 합계 행 — points_sum_warning 시 주황색 경고 강조
+        _sum_fill = _warn_fill if e["points_sum_warning"] else _grp_fill
+        c_tot = ws2.cell(row=row, column=1, value="합  계")
+        c_tot.font = _bold; c_tot.fill = _sum_fill; c_tot.border = _border_thin
         c_sum = ws2.cell(row=row, column=2,
                          value=running_total if running_total else None)
-        c_sum.font = _bold
-        c_sum.fill = _grp_fill
-        c_sum.alignment = _center
+        c_sum.font = _bold; c_sum.fill = _sum_fill
+        c_sum.alignment = _center; c_sum.number_format = _NUM_FMT
+        c_sum.border = _border_thin
+        for ci in (3, 4):
+            ct = ws2.cell(row=row, column=ci)
+            ct.fill = _sum_fill; ct.border = _border_thin
         row += 2
 
     if e["disqualify"]:
@@ -1014,7 +1089,6 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     ws2.column_dimensions["B"].width = 8
     ws2.column_dimensions["C"].width = 22
     ws2.column_dimensions["D"].width = 55
-    _auto_width(ws2)
 
     # ── Sheet 3: 요구사항·필수조건 ────────────────────────────────────────────
     ws3 = wb.create_sheet("3.요구사항")
@@ -1022,6 +1096,7 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     row = _write_section_title(ws3, "3. 요구사항·필수조건", 1, span=_S3_SPAN)
     row += 1
     ws3.freeze_panes = "A3"
+    ws3.print_title_rows = "1:2"
 
     if r["requirements"]:
         row = _write_subsection(ws3, "평가축별 요구사항", row, span=_S3_SPAN)
@@ -1181,13 +1256,13 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
     ws3.column_dimensions["A"].width = 16
     ws3.column_dimensions["B"].width = 55
     ws3.column_dimensions["C"].width = 12
-    _auto_width(ws3)
 
     # ── Sheet 4: 검증 경고 ────────────────────────────────────────────────────
     ws4 = wb.create_sheet("4.검증경고")
     row = _write_section_title(ws4, "4. 검증 경고", 1, span=4)
     row += 1
     ws4.freeze_panes = "A3"
+    ws4.print_title_rows = "1:2"
 
     high_n, med_n, low_n = (
         summary.get("high", 0),
@@ -1223,7 +1298,10 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         c = ws4.cell(row=row, column=1, value="검출된 경고 없음")
         ws4.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
 
-    _auto_width(ws4)
+    ws4.column_dimensions["A"].width = 10
+    ws4.column_dimensions["B"].width = 20
+    ws4.column_dimensions["C"].width = 60
+    ws4.column_dimensions["D"].width = 20
 
     buf = io.BytesIO()
     wb.save(buf)
