@@ -87,6 +87,10 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
   - `DIGITAL_TEXT_EXCLUDE_TYPES` — `{"AREA_TABLE","TECHNICAL","INCENTIVE_TABLE","BUSINESS_VIABILITY","AREA_INCREASE","BRIEF_PROGRAM","BRIEF_REGULATIONS","BRIEF_EVALUATION"}`. 이 타입들은 fitz.get_text() Tier 0을 건너뛰고 타일-비전 경로로 처리. `BRIEF_EVALUATION` 추가 이유: HWP→PDF 변환 시 병합 셀 구조 붕괴 → 구분/항목/비중 관계 오독 위험.
   - `BRIEF_EVALUATION` 추출 스키마: `evaluation_categories[].sub_items`(구분 하위 세부항목 문자열 배열) + `evaluation_categories[].shared_with`(병합 셀로 배점이 공유된 형제 구분 이름 목록) 추가. `total_points`는 배점 합계(통상 100).
   - **BRIEF_EVALUATION 다중 페이지 스태킹:** `extract_pdf(is_brief=True)` 진입 시 BRIEF_EVALUATION 페이지가 2개 이상이면 `_stack_images_vertically()` (PIL)로 세로 이어붙임 → LLM에 1회 전달. `precomputed_eval`에 결과 저장, 나머지 페이지는 `{"data": {}, "_merged": True}` 반환. 병합 셀이 페이지 경계를 넘어도 표 구조를 한 번에 파악 가능.
+  - **BRIEF_EVALUATION 스태킹 폴백:** 스태킹 추출 후 non-null points 합계(`_pts_sum`)가 0이면 스태킹 결과 폐기(`precomputed_eval = None`) → `stacked_eval_set` 비워짐 → 각 페이지 개별 추출. 연속되지 않은 페이지(예: p.21 + p.117)가 분류되어 스태킹됐을 때 LLM 혼동 방지.
+  - **BRIEF_PROGRAM 다중 페이지 스태킹:** 5페이지 청크 단위(`_PROG_CHUNK=5`)로 스태킹 후 `area_rows` 추출. 청크 결과를 `extend()`로 병합.
+  - **`_stack_images_vertically()` — JPEG 출력:** PIL 스태킹 결과를 **JPEG(quality=85)**로 저장. PNG 대비 파일 크기 약 1/10 → Anthropic API 5MB 이미지 한도 초과 방지. 5페이지 PNG = 7~10MB → 400 오류 / JPEG = 0.5~1MB → 정상. **PNG로 되돌리면 BRIEF_PROGRAM이 많은 지침서(36페이지 등)에서 400 오류 재발.**
+  - **`_image_block()` — JPEG 마법 바이트 감지:** `img_bytes[:3] == b'\xff\xd8\xff'`이면 `media_type: "image/jpeg"`, 아니면 `"image/png"`. `safe_encode_image()`에 올바른 `fmt` 전달. 포맷 불일치는 또 다른 400 오류 원인.
   - **`points_sum_warning`:** 스태킹 후 `null`이 아닌 `points` 합계가 95~105 범위를 벗어나면 `precomputed_eval["data"]["points_sum_warning"] = True` 플래그 추가. `brief_checklist_exporter`가 경고로 노출.
   - **BRIEF_PROJECT_INFO FIELD NOTES:** 한국어 표현 → 스키마 키 명시 매핑 추가 (`건폐율(%)` → `building_coverage_pct`, `용적률(%)` → `floor_area_ratio_pct`, `대지면적(㎡)` → `site_area_sqm`, `건축규모/연면적(㎡)` → `floor_area_sqm`, `높이(m)` → `max_height_m`, `공개공지(㎡)` → `open_space_sqm`). 괄호 접두사(`(완화) 460%`) → 숫자만 추출 룰, 부지 복수 → `sites` 배열 분리 룰.
 - `services/llm_client.py` - Claude API 호출 래퍼 (`call_messages()`). `system` 인자는 `str | list` 모두 지원 (캐시 블록 전달용). 응답 `usage`의 `cache_creation_input_tokens` / `cache_read_input_tokens`를 로그 출력
@@ -107,6 +111,7 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
 - `services/brief_validator.py` - 지침서 검증 (LLM 호출 없음). `validate_brief(brief_data, requirements) → dict`. 반환: `{flags: [...], summary: {high, medium, low}, checked_rules}`. 각 flag: `{rule_id, severity, message, evidence}`.
 - `services/brief_checklist_exporter.py` - 지침서 체크리스트 내보내기 (LLM 호출 금지). `to_markdown(brief_data, validation) → str` / `to_xlsx(brief_data, validation) → bytes`. openpyxl lazy import (`import openpyxl` 함수 내부) — PyInstaller spec에 서브모듈 전체 명시 필수.
   - **헬퍼:** `_first(data, key)` — `merge_extracted_data()` dict-or-list 반환 정규화. `_collect(data, key)` — 여러 페이지 리스트 필드 합산. `_v(val, unit)` — null/빈값 → `"(없음)"`, 리스트 → 쉼표 조인. `_write_kv(ws, label, val, row, val_end_col=2)` — 셀 병합 지원 KV 쓰기.
+  - **`brief_evaluation` 다중 페이지 처리:** `_extract_sections()`에서 `brief_evaluation` 리스트 내 non-null 배점 수가 가장 많은 페이지를 `max(key=_eval_pts)`로 선택. `_first()`(항상 첫 페이지)를 쓰면 BRIEF_EVALUATION 스태킹 폴백 시 p.21이 빈 결과여도 p.117의 실제 배점표가 무시됨. **`_first(brief_evaluation)`으로 되돌리면 비연속 페이지 케이스에서 심사기준 Sheet 전체 누락 재발.**
   - **`_COST_KW` 필터:** area_table 조립 후 `{"공사비","내역서","공종","원가","견적"}` 키워드를 group_name에 포함한 그룹 제거 (개략공사비 내역서 등 비설계 항목 배제).
   - **Excel (4 시트):** Sheet 1(면적·프로그램) `freeze_panes="A3"`, KV `val_end_col=4`로 병합. Sheet 2(심사기준) 4열 구조 `항목명|배점|공유배점|세부기준`, sub_items를 col 4에 별도 행으로 렌더링, `freeze_panes="A3"`. Sheet 3(요구사항) 2열 라벨+내용 구조, 각 설계 섹션(배치·동선/입면·재료/친환경·인증/특수·보안/기타)을 라벨화된 서브리스트로 렌더링, `freeze_panes="A3"`. Sheet 4(검증경고) `freeze_panes="A3"`.
   - **MD (`to_markdown`):** 프로그램·LLM 연동용 구조화 데이터 덤프. 마크다운 표 없음. 형식: `key: value` 한 줄 / `- item` / 들여쓰기 `- sub_item` 계층 리스트. null 필드는 `(없음)` 명시. 5개 섹션: 1.사업개요 / 2.면적프로그램 / 3.심사기준(평가항목별 `### Name` 블록) / 4.요구사항·설계지침(모든 서브라벨 열거) / 5.검증경고(`[심각도] type: message | 위치: ...` 형식).
@@ -398,16 +403,57 @@ Test with curl or Postman by uploading files to:
 
 ## Known Issues — TODO
 
-우선순위 표시: 🟢 = 엣지 케이스.
+우선순위 표시: 🔴 = 재발 위험 높음, 🟡 = 미해결 버그, 🟢 = 엣지 케이스.
 
-### 🟢 엣지 케이스
+---
+
+### 🔴 재발 위험 — 현재 작동하지만 되돌리면 즉시 망가지는 것들
+
+1. **BRIEF_PROGRAM 스태킹 이미지 크기 한도 (400 Bad Request)**
+   - **증상:** `_brief.json`의 `brief_program[0].error` = "Client error '400 Bad Request'", `area_rows: []`. Sheet 5 "면적표상세" 미생성, `## 2. 면적 프로그램` 공백.
+   - **원인:** `_stack_images_vertically()`가 PNG를 반환하면 5페이지 기준 7~10MB → Anthropic 5MB 한도 초과.
+   - **현재 상태: FIXED** — JPEG(quality=85) 출력으로 변경. `_image_block()`에 JPEG 마법 바이트 감지 추가.
+   - **재발 조건:** `_stack_images_vertically()` 포맷을 PNG로 되돌리거나, `_image_block()`의 포맷 감지 코드를 제거하면 즉시 재발.
+   - **진단 방법:** 재발 시 GCS `_briefs/*.json`에서 `brief_program[0]` 확인 → `"error": "400"` 여부.
+
+1. **BRIEF_EVALUATION 비연속 페이지 스태킹 → 심사기준 누락**
+   - **증상:** `evaluation_categories = [{"name": "평가항목", "points": null}]` — 실제 배점 항목(창의성 및 공공성 등) 누락. Sheet 2 "심사기준" 공백.
+   - **원인:** 문서 앞쪽 페이지(예: p.21)와 뒤쪽 페이지(예: p.117)가 모두 BRIEF_EVALUATION으로 분류되어 이어붙여짐 → LLM이 두 맥락을 혼동하여 의미없는 결과 반환.
+   - **현재 상태: FIXED** — `_pts_sum == 0`이면 `precomputed_eval = None` → 개별 페이지 추출 폴백. `brief_checklist_exporter._extract_sections()`에서 non-null 배점 최다 페이지를 `max()`로 선택.
+   - **재발 조건:** `_extract_sections()`를 `_first(brief_evaluation)`으로 되돌리면 재발.
+   - **미해결 엣지:** 실제 배점표가 p.19 같은 BRIEF_SUBMISSION 오분류 페이지에 있는 경우 — 분류기 수정 없이는 해결 불가. 재분석 후에도 심사기준이 비면 `_brief.json`의 `page_map`에서 BRIEF_SUBMISSION 페이지의 `has_scoring_table` 필드를 확인할 것.
+
+---
+
+### 🔴 운영 주의 — GCP 재배포 누락
+
+1. **로컬 코드 변경이 GCP에 반영되지 않는 문제**
+   - **증상:** 로컬에서 수정·테스트 후 오류가 사라졌는데 GCP 앱에서는 동일 오류 재발.
+   - **원인:** `gcloud run deploy` 실행을 잊음. GCP Cloud Run은 소스를 자동으로 감시하지 않음.
+   - **진단:** `gcloud run services describe competition-analyzer --region asia-northeast3 --format="value(status.latestCreatedRevisionName,metadata.creationTimestamp)"` — 타임스탬프가 최근 커밋 이전이면 재배포 필요.
+   - **배포 명령:**
+
+     ```powershell
+     cd d:\APPS\competition_comparison
+     gcloud run deploy competition-analyzer --source . --region asia-northeast3
+     ```
+
+   - **이번 세션 이력:** 로컬 JPEG 수정이 5월 21일 이후 배포되지 않아 6월 17일까지 GCP에서 400 오류 지속. 2회 배포 후 해결(revision 00055, 00056).
+
+---
+
+### 🟡 미해결 버그
 
 1. **`BRIEF_EVALUATION` 배점 합계가 100 초과로 추출되는 문제**
    - 실제 배점 합계가 100점인 지침서에서 160점 등으로 추출됨
    - 원인: HWP→PDF 변환 시 병합셀 구조 붕괴로 동일 배점이 여러 행에 중복 집계되는 것으로 추정
    - 수정안: `data_extractor.py` BRIEF_EVALUATION 추출 프롬프트에 "배점 합계 ≈ 100이 되도록 병합셀 중복 제거" 룰 추가, 또는 후처리로 `total_points > 110`이면 경고 flag
 
-2. **`/run-single` 재실행 시 `_meta.json`의 `submissions` 리스트 초기화**
+---
+
+### 🟢 엣지 케이스
+
+1. **`/run-single` 재실행 시 `_meta.json`의 `submissions` 리스트 초기화**
    - `routers/accumulate.py:676-679` → `save_project_meta(...)`는 항상 `meta["submissions"] = []`로 시작
    - 같은 `project_number + competition_name`으로 두 번째 회사 등록 시 첫 회사의 메타 엔트리가 사라짐 (submission JSON 파일은 디스크에 고아로 남음)
    - MyProjectMode는 1프로젝트=1제출물 전제라 통상 발생 안 함. 다회사 추가는 `/add-submission` 사용

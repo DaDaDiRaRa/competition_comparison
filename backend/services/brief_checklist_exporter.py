@@ -119,7 +119,16 @@ def _extract_sections(brief_data: dict) -> dict:
     bp    = _first(brief_data, "brief_program")
     br    = _first(brief_data, "brief_regulations")
     at    = _first(brief_data, "area_table")
-    be    = _first(brief_data, "brief_evaluation")
+    # brief_evaluation: 배점이 가장 많은 페이지를 우선 사용.
+    # 스태킹 폴백 시 개별 추출된 여러 페이지 중 실제 배점표가 있는 페이지를 선택.
+    _be_pages = brief_data.get("brief_evaluation") or []
+    if not isinstance(_be_pages, list):
+        _be_pages = [_be_pages] if isinstance(_be_pages, dict) else []
+    _be_pages = [p for p in _be_pages if isinstance(p, dict) and not p.get("_merged")]
+    def _eval_pts(p: dict) -> int:
+        cats = (p or {}).get("evaluation_categories") or []
+        return sum(1 for c in cats if isinstance(c.get("points"), (int, float)))
+    be = max(_be_pages, key=_eval_pts, default={})
     dg    = _first(brief_data, "brief_design_guide")   # 기타/폴백
     dm    = _first(brief_data, "brief_design_massing")
     dfa   = _first(brief_data, "brief_design_facade")

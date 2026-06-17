@@ -962,7 +962,12 @@ async def extract_pdf(
         _pts_sum = sum(c["points"] for c in _cats if isinstance(c.get("points"), (int, float)))
         if _pts_sum > 0 and not (95 <= _pts_sum <= 105):
             precomputed_eval["data"]["points_sum_warning"] = True
-        precomputed_eval["_stacked_pages"] = eval_page_nums
+        # 스택 추출이 의미없는 결과(points 합계 0)를 반환하면 개별 페이지 추출로 폴백.
+        # 연속되지 않은 페이지(예: p.21 + p.117)를 이어붙이면 LLM이 혼동할 수 있음.
+        if _pts_sum == 0:
+            precomputed_eval = None
+        else:
+            precomputed_eval["_stacked_pages"] = eval_page_nums
 
     stacked_eval_set: set[int] = set(eval_page_nums) if precomputed_eval else set()
 
