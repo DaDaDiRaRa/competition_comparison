@@ -13,8 +13,7 @@ Competition Analyzer is a full-stack application for analyzing architectural com
 - AI: Anthropic Claude (claude-sonnet-4-6) via Anthropic API
 - PDF Processing: PyMuPDF (fitz) — primary rasterizer in `services/utils.py`
 - Database: Custom JSON-based storage
-- 배포 (데스크톱): PyInstaller(`--onedir`) + PyWebView 네이티브 윈도우 (Windows EdgeChromium WebView2)
-- 배포 (웹서버): Docker + Google Cloud Run (gen2) + GCS 버킷 마운트 (`/data`)
+- 배포: Docker + Google Cloud Run (gen2) + GCS 버킷 마운트 (`/data`) — GitHub Actions 자동 배포
 
 ## Architecture
 
@@ -133,7 +132,7 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
 - `services/myproject_report_generator.py` - `_deep.json` → HTML 리포트 렌더링 (LLM 호출 없음). `generate_myproject_report(deep_doc) -> str`
 - `services/archive_search.py` - in-memory SQLite FTS5 인덱싱 + 자연어 검색. `build_index()` 앱 시작 시 1회, `rerun-compare` 완료 후 `rebuild_index()`. `sqlite3.connect(":memory:", check_same_thread=False)` 필수 (FastAPI threadpool 교차).
 - `services/brief_validator.py` - 지침서 검증 (LLM 호출 없음). `validate_brief(brief_data, requirements) → dict`. 반환: `{flags: [...], summary: {high, medium, low}, checked_rules}`. 각 flag: `{rule_id, severity, message, evidence}`. **진입 시 `requirements`가 dict가 아니면 `{}` 교체** — LLM이 배열 반환한 경우 방어.
-- `services/brief_checklist_exporter.py` - 지침서 체크리스트 내보내기 (LLM 호출 금지). `to_markdown(brief_data, validation) → str` / `to_xlsx(brief_data, validation) → bytes`. openpyxl lazy import (`import openpyxl` 함수 내부) — PyInstaller spec에 서브모듈 전체 명시 필수.
+- `services/brief_checklist_exporter.py` - 지침서 체크리스트 내보내기 (LLM 호출 금지). `to_markdown(brief_data, validation) → str` / `to_xlsx(brief_data, validation) → bytes`. openpyxl lazy import (`import openpyxl` 함수 내부).
   - **헬퍼:** `_first(data, key)` — `merge_extracted_data()` dict-or-list 반환 정규화. `_collect(data, key)` — 여러 페이지 리스트 필드 합산. `_v(val, unit)` — null/빈값 → `"(없음)"`, 리스트 → 쉼표 조인. `_write_kv(ws, label, val, row, val_end_col=2)` — 셀 병합 지원 KV 쓰기.
   - **`brief_evaluation` 다중 페이지 처리:** `_extract_sections()`에서 `brief_evaluation` 리스트 내 non-null 배점 수가 가장 많은 페이지를 `max(key=_eval_pts)`로 선택. `_first()`(항상 첫 페이지)를 쓰면 BRIEF_EVALUATION 스태킹 폴백 시 p.21이 빈 결과여도 p.117의 실제 배점표가 무시됨. **`_first(brief_evaluation)`으로 되돌리면 비연속 페이지 케이스에서 심사기준 Sheet 전체 누락 재발.**
   - **`_COST_KW` 필터:** area_table 조립 후 `{"공사비","내역서","공종","원가","견적"}` 키워드를 group_name에 포함한 그룹 제거 (개략공사비 내역서 등 비설계 항목 배제).
@@ -157,7 +156,7 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
   - `axes_for(facility_type) → dict` — facility_type의 group에 맞는 axes 반환
   - `axes_keys_for(facility_type) → list` — axes 키 목록
   - `COMPARISON_AXES_META` / `COMPARISON_AXES` — legacy aliases (redev 그룹, 하위호환용)
-  - `DEFAULT_DB_PATH` — 우선순위: `DB_PATH` 환경변수 → `M:\...KUNWON_COMPETITION_DB` (Windows 기본값)
+  - `DEFAULT_DB_PATH` — 우선순위: `DB_PATH` 환경변수(GCP에서 `/data`) → `~/CompetitionAnalyzerDB` (로컬 기본값)
   - Cloud Run 배포 시 `DB_PATH=/data` 환경변수로 GCS 마운트 경로 지정
   - `settings.db_path` — `app_settings.json`의 `db_path` 값 우선, 없으면 `DEFAULT_DB_PATH`
   - `settings.has_db_path` — 사용자가 명시적으로 경로를 설정했는지 여부
@@ -315,7 +314,7 @@ Test with curl or Postman by uploading files to:
 
 ## Configuration Files
 
-**`app_settings.json`** (저장 위치: 개발 모드 → `backend/app_settings.json` / PyInstaller `frozen` 모드 → `~/.competition-analyzer/app_settings.json`. `config.py::_resolve_settings_file()` 참조):
+**`app_settings.json`** (저장 위치: `backend/app_settings.json`. `config.py::_resolve_settings_file()` 참조):
 
 ```json
 {
@@ -373,10 +372,8 @@ Test with curl or Postman by uploading files to:
 - **ProgressLog Events:** All SSE events must include `_timestamp` for elapsed time display.
 - **PDF Rasterizer:** `services/utils.py::rasterize_pdf` (PyMuPDF) 가 단일 경로. PaddleOCR은 `services/utils.py::ocr_page()`에서 lazy-load — `requirements-ocr.txt` 미설치 시 자동 스킵.
 - **FastAPI Lifespan:** `main.py`는 `@app.on_event` 대신 `@asynccontextmanager async def lifespan()` 사용. `init_db()` 실패해도 서버가 뜨도록 graceful 처리.
-- **데스크톱 앱 (PyWebView + PyInstaller):** `backend/launcher.py`가 진입점. uvicorn을 백그라운드 스레드로 띄운 뒤 `webview.create_window()`로 EdgeChromium 네이티브 창 표시 (`gui` 미지정 시 Windows에서 자동 선택). `JsApi.open_external(url)` JS API 노출 → 프론트의 `App.jsx`가 `target="_blank"` 클릭을 가로채 `window.pywebview.api.open_external()`로 시스템 기본 브라우저에 위임 (리포트 인쇄/다운로드 편의). `frozen` 모드 감지(`getattr(sys, 'frozen', False)`)로 `sys._MEIPASS` 안의 `frontend_dist` 서빙.
-- **PyInstaller spec:** `backend/competition_analyzer.spec`. `collect_all('webview')`, `collect_all('clr_loader')`, `collect_all('pythonnet')` 필수 — pywebview는 .NET 어셈블리(`System`, `System.Windows`, `System.Drawing`)를 동적 로드하므로 정적 분석으로 못 잡힘. PaddleOCR 등 무거운 의존성은 `excludes`. 산출물: `backend/dist/CompetitionAnalyzer/CompetitionAnalyzer.exe` (~14MB) + `_internal/` (~120MB). `console=False` (windowed 빌드) — CMD 창 미표시.
-- **로깅 (windowed 빌드):** `console=False`이면 stdout/stderr가 어디에도 표시되지 않음. `launcher.py::_setup_logging()`이 `RotatingFileHandler`로 `~/.competition-analyzer/app.log`(2MB×3 백업)에 기록. 치명적 오류는 `_show_error_dialog()`로 Win32 MessageBox 표시 (`ctypes.windll.user32.MessageBoxW`). uvicorn 자체 로그는 console 없으면 사라지지만 launcher 핵심 이벤트는 모두 파일에 남음. 디버깅 시 이 파일을 먼저 확인.
-- **빌드 스크립트:** 저장소 루트의 `build.ps1` — npm install → vite build → PyInstaller 일괄 실행. PowerShell의 `$ErrorActionPreference = "Stop"`이 PyInstaller stderr(INFO 로그)를 에러로 오인할 수 있어 일부 환경에서 실패 표시될 수 있으나, 실제 산출물은 정상 생성됨. 직접 `.\venv\Scripts\python.exe -m PyInstaller competition_analyzer.spec --noconfirm` 실행하면 우회.
+- **배포:** `main` 브랜치 push → GitHub Actions(`.github/workflows/deploy.yml`) 자동 실행 → Docker 이미지 빌드 → Cloud Run 배포. 수동 배포나 빌드 스크립트 불필요. 자세한 내용은 `DEPLOYMENT.md` 참조.
+- **로깅 (GCP):** Cloud Run 로그는 `gcloud logging read "resource.type=cloud_run_revision" --limit=50`으로 확인. 개발 모드에서는 uvicorn 콘솔 로그 직접 확인.
 - **테마/색상 시스템:** 화이트 테마 + **건원 RED 액센트** (`#e60012`). 색상 정의 위치:
   1. `frontend/src/kunwon-tokens.css` — **단일 소스 CSS 변수** (모든 프론트 컴포넌트가 `var(--token)` 참조). `main.jsx`에서 전역 import.
   2. `frontend/src/theme.js` — 색 토큰 명세 (참고용 문서)
@@ -397,7 +394,7 @@ Test with curl or Postman by uploading files to:
   - 색 변경 시 `kunwon-tokens.css` 수정 → `theme.js`도 동기화해 단일 명세 유지. 토큰 추가 시 `CLAUDE.md` 현재 브랜드 토큰 목록도 갱신.
   - 감사 도구: `tools/audit_tokens.py` — 프론트 파일 전체에서 인라인 hex 스캔 → `DESIGN_AUDIT.md` 생성.
 - **ProjectList Filtering:** 데이터 존재하는 시설 유형만 탭 노출. 첫 번째 유형 자동 선택.
-- **New Machine Setup:** `git clone` → `pip install -r requirements.txt` + `npm install` → 백엔드 실행 → 브라우저에서 설정 탭에서 DB 경로 입력 + API 키 입력. DB 경로 미입력 시 `~/CompetitionAnalyzerDB` 자동 사용.
+- **New Machine Setup:** `git clone` → `pip install -r requirements.txt` + `npm install` → 백엔드/프론트 실행 → 브라우저 설정 탭에서 DB 경로 + API 키 입력. DB 경로 미입력 시 `~/CompetitionAnalyzerDB` 자동 사용. 배포는 `git push origin main` → GitHub Actions 자동 처리.
 - **PaddleOCR (선택):** 이미지 기반 PDF(텍스트 없는) OCR 필요 시만 `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision으로 동작하므로 불필요.
 - **DOCX 지침서 지원:** `python-docx`(필수, 양쪽 requirements 동기화) + `services/docx_loader.py` 모듈. PDF 흐름과 완전 독립 — `classify_all_blocks_brief` / `extract_docx` 가 별도 함수. block_num을 page 필드로 재사용해 page_map 스키마 호환. **이미지 토큰 0**(텍스트+표 마크다운만 LLM에 전달). 도면/렌더링 페이지는 인식 불가 — UI에서 "도면 포함 지침서는 PDF로" 안내.
 - **테스트 스위트 — DOCX 흐름:** `tests/test_docx_extractor.py` (pytest). 10개 단위 테스트: split 6케이스 (빈 docx, 표 3개, 폰트 휴리스틱, vMerge·merge_info, TOC 압축, force-cut 31단락) + eval 4케이스 (정상 100점, points_col vMerge→shared_with, 소계행 자동 제외, 배점 컬럼 없음→빈 결과). 모든 픽스처 python-docx로 in-memory 생성(LLM/네트워크 의존 없음). 실행: `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py -v`. **신규 docx 관련 코드 추가 시 회귀 보호 필수 — 새 시나리오는 반드시 테스트 추가**.
@@ -512,7 +509,6 @@ Test with curl or Postman by uploading files to:
    - **체크리스트 — 신규 Python 패키지 추가 시 항상 두 파일 모두 수정:**
      1. `backend/requirements.txt` 에 추가 (로컬 dev용, 보통 `>=` 버전 핀)
      2. `backend/requirements-server.txt` 에 추가 (서버용, `==` 정확한 버전 핀)
-     3. `backend/competition_analyzer.spec` PyInstaller 빌드 영향 여부 확인 (`hiddenimports` / `datas` 필요할 수 있음)
    - **OCR 전용 패키지는 예외:** PaddleOCR 등 무거운 의존성은 `requirements-ocr.txt` 에만 (선택 설치).
    - **이번 세션 이력:** 2026-06-18 DOCX 지원 추가 시 `python-docx` 를 `requirements.txt` 에만 추가하고 `requirements-server.txt` 누락 → GCP 배포 후 첫 DOCX 분석 시 ModuleNotFoundError. 두 파일 동기화 후 재배포로 해결.
 
