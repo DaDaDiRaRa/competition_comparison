@@ -87,7 +87,7 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
 - `services/docx_loader.py` - DOCX 지침서를 블록 단위로 분할 (PDF 흐름과 완전 독립)
   - `split_docx_to_blocks(path) → list[dict]` — 본문 순회 후 R1~R5 + F1~F3 규칙으로 블록 분할. 각 블록: `{block_num, header_text, paragraphs[], table_markdown, table_rows_raw, merge_info[]}`. block_num이 page_map의 `page` 역할.
   - **분할 규칙:** R1 Heading 1/2/3 스타일 / R2 폰트 휴리스틱(굵게+14pt 이상 또는 16pt 이상) / R3 섹션 번호(`^(제\d+장|\d+(\.\d+){0,3})\s`) / R4 캡션(`[표/양식/서식/별표 N]`) / R5 표는 항상 단독 블록의 마지막 요소
-  - **필터/머지:** F1 TOC(`\t\d+$`) → "(목차)" 단일 블록 압축 / F2 orphan 헤더(단락1개+표없음+R3매칭) → 다음 블록의 breadcrumb 누적 ("A > B > C") / F3 단락 30개 OR 8000자 초과 → 강제 컷, " (계속)" suffix
+  - **필터/머지:** F1 TOC(`\t\d+$`) → "(목차)" 단일 블록 압축 / F2 orphan 헤더(단락1개+표없음+R3매칭) → 다음 블록의 breadcrumb 누적 ("A > B > C") / F3 단락 60개 OR 12000자 초과 → 강제 컷, " (계속)" suffix
   - **헤더 폴백 순서:** A(Heading) → B(폰트 visual) → C(캡션) → **D(표 첫 행 텍스트 60자)** → E(첫 단락) → F("(블록 N)" 디폴트)
   - **vMerge 감지:** `cell._tc` identity 비교 우선 + tcPr 내 `w:vMerge` element 검사. python-docx 가 vMerge 그룹 전체에 동일 `_tc` 인스턴스를 반환하는 동작을 활용 — XML state만으로는 그룹 시작/끝을 정확히 구분 못 함. **두 시그널을 조합한 로직을 되돌리면 merge_info 가 비게 됨.**
   - 표 → 파이프 마크다운(`table_markdown`): vMerge continue 행은 빈 칸 출력, 셀 60자 컷 + "…", 셀 안 `|` → `&#124;`, 셀 내 개행 → 공백. **`table_rows_raw`**: 동일 표의 원문 텍스트 2D 리스트 — 60자 컷 없이 개행 보존. 추출기·source_text가 이 필드를 우선 사용. `_table_to_markdown` 반환 타입: `tuple[str, list[dict], list[list[str]]]` — `(markdown_str, merge_info, rows_raw)`.

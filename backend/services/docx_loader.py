@@ -19,8 +19,8 @@ from typing import Any
 _FONT_HEADING_PT     = 14.0     # R2: 굵게+이 크기 이상
 _FONT_HEADING_PT_BIG = 16.0     # R2: 굵기 무관 이 크기 이상
 _HEADING_MAX_LEN     = 60       # R2: 헤딩 단락 최대 길이
-_FORCE_CUT_PARAS     = 30       # F3: 단락 수
-_FORCE_CUT_CHARS     = 8000     # F3: 글자 수
+_FORCE_CUT_PARAS     = 60       # F3: 단락 수
+_FORCE_CUT_CHARS     = 12000    # F3: 글자 수
 _HEADER_FALLBACK_LEN = 60       # page_header_text 폴백 최대 길이
 _SOURCE_TEXT_CAP     = 6000     # get_block_source_text 최대 길이
 _SOURCE_HEAD_CAP     = 4000     # 위 초과 시 앞쪽 보존

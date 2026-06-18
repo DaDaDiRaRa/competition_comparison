@@ -538,10 +538,34 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     L.append(f"평가방법: {_v(e['eval_method'])}")
     L.append(f"심사단구성: {_v(e['jury'])}")
 
-    running = 0.0
+    # 동일 이름 항목 병합: 표에 같은 구분이 여러 행으로 나뉜 경우(예: 10+5점) 하나로 합산
+    _merged_rows: list[dict] = []
+    _seen_names: dict[str, int] = {}  # name → index in _merged_rows
     for ev in e["rows"]:
         if not isinstance(ev, dict):
             continue
+        name = ev.get("name") or "(항목명 없음)"
+        if name in _seen_names:
+            existing = _merged_rows[_seen_names[name]]
+            # 배점 합산
+            ep, np_ = existing.get("points"), ev.get("points")
+            if isinstance(ep, (int, float)) and isinstance(np_, (int, float)):
+                existing["points"] = ep + np_
+            elif np_ is not None:
+                existing["points"] = np_
+            # sub_items 합산
+            existing.setdefault("sub_items", [])
+            existing["sub_items"].extend(ev.get("sub_items") or [])
+            # shared_with 합산
+            sw = existing.get("shared_with") or []
+            sw.extend(sw2 for sw2 in (ev.get("shared_with") or []) if sw2 not in sw)
+            existing["shared_with"] = sw
+        else:
+            _seen_names[name] = len(_merged_rows)
+            _merged_rows.append(dict(ev))
+
+    running = 0.0
+    for ev in _merged_rows:
         name      = ev.get("name") or "(항목명 없음)"
         pts       = ev.get("points")
         shared    = ev.get("shared_with") or []

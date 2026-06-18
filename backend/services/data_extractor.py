@@ -1944,6 +1944,8 @@ def merge_extracted_data(
                     "_source_key":    src_key,
                 })
     if grouped_all:
+        # block 순서 보존: _source_page(=block_num) 오름차순 정렬 (타입 순서 의존 제거)
+        grouped_all.sort(key=lambda g: (g.get("_source_page") or 0))
         result["design_guidelines_grouped"] = grouped_all
 
     # 정량 데이터: AREA_TABLE 우선, SITE_PLAN 보완
