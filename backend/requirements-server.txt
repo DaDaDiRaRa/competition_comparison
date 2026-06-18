@@ -10,3 +10,4 @@ pymupdf==1.25.5
 pillow==11.2.1
 numpy==2.2.5
 openpyxl==3.1.5
+python-docx==1.2.0
