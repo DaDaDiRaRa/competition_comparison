@@ -607,87 +607,6 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     if r["concept"]:
         L.append(f"\n설계방향: {r['concept']}")
 
-    # ── 배치·동선 ────────────────────────────────────────────────────────────
-    m = r["massing"]
-    _m_has = any([
-        m["setback_m"] is not None, m["height_strategy"],
-        m["open_space"], m["parking"], m["pedestrian"],
-        m["connection"], m["guidelines"],
-    ])
-    L.append("\n### 배치·동선 지침")
-    L.append(f"이격거리: {_v(m['setback_m'], ' m')}")
-    L.append(f"높이전략: {_v(m['height_strategy'])}")
-    for lbl, lst in [
-        ("공개공지", m["open_space"]),
-        ("주차계획", m["parking"]),
-        ("동선계획", m["pedestrian"]),
-        ("연결부",   m["connection"]),
-        ("배치지침", m["guidelines"]),
-    ]:
-        if lst:
-            L.append(f"{lbl}:")
-            for x in lst:
-                L.append(f"- {_str_item(x)}")
-        else:
-            L.append(f"{lbl}: (없음)")
-
-    # ── 입면·재료 ────────────────────────────────────────────────────────────
-    f = r["facade"]
-    L.append("\n### 입면·재료 지침")
-    for lbl, lst in [
-        ("지정재료",   f["primary_materials"]),
-        ("금지재료",   f["prohibited_materials"]),
-        ("색채계획",   f["color"]),
-        ("입면지침",   f["facade_guidelines"]),
-        ("조경경관",   f["landscape"]),
-    ]:
-        if lst:
-            L.append(f"{lbl}:")
-            for x in lst:
-                L.append(f"- {_str_item(x)}")
-        else:
-            L.append(f"{lbl}: (없음)")
-
-    # ── 친환경·인증 ──────────────────────────────────────────────────────────
-    sv = r["sustain"]
-    L.append("\n### 친환경·인증 요구사항")
-    if sv["certifications"]:
-        L.append("의무인증:")
-        for c in sv["certifications"]:
-            if isinstance(c, dict):
-                L.append(f"- {c.get('name') or ''}  요구등급: {_v(c.get('required_grade'))}")
-            else:
-                L.append(f"- {_str_item(c)}")
-    else:
-        L.append("의무인증: (없음)")
-    L.append(f"신재생에너지비율: {_v(sv['renewable_pct'], '%')}")
-    for lbl, lst in [
-        ("에너지지침",  sv["energy_guidelines"]),
-        ("지속가능성",  sv["sustainability_reqs"]),
-    ]:
-        if lst:
-            L.append(f"{lbl}:")
-            for x in lst:
-                L.append(f"- {_str_item(x)}")
-        else:
-            L.append(f"{lbl}: (없음)")
-
-    # ── 특수·보안 ────────────────────────────────────────────────────────────
-    sp = r["special"]
-    L.append("\n### 특수·보안 지침")
-    for lbl, lst in [
-        ("보안요건",     sp["security"]),
-        ("장애인접근성", sp["accessibility"]),
-        ("안전요건",     sp["safety"]),
-        ("특수기술",     sp["special_tech"]),
-    ]:
-        if lst:
-            L.append(f"{lbl}:")
-            for x in lst:
-                L.append(f"- {_str_item(x)}")
-        else:
-            L.append(f"{lbl}: (없음)")
-
     # ── 기타 설계 지침 (구 데이터 폴백) ─────────────────────────────────────
     # 계층 보존 설계지침 (시설별 / 공통 — design_guidelines_grouped 출처)
     grouped_all = s.get("guidelines_grouped") or []
@@ -737,8 +656,8 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
                             continue
                         L.append(f"- {label} {text}" if label else f"- {text}")
 
-        _md_grouped_block(facility_specific, "시설별 설계지침")
-        _md_grouped_block(common_grouped,   "공통 설계지침 (그룹별)")
+        _md_grouped_block(facility_specific, "시설별 지침")
+        _md_grouped_block(common_grouped,   "설계 지침 및 요구사항")
 
     _misc = [
         ("특수요구사항", r["special_reqs"]),
@@ -1368,80 +1287,6 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                             end_row=row, end_column=_S3_SPAN)
             row += 1
 
-    # ── 배치·동선 지침 ────────────────────────────────────────────────────────
-    m = r["massing"]
-    _MASSING_SUBS = [
-        ("이격거리",  [f"{m['setback_m']} m"] if m["setback_m"] is not None else []),
-        ("높이 전략", [m["height_strategy"]] if m["height_strategy"] else []),
-        ("공개공지",  m["open_space"]),
-        ("주차 계획", m["parking"]),
-        ("동선 계획", m["pedestrian"]),
-        ("연결부",    m["connection"]),
-        ("배치 지침", m["guidelines"]),
-    ]
-    if any(v for _, v in _MASSING_SUBS):
-        row = _write_subsection(ws3, "배치·동선 지침", row, span=_S3_SPAN)
-        for lbl, items in _MASSING_SUBS:
-            _ws3_labeled(lbl, items)
-        row += 1
-
-    # ── 입면·재료 지침 ────────────────────────────────────────────────────────
-    f = r["facade"]
-    _FACADE_SUBS = [
-        ("지정 재료", f["primary_materials"]),
-        ("금지 재료", f["prohibited_materials"]),
-        ("색채 계획", f["color"]),
-        ("입면 지침", f["facade_guidelines"]),
-        ("조경·경관", f["landscape"]),
-    ]
-    if any(v for _, v in _FACADE_SUBS):
-        row = _write_subsection(ws3, "입면·재료 지침", row, span=_S3_SPAN)
-        for lbl, items in _FACADE_SUBS:
-            _ws3_labeled(lbl, items)
-        row += 1
-
-    # ── 친환경·인증 요구사항 ─────────────────────────────────────────────────
-    sv = r["sustain"]
-    _has_sv = bool(
-        sv["certifications"] or sv["renewable_pct"] is not None
-        or sv["energy_guidelines"] or sv["sustainability_reqs"]
-    )
-    if _has_sv:
-        row = _write_subsection(ws3, "친환경·인증 요구사항", row, span=_S3_SPAN)
-        if sv["certifications"]:
-            for i, cert in enumerate(sv["certifications"]):
-                if i == 0:
-                    ws3.cell(row=row, column=1, value="의무 인증").font = Font(bold=True, size=9)
-                if isinstance(cert, dict):
-                    name  = cert.get("name") or ""
-                    grade = cert.get("required_grade") or ""
-                    content = f"{name}  {grade}".strip() if grade else name
-                else:
-                    content = _str_item(cert)
-                c = ws3.cell(row=row, column=2, value=content)
-                c.alignment = _wrap_top
-                ws3.merge_cells(start_row=row, start_column=2,
-                                end_row=row, end_column=_S3_SPAN)
-                row += 1
-        _ws3_kv("신재생에너지 비율", (f"{sv['renewable_pct']}%" if sv["renewable_pct"] is not None else None))
-        _ws3_labeled("에너지 지침",  sv["energy_guidelines"])
-        _ws3_labeled("지속가능성",   sv["sustainability_reqs"])
-        row += 1
-
-    # ── 특수·보안 지침 ────────────────────────────────────────────────────────
-    sp = r["special"]
-    _SPECIAL_SUBS = [
-        ("보안 요건",     sp["security"]),
-        ("장애인 접근성", sp["accessibility"]),
-        ("안전 요건",     sp["safety"]),
-        ("특수 기술",     sp["special_tech"]),
-    ]
-    if any(v for _, v in _SPECIAL_SUBS):
-        row = _write_subsection(ws3, "특수·보안 지침", row, span=_S3_SPAN)
-        for lbl, items in _SPECIAL_SUBS:
-            _ws3_labeled(lbl, items)
-        row += 1
-
     # ── 계층 보존 설계지침 (design_guidelines_grouped) ─────────────────────────
     # 시설별 (facility_scope != "전체") 과 공통 (facility_scope == "전체") 으로 분리,
     # facility → space → category 순으로 중첩 렌더링.
@@ -1506,10 +1351,10 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         common_grouped   = [g for g in grouped_all
                              if (g.get("facility_scope") or "전체") == "전체"]
         if facility_specific:
-            row = _write_subsection(ws3, "시설별 설계지침", row, span=_S3_SPAN)
+            row = _write_subsection(ws3, "시설별 지침", row, span=_S3_SPAN)
             _ws3_grouped_section(facility_specific)
         if common_grouped:
-            row = _write_subsection(ws3, "공통 설계지침 (그룹별)", row, span=_S3_SPAN)
+            row = _write_subsection(ws3, "설계 지침 및 요구사항", row, span=_S3_SPAN)
             _ws3_grouped_section(common_grouped)
 
     # ── 기타 설계 지침 (폴백 / 구 데이터) ───────────────────────────────────
