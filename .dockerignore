@@ -4,8 +4,6 @@ backend/**/__pycache__/
 backend/build/
 backend/dist/
 backend/app_settings.json
-backend/*.spec
-backend/app_icon.ico
 frontend/node_modules/
 frontend/dist/
 **/*.pyc
