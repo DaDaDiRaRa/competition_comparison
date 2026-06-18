@@ -1425,7 +1425,7 @@ def _extract_docx_block_with_llm(block: dict, page_type: str, prompt_cfg: dict) 
     if page_type in _HIGH_OUT:
         max_out = 8000
     elif page_type in _DESIGN_OUT:
-        max_out = 4000
+        max_out = 6000  # _FORCE_CUT_PARAS=60 상한에 맞춰 4000 → 6000
     else:
         max_out = 2000
     try:
@@ -1438,6 +1438,31 @@ def _extract_docx_block_with_llm(block: dict, page_type: str, prompt_cfg: dict) 
         )
         data = parse_json_response(raw)
     except Exception as e:
+        # BRIEF_DESIGN_* JSON 파싱 실패 시: design_guidelines_grouped 전용으로 재시도
+        # 전체 스키마 대신 범용 그룹 필드만 추출 → 응답 단순화로 파싱 성공률 향상
+        if page_type in _DESIGN_OUT:
+            try:
+                _fallback_text = (
+                    "다음은 DOCX 지침서의 한 블록입니다. 이미지 없이 텍스트와 표만으로 추출하세요.\n\n"
+                    f"{source}\n\n"
+                    "아래 JSON 스키마 하나로만 응답하세요. 블록에 보이는 모든 설계지침 항목을 "
+                    "빠짐없이 추출하고, 반드시 유효한 JSON만 출력하세요.\n\n"
+                    "{\n  " + _DESIGN_GROUPED_SCHEMA + "\n}"
+                    + _DESIGN_GROUPED_NOTES
+                )
+                raw2 = call_messages(
+                    model=settings.model_id,
+                    max_tokens=8000,
+                    temperature=0,
+                    system=SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": _fallback_text}],
+                )
+                data2 = parse_json_response(raw2)
+                if isinstance(data2, dict) and data2.get("design_guidelines_grouped"):
+                    data2["_fallback"] = True
+                    return data2
+            except Exception:
+                pass
         data = {"error": str(e)}
     return data
 
