@@ -771,6 +771,13 @@ OCR_MIN_CHARS = 80  # 이 글자수 미만이면 OCR 불충분 → vision fallba
 # settings.extraction_priority_limit=3으로 올리면 기존 동작(전 페이지 추출) 복원.
 SKIP_PAGE_TYPES = {"COVER", "RENDERING_EXT", "RENDERING_INT"}
 
+# BRIEF_DESIGN_* 타입: 복합 스키마(+ design_guidelines_grouped) 때문에 max_out을 6000으로 확장.
+# DOCX 경로와 동일한 토큰 예산 적용 (CLAUDE.md 참조).
+_DESIGN_BRIEF_TYPES = {
+    "BRIEF_DESIGN_MASSING", "BRIEF_DESIGN_GUIDE", "BRIEF_DESIGN_FACADE",
+    "BRIEF_DESIGN_SUSTAIN", "BRIEF_DESIGN_SPECIAL",
+}
+
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 def _b64(img_bytes: bytes) -> str:
     return base64.standard_b64encode(img_bytes).decode("utf-8")
@@ -850,12 +857,37 @@ def _extract_page_sync(
     ]
     # 표가 빽빽한 페이지(면적 프로그램·배점표)는 행이 많아 출력 토큰 많이 필요.
     # 예: BRIEF_PROGRAM 단일 페이지 50행 × ~70 tokens/행 ≈ 3500. 안전 마진 8000.
+    # BRIEF_DESIGN_*: 복합 스키마(+ design_guidelines_grouped) → 6000 (DOCX 경로와 동일).
     # 그 외 페이지는 2000으로 충분 (텍스트 요약 위주).
-    max_out = 8000 if page_type in {"BRIEF_PROGRAM", "BRIEF_EVALUATION"} else 2000
+    max_out = (
+        8000 if page_type in {"BRIEF_PROGRAM", "BRIEF_EVALUATION"}
+        else 6000 if page_type in _DESIGN_BRIEF_TYPES
+        else 2000
+    )
     try:
         raw = _call_claude(content, max_tokens=max_out)
         data = parse_json_response(raw)
     except Exception as e:
+        # BRIEF_DESIGN_* 파싱 실패 시 design_guidelines_grouped 전용으로 재시도 (DOCX 경로와 동일).
+        if page_type in _DESIGN_BRIEF_TYPES:
+            try:
+                _fallback_instruction = (
+                    "아래 JSON 스키마 하나로만 응답하세요. 페이지에 보이는 모든 설계지침 항목을 "
+                    "빠짐없이 추출하고, 반드시 유효한 JSON만 출력하세요.\n\n"
+                    "{\n  " + _DESIGN_GROUPED_SCHEMA + "\n}"
+                    + _DESIGN_GROUPED_NOTES
+                )
+                _content2 = [
+                    _image_block(img_bytes),
+                    {"type": "text", "text": _fallback_instruction},
+                ]
+                _raw2 = _call_claude(_content2, max_tokens=8000)
+                _data2 = parse_json_response(_raw2)
+                if isinstance(_data2, dict) and _data2.get("design_guidelines_grouped"):
+                    _data2["_fallback"] = True
+                    return {"page": page_num, "type": page_type, "data": _data2}
+            except Exception:
+                pass
         data = {"error": str(e)}
     return {"page": page_num, "type": page_type, "data": data}
 
@@ -942,17 +974,21 @@ def _extract_digital_text_only(
             ),
         }
     ]
+    # BRIEF_DESIGN_*: design_guidelines_grouped 포함 복합 스키마 → 6000 토큰 필요.
+    _max_t = 6000 if page_type in _DESIGN_BRIEF_TYPES else 2000
     try:
         raw = call_messages(
             model=settings.model_id_classify,  # Haiku — 텍스트 구조화는 Sonnet 불필요
-            max_tokens=2000,
+            max_tokens=_max_t,
             temperature=0,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}],
         )
         data = parse_json_response(raw)
-    except Exception as e:
-        data = {"error": str(e)}
+    except Exception:
+        # 파싱 실패 시 None 반환 → 호출자(extract_one)가 vision 경로로 폴백.
+        # (기존: error dict 반환으로 vision 폴백이 차단됐음)
+        return None
 
     return {"page": page_num, "type": page_type, "data": data, "_source": "digital_haiku"}
 
