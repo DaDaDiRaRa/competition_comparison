@@ -416,3 +416,112 @@ async def classify_all_pages_brief(pdf_path: Path) -> list[dict]:
     """지침서 PDF 전체 페이지 분류 (BRIEF taxonomy)."""
     async with _SEMAPHORE:
         return await asyncio.to_thread(_classify_brief_pdf_sync, pdf_path)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 지침서(Brief) DOCX 블록 분류기 (텍스트 입력, 이미지 없음)
+# PDF 흐름의 classify_all_pages_brief 와 완전 분리.
+# block["block_num"] 을 page 필드로 사용하여 page_map 스키마 호환.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# DOCX 입력은 텍스트만 있으므로 이미지 페이지 헤더 환각 위험 없음.
+# 다만 표 캡션이 헤더로 잘못 추출되는 케이스를 막기 위해 기존 BRIEF_CLASSIFY_PROMPT 그대로 재사용.
+_BRIEF_DOCX_PREAMBLE = (
+    "아래는 DOCX 문서의 블록 텍스트입니다. 이미지 없이 텍스트와 표만으로 분류하세요.\n"
+    "각 블록은 [HEADER]/[PARAGRAPHS]/[TABLE] 섹션으로 구성됩니다. "
+    "[TABLE] 섹션은 파이프(|) 마크다운 형식의 표입니다.\n"
+    "has_scoring_table: [TABLE]에 비중/배점/점수 컬럼이 있고 값 합계가 ~100이면 true.\n"
+    "page_header_text: 각 블록의 [HEADER]를 그대로 반환.\n"
+    "has_text: 항상 true. has_drawing/has_rendering: 항상 false (DOCX는 도면·렌더링 없음).\n\n"
+)
+
+
+def _call_classify_brief_blocks(batch: list[dict]) -> list[dict]:
+    """텍스트 입력으로 한 배치 블록 분류 (BRIEF taxonomy)."""
+    from services.docx_loader import get_block_source_text
+
+    parts: list[str] = [_BRIEF_DOCX_PREAMBLE + BRIEF_CLASSIFY_PROMPT, ""]
+    for block in batch:
+        bn = block["block_num"]
+        parts.append(f"=== BLOCK {bn} ===")
+        parts.append(get_block_source_text(block))
+        parts.append("")
+    user_text = "\n".join(parts)
+
+    raw_text = call_messages(
+        model=settings.model_id_classify,
+        max_tokens=3000,
+        temperature=0,
+        system=BRIEF_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_text}],
+    )
+    try:
+        results = parse_json_response(raw_text)
+        if not isinstance(results, list):
+            results = [results]
+        return results
+    except Exception:
+        return []
+
+
+def _classify_brief_blocks_with_validation(batch: list[dict], max_retries: int = 2) -> list[dict]:
+    for _ in range(max_retries + 1):
+        results = _call_classify_brief_blocks(batch)
+        if isinstance(results, list) and len(results) == len(batch):
+            return results
+    # 1개씩 폴백
+    fallback = []
+    for single in batch:
+        res = _call_classify_brief_blocks([single])
+        fallback.append(res[0] if res else {})
+    return fallback
+
+
+def _classify_blocks_brief_sync(blocks: list[dict]) -> list[dict]:
+    all_results: list[dict] = []
+    for batch_start in range(0, len(blocks), BATCH_SIZE):
+        batch = blocks[batch_start: batch_start + BATCH_SIZE]
+        raw_results = _classify_brief_blocks_with_validation(batch)
+
+        for i, r in enumerate(raw_results):
+            block_num = batch[i]["block_num"]
+            normalised = _normalise_brief_result(r)
+            # DOCX 입력 — 시각 요소 없음. 강제 고정.
+            normalised["has_drawing"]   = False
+            normalised["has_rendering"] = False
+            normalised["has_text"]      = True
+            # has_table: block에 table_markdown이 있으면 LLM 응답과 무관하게 true
+            normalised["has_table"]     = bool(batch[i].get("table_markdown"))
+            # page_header_text가 비어있으면 블록 헤더로 폴백
+            if not normalised.get("page_header_text"):
+                normalised["page_header_text"] = batch[i].get("header_text", "")
+            all_results.append({**normalised, "page": block_num})
+
+    # 누락된 블록은 폴백 엔트리로 채움
+    by_page = {r["page"]: r for r in all_results}
+    fallback_results: list[dict] = []
+    for block in blocks:
+        bn = block["block_num"]
+        if bn in by_page:
+            fallback_results.append(by_page[bn])
+        else:
+            entry = _fallback_brief_entry(bn)
+            entry["has_table"]        = bool(block.get("table_markdown"))
+            entry["has_text"]         = True
+            entry["page_header_text"] = block.get("header_text", "")
+            fallback_results.append(entry)
+    return fallback_results
+
+
+async def classify_all_blocks_brief(blocks: list[dict]) -> list[dict]:
+    """DOCX 블록 리스트 분류 (BRIEF taxonomy). 이미지 토큰 0.
+
+    Args:
+        blocks: split_docx_to_blocks()의 반환값. 각 dict는 block_num/header_text/
+                paragraphs/table_markdown/merge_info 키 보유.
+
+    Returns:
+        page_map 스키마와 동일한 리스트. page = block_num.
+    """
+    async with _SEMAPHORE:
+        return await asyncio.to_thread(_classify_blocks_brief_sync, blocks)

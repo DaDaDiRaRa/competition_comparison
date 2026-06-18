@@ -324,6 +324,7 @@ def _extract_sections(brief_data: dict) -> dict:
             "construction_period_months": bpi.get("construction_period_months"),
             "budget_notes": _as_list(bpi, "budget_notes"),
             "special_conditions": _as_list(bpi, "special_conditions"),
+            "unit_program": _as_list(bpi, "unit_program"),
         },
     }
 
@@ -381,6 +382,31 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
         L.append("특기사항:")
         for c in pi["special_conditions"]:
             L.append(f"- {_str_item(c)}")
+
+    if pi["unit_program"]:
+        L.append("단위세대·시설별 분배:")
+        for u in pi["unit_program"]:
+            if not isinstance(u, dict):
+                L.append(f"- {_str_item(u)}")
+                continue
+            block      = u.get("block") or ""
+            tenure     = u.get("tenure") or ""
+            type_label = u.get("type_label") or ""
+            area_text  = u.get("area_text") or ""
+            ratio_text = u.get("ratio_text") or ""
+            note       = u.get("note") or ""
+            head = block + (f"({tenure})" if tenure else "")
+            if type_label:
+                head = (head + " · " if head else "") + type_label
+            parts: list[str] = []
+            if area_text:
+                parts.append(area_text)
+            if ratio_text:
+                parts.append(ratio_text)
+            if note:
+                parts.append(f"비고: {note}")
+            body = " / ".join(parts) if parts else "(내용 없음)"
+            L.append(f"- {head}: {body}" if head else f"- {body}")
 
     # ── BRIEF_PROJECT_INFO 부지별 ─────────────────────────────────────────────
     for i, st in enumerate([x for x in pi["sites"] if isinstance(x, dict)]):
@@ -862,6 +888,31 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                     c.alignment = _wrap_top
                     ws1.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
                     row += 1
+
+        # 단위세대·시설별 분배표 (BRIEF_PROJECT_INFO.unit_program[])
+        unit_prog = [u for u in pi.get("unit_program") or [] if isinstance(u, dict)]
+        if unit_prog:
+            row = _write_subsection(ws1, "단위세대·시설별 분배", row, span=4)
+            row = _write_header(ws1, ["구분", "평형/유형", "면적·규모", "비율/비고"], row)
+            for u in unit_prog:
+                block      = u.get("block") or ""
+                tenure     = u.get("tenure") or ""
+                type_label = u.get("type_label") or ""
+                area_text  = u.get("area_text") or ""
+                ratio_text = u.get("ratio_text") or ""
+                note       = u.get("note") or ""
+                head = block + (f"({tenure})" if tenure else "")
+                # 비율/비고: 비율과 비고를 한 칸에 결합 (둘 다 있을 때는 줄바꿈)
+                rn_parts: list[str] = []
+                if ratio_text:
+                    rn_parts.append(ratio_text)
+                if note:
+                    rn_parts.append(note)
+                rn_combined = "\n".join(rn_parts)
+                for c_idx, v in enumerate([head, type_label, area_text, rn_combined], start=1):
+                    cell = ws1.cell(row=row, column=c_idx, value=v or "")
+                    cell.alignment = _wrap_top
+                row += 1
         row = _sep(ws1, row)
 
     # ── 전체 규모 한도 / 부지별 건축개요 ─────────────────────────────────────

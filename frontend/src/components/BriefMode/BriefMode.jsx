@@ -80,7 +80,7 @@ export default function BriefMode() {
 
   const [facilityType, setFacilityType] = useState('')
   const [briefName, setBriefName] = useState('')
-  const [pdfFile, setPdfFile] = useState(null)
+  const [briefFile, setBriefFile] = useState(null)
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)   // complete 이벤트 payload
@@ -89,7 +89,13 @@ export default function BriefMode() {
   const defaultFt = facilityTypes[0]?.key ?? ''
   const ft = facilityType || defaultFt
 
-  const canRun = !!pdfFile && !running && !!ft
+  // 파일 확장자로 docx 여부 판단
+  const isDocx = !!briefFile && /\.docx$/i.test(briefFile.name || '')
+
+  // complete 이벤트가 알려주는 source_format 우선, 없으면 업로드 파일 확장자 기반
+  const sourceFormat = result?.source_format ?? (isDocx ? 'docx' : 'pdf')
+
+  const canRun = !!briefFile && !running && !!ft
 
   const run = async () => {
     setRunning(true)
@@ -100,7 +106,7 @@ export default function BriefMode() {
     const fd = new FormData()
     fd.append('facility_type', ft)
     fd.append('brief_name', briefName.trim())
-    fd.append('brief_pdf', pdfFile)
+    fd.append('brief_pdf', briefFile)
 
     try {
       for await (const ev of runBriefAnalyze(fd)) {
@@ -175,8 +181,25 @@ export default function BriefMode() {
       </div>
 
       <div style={s.group}>
-        <label style={s.label}>지침서 PDF</label>
-        <DropZone label="지침서 PDF 드래그 또는 클릭" onFiles={setPdfFile} />
+        <label style={s.label}>지침서 파일 (PDF 또는 DOCX)</label>
+        <DropZone
+          label="지침서 PDF/DOCX 드래그 또는 클릭"
+          accept=".pdf,.docx"
+          onFiles={setBriefFile}
+        />
+        {isDocx && (
+          <div style={{
+            marginTop: 8,
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+            background: 'var(--color-info-bg)',
+            border: '1px solid var(--color-info)',
+            borderRadius: 6,
+            padding: '8px 12px',
+          }}>
+            DOCX 파일: 텍스트와 표만 분석됩니다. 도면이 포함된 지침서는 PDF로 업로드해주세요.
+          </div>
+        )}
       </div>
 
       <button
@@ -238,7 +261,11 @@ export default function BriefMode() {
                   </span>
                   <div style={s.flagMsg}>{flag.message}</div>
                   {flag.location && (
-                    <div style={s.flagEvidence}>{flag.location}</div>
+                    <div style={s.flagEvidence}>
+                      {sourceFormat === 'docx'
+                        ? flag.location.replace(/p\.(\d+)/g, '블록 $1')
+                        : flag.location}
+                    </div>
                   )}
                 </div>
               ))}

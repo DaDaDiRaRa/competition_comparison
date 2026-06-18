@@ -365,7 +365,11 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '],\n'
             '"construction_cost_100m_won":null,"design_cost_100m_won":null,\n'
             '"construction_period_months":null,\n'
-            '"budget_notes":[],"special_conditions":[]\n'
+            '"budget_notes":[],"special_conditions":[],\n'
+            '"unit_program":[\n'
+            '  {"block":"","tenure":"","type_label":"",\n'
+            '   "area_text":"","ratio_text":"","note":""}\n'
+            ']\n'
             '}\n\n'
             'FIELD NOTES:\n'
             '- site_id: use label from brief exactly (부지1/부지2, A/B, 단일부지, etc.); '
@@ -394,6 +398,23 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '  "공개공지(㎡)" or "공개공지면적" → sites[].open_space_sqm\n'
             'PARENTHETICAL PREFIX RULE: values like "(완화) 460%" or "(조건부) 50m" — '
             'extract the NUMBER only, ignore the parenthetical prefix entirely\n'
+            '\n'
+            '- unit_program[]: 표에 시설/블록/평형별 분배 행이 보이면 '
+            '**표의 모든 행을 빠짐없이** 한 행씩 별도 entry로 기록한다. '
+            '자기검열로 일부만 골라 담지 말 것. 표에 없으면 [] 반환.\n'
+            '  대상 패턴 (모두 unit_program으로 추출):\n'
+            '    • 단위세대 분배: "1,2BL(분양) 84형 80%", "3BL(임대) 59형 20%", "공동주택A 59㎡ 30%" 등\n'
+            '    • 시설별 면적 제약: "근린생활시설 3% 이내", "부대복리시설 적정 규모"\n'
+            '    • 기여시설/별도부지: "공공기여시설(준주거용지) 4,800평", "기부채납 1,200㎡"\n'
+            '  각 entry 필드 (보이는 것만 채우고 나머지는 null/빈 문자열):\n'
+            '    - block: 좌측 1열 구분 라벨 그대로 ("1,2BL", "3BL", "근린생활시설", "공공기여시설(준주거용지)")\n'
+            '    - tenure: 괄호 안 임대유형 ("분양"/"임대") — 라벨에 명시 없으면 ""\n'
+            '    - type_label: 평형/유형 라벨 ("84형", "59~110형") — 시설 행은 ""\n'
+            '    - area_text: 면적 컬럼 원문 그대로 ("전용 85㎡ 내외", "4,800평", "적정 규모 제안")\n'
+            '    - ratio_text: 비율 컬럼 원문 그대로 ("80% 내외", "20%") — 없으면 ""\n'
+            '    - note: 비고 컬럼 원문 그대로 ("비율조정 가능", "전체 연면적의 3% 이내 반영할 것")\n'
+            '  특히 가로 병합 셀(상위 카테고리가 여러 행에 걸쳐 표시)이 있는 표에서는 '
+            'block 값을 모든 행에 반복 기록 — 비어 보이는 칸은 직전 행의 block을 그대로 사용.\n'
             '- Do NOT invent values. null if not visible on page.'
         ),
     },
@@ -1108,6 +1129,315 @@ async def extract_pdf(
     return sorted(results, key=lambda r: r.get("page", 0))
 
 
+# ── DOCX 블록 단위 추출 (rasterize 없음, 이미지 토큰 0) ──────────────────────────
+
+def _extract_docx_eval_from_table(block: dict) -> dict:
+    """BRIEF_EVALUATION 표 → evaluation_categories 직접 생성 (LLM 호출 없음).
+
+    두 가지 표 구조 모두 처리:
+      (A) name_col vMerge + 행별 points (KT 패턴):
+          한 구분이 여러 sub_items로 나뉘고 각 sub_item이 자체 배점.
+          → 카테고리 1개, sub_items[]에 행별 detail, points = 행별 점수 합계.
+      (B) points_col vMerge (영등포 패턴, shared_with):
+          단일 배점 셀이 여러 구분에 걸쳐 병합 → shared_with 자동 생성.
+
+    환각 원천 차단을 위해 LLM 사용 안 함.
+    """
+    import re as _re
+
+    table_md = block.get("table_markdown") or ""
+    merge_info = block.get("merge_info") or []
+    if not table_md:
+        return {"evaluation_categories": [], "total_points": None}
+
+    lines = [l for l in table_md.split("\n") if l.strip()]
+    if len(lines) < 3:
+        return {"evaluation_categories": [], "total_points": None}
+
+    def _parse_row(line: str) -> list[str]:
+        s = line.strip()
+        if s.startswith("|"):
+            s = s[1:]
+        if s.endswith("|"):
+            s = s[:-1]
+        return [c.strip().replace("&#124;", "|") for c in s.split("|")]
+
+    headers = _parse_row(lines[0])
+    body_rows = [_parse_row(l) for l in lines[2:]]
+
+    # 컬럼 인덱스 식별
+    name_col   = 0
+    points_col = -1
+    detail_col = -1
+    for i, h in enumerate(headers):
+        if _re.search(r"비중|배점|점수|가중", h):
+            points_col = i
+        elif _re.search(r"세부|평가\s*사항|항목|평가\s*항목|내용", h) and i != 0:
+            detail_col = i
+
+    if points_col < 0:
+        return {"evaluation_categories": [], "total_points": None}
+
+    # merge_info row 는 원본 table.rows 인덱스 (헤더 포함).
+    # body_rows 인덱스 i = 원본 row index i+1.
+    # 헤더 행 자체 병합(예: row=0 col=0 rows=2)은 무시 — body 에 영향 없음.
+    def _body_groups_for_col(col: int) -> dict[int, dict]:
+        """col 에 대한 vMerge 그룹: body_idx → {start_body, end_body, value}."""
+        groups: dict[int, dict] = {}
+        for m in merge_info:
+            if m["col"] != col:
+                continue
+            start_orig = m["row"]
+            end_orig   = start_orig + m["merged_rows"] - 1
+            # body 좌표로 변환 (원본 row 1 = body 0)
+            start_body = start_orig - 1
+            end_body   = end_orig - 1
+            if end_body < 0:
+                continue
+            if start_body < 0:
+                start_body = 0
+            for r in range(start_body, end_body + 1):
+                if 0 <= r < len(body_rows):
+                    groups[r] = {"start": start_body, "end": end_body, "value": m["value"]}
+        return groups
+
+    name_groups   = _body_groups_for_col(name_col)
+    points_groups = _body_groups_for_col(points_col)
+
+    def _parse_points(text: str) -> float | None:
+        if not text:
+            return None
+        s = text.strip().strip("○●◯◎").strip()
+        m = _re.search(r"(\d+(?:\.\d+)?)", s)
+        if not m:
+            return None
+        try:
+            v = float(m.group(1))
+        except ValueError:
+            return None
+        if 0 < v <= 1.0:
+            v *= 100
+        return v
+
+    categories: list[dict] = []
+    seen_name_starts: set[int] = set()
+    seen_points_starts: set[int] = set()
+
+    for body_idx, cells in enumerate(body_rows):
+        if not cells or all(not c for c in cells):
+            continue
+
+        name_text   = cells[name_col]   if name_col   < len(cells) else ""
+        detail_text = cells[detail_col] if 0 <= detail_col < len(cells) else ""
+        points_text = cells[points_col] if points_col < len(cells) else ""
+
+        # 패턴 (B): points_col vMerge — 단일 점수 셀이 여러 구분에 걸침
+        if body_idx in points_groups:
+            grp = points_groups[body_idx]
+            if grp["start"] in seen_points_starts:
+                continue
+            seen_points_starts.add(grp["start"])
+
+            group_names: list[str] = []
+            sub_items: list[str] = []
+            for r in range(grp["start"], grp["end"] + 1):
+                if r >= len(body_rows):
+                    continue
+                row = body_rows[r]
+                nm = row[name_col].strip() if name_col < len(row) else ""
+                if nm and nm not in group_names:
+                    group_names.append(nm)
+                if 0 <= detail_col < len(row):
+                    dt = row[detail_col].strip()
+                    if dt:
+                        sub_items.append(dt)
+            primary = group_names[0] if group_names else (name_text or "")
+            shared  = group_names[1:] if len(group_names) > 1 else []
+            points  = _parse_points(grp["value"])
+            if primary or points is not None:
+                categories.append({
+                    "name":        primary,
+                    "points":      points,
+                    "shared_with": shared,
+                    "sub_items":   sub_items,
+                })
+            continue
+
+        # 패턴 (A): name_col vMerge — 한 구분의 sub_items가 행별로 분리, 각 행이 자체 점수
+        if body_idx in name_groups:
+            grp = name_groups[body_idx]
+            if grp["start"] in seen_name_starts:
+                continue
+            seen_name_starts.add(grp["start"])
+
+            primary  = (grp["value"] or "").replace("\n", " ").strip()
+            sub_items: list[str] = []
+            row_points: list[float] = []
+            for r in range(grp["start"], grp["end"] + 1):
+                if r >= len(body_rows):
+                    continue
+                row = body_rows[r]
+                if 0 <= detail_col < len(row):
+                    dt = row[detail_col].strip()
+                    if dt:
+                        sub_items.append(dt)
+                if 0 <= points_col < len(row):
+                    pv = _parse_points(row[points_col])
+                    if pv is not None:
+                        row_points.append(pv)
+            # 카테고리 총점 = 행별 점수 합계 (각 sub_item이 자체 점수를 가질 때)
+            cat_points = sum(row_points) if row_points else None
+            categories.append({
+                "name":        primary or name_text,
+                "points":      cat_points,
+                "shared_with": [],
+                "sub_items":   sub_items,
+            })
+            continue
+
+        # 단일 행
+        name = name_text
+        if not name:
+            continue
+        points = _parse_points(points_text)
+        sub_items = [detail_text] if detail_text else []
+        categories.append({
+            "name":        name,
+            "points":      points,
+            "shared_with": [],
+            "sub_items":   sub_items,
+        })
+
+    # 소계/합계 행 식별 — total_points 계산에서 제외, 카테고리 리스트에서도 제거
+    _SUBTOTAL_RE = _re.compile(r"소\s*계|합\s*계|총\s*계|^합계|^total")
+    explicit_total: float | None = None
+    primary_categories: list[dict] = []
+    for c in categories:
+        name = (c.get("name") or "").strip()
+        if _SUBTOTAL_RE.search(name):
+            pts = c.get("points")
+            if isinstance(pts, (int, float)) and pts >= 95 and pts <= 105:
+                explicit_total = float(pts)
+            continue
+        primary_categories.append(c)
+
+    if explicit_total is not None:
+        total_points = explicit_total
+    else:
+        total_points = sum(
+            c["points"] for c in primary_categories
+            if isinstance(c.get("points"), (int, float))
+        )
+        if total_points <= 0:
+            total_points = None
+
+    return {
+        "total_points":          total_points,
+        "evaluation_categories": primary_categories,
+        "evaluation_method":     "",
+        "jury_composition":      "",
+        "disqualification_criteria": [],
+    }
+
+
+def _extract_docx_block_with_llm(block: dict, page_type: str, prompt_cfg: dict) -> dict:
+    """블록의 텍스트(파라그래프 + 표 마크다운)를 LLM에 보내 추출. 이미지 없음."""
+    from services.docx_loader import get_block_source_text
+
+    source = get_block_source_text(block)
+
+    # 표가 있는 경우 LLM에 병합 셀 설명 추가
+    if block.get("table_markdown"):
+        merge_note = (
+            "\n\n[표 해석 규칙: 같은 텍스트가 인접 행에서 반복되면 가로/세로 병합 셀이다. "
+            "비중/배점이 병합되어 여러 구분에 공유되면 shared_with 배열에 형제 항목명을 기록하라.]"
+        )
+    else:
+        merge_note = ""
+
+    instruction = prompt_cfg["instruction"] + merge_note
+    user_text = (
+        "다음은 DOCX 지침서의 한 블록입니다. 이미지 없이 텍스트와 표만으로 추출하세요.\n\n"
+        f"{source}\n\n"
+        f"{instruction}"
+    )
+
+    max_out = 8000 if page_type in {"BRIEF_PROGRAM", "BRIEF_EVALUATION"} else 2000
+    try:
+        raw = call_messages(
+            model=settings.model_id,
+            max_tokens=max_out,
+            temperature=0,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_text}],
+        )
+        data = parse_json_response(raw)
+    except Exception as e:
+        data = {"error": str(e)}
+    return data
+
+
+async def extract_docx(
+    docx_path: str,
+    page_map: list[dict],
+    is_brief: bool = True,
+) -> list[dict]:
+    """DOCX 블록별 데이터 추출. rasterize 없음, 이미지 토큰 0.
+
+    page_map: classify_all_blocks_brief() 반환값. page = block_num.
+
+    BRIEF_EVALUATION + 표 있는 블록은 LLM 없이 표 구조에서 직접 추출 (환각 차단).
+    그 외 BRIEF_* 타입은 표 마크다운 + 텍스트를 LLM에 전달 (이미지 토큰 0).
+    BRIEF_ADMIN: 스킵 (PDF 정책 동일).
+
+    Returns: [{page, type, data, ...}, ...] — extract_pdf 와 동일 스키마.
+    """
+    from services.docx_loader import split_docx_to_blocks
+    blocks = split_docx_to_blocks(docx_path)
+    block_by_num = {b["block_num"]: b for b in blocks}
+
+    type_by_block: dict[int, str] = {}
+    for entry in page_map:
+        type_by_block[entry.get("page", 0)] = entry.get("primary_type", "BRIEF_DESIGN_GUIDE")
+
+    sem = asyncio.Semaphore(4)
+
+    async def _extract_one(block: dict) -> dict:
+        bn        = block["block_num"]
+        page_type = type_by_block.get(bn, "BRIEF_DESIGN_GUIDE")
+
+        # 1. BRIEF_ADMIN 스킵
+        if page_type == "BRIEF_ADMIN":
+            return {"page": bn, "type": page_type, "data": {}, "_skipped": True}
+
+        # 프롬프트 선택 (BRIEF_* 우선)
+        prompt_cfg = EXTRACTION_PROMPTS_BRIEF.get(page_type)
+        if prompt_cfg is None:
+            prompt_cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
+
+        # priority=3 페이지는 호출 생략 (토큰 절감, PDF 정책 동일)
+        if prompt_cfg.get("priority", 3) >= SKIP_PRIORITY_THRESHOLD:
+            return {"page": bn, "type": page_type, "data": {}, "_skipped": True}
+
+        # 2. BRIEF_EVALUATION + 표 있는 블록: 표 구조 직접 파싱 (환각 차단)
+        if page_type == "BRIEF_EVALUATION" and block.get("table_markdown"):
+            data = await asyncio.to_thread(_extract_docx_eval_from_table, block)
+            # 표 파싱이 빈 결과면 LLM 폴백
+            if data.get("evaluation_categories"):
+                return {"page": bn, "type": page_type, "data": data, "_source": "docx_table"}
+
+        # 3. 그 외: 텍스트 + 표 마크다운을 LLM에 전달
+        async with sem:
+            data = await asyncio.to_thread(
+                _extract_docx_block_with_llm, block, page_type, prompt_cfg
+            )
+        return {"page": bn, "type": page_type, "data": data, "_source": "docx_llm"}
+
+    target_blocks = [block_by_num[entry["page"]] for entry in page_map if entry["page"] in block_by_num]
+    results = await asyncio.gather(*[_extract_one(b) for b in target_blocks])
+    return sorted(results, key=lambda r: r.get("page", 0))
+
+
 # ── 유틸리티 ──────────────────────────────────────────────────────────────────
 def _extract_brief_reqs_sync(brief_trimmed: dict, axes_str: str) -> dict:
     prompt = (_BRIEF_REQ_PROMPT_TEMPLATE
@@ -1175,7 +1505,7 @@ def _merge_brief_project_info_pages(items: list[dict]) -> dict:
     _TOP_SCALARS = ["competition_name", "organizer", "competition_type",
                     "construction_cost_100m_won", "design_cost_100m_won",
                     "construction_period_months"]
-    _TOP_LISTS = ["budget_notes", "special_conditions"]
+    _TOP_LISTS = ["budget_notes", "special_conditions", "unit_program"]
 
     merged: dict = {}
 
@@ -1189,15 +1519,24 @@ def _merge_brief_project_info_pages(items: list[dict]) -> dict:
         else:
             merged[key] = None
 
-    # 상위 list: 순서 유지 합집합
+    # 상위 list: 순서 유지 합집합. dict 요소(unit_program 등)는 JSON repr로 해시.
     for key in _TOP_LISTS:
         seen: list = []
         seen_set: set = set()
         for item in items:
             for v in (item.get(key) or []):
-                if v not in seen_set:
+                if isinstance(v, dict):
+                    sig = json.dumps(v, ensure_ascii=False, sort_keys=True)
+                else:
+                    sig = v
+                try:
+                    is_new = sig not in seen_set
+                except TypeError:
+                    is_new = True  # 비교 불가한 타입은 보존 (안전 측)
+                if is_new:
                     seen.append(v)
-                    seen_set.add(v)
+                    if isinstance(sig, str):
+                        seen_set.add(sig)
         merged[key] = seen
 
     # sites[]: site_id로 매칭, 필드별 first-non-null
