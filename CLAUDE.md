@@ -59,8 +59,14 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
 
 6. **`routers/archive.py`** - 아카이브 자연어 검색 (FTS5 in-memory SQLite, `GET /list` + `POST /search` + `GET /{ft}/{cid}`)
 
-7. **`routers/brief.py`** - 지침서 단독 분석 엔드포인트
-   - `POST /brief/analyze` — 지침서 PDF 1개 업로드 → 페이지 분류 → 데이터 추출 → 요구사항 분석 → 검증 → JSON·MD·xlsx 저장 (SSE)
+7. **`routers/brief.py`** - 지침서 단독 분석 엔드포인트 (PDF + DOCX)
+   - `POST /brief/analyze` — 지침서 1개 업로드 → 분류 → 추출 → 요구사항 → 검증 → JSON·MD·xlsx 저장 (SSE)
+   - `_validate_brief_file(data, filename)` 확장자 분기: `.pdf` (≤200MB, magic byte `%PDF`) / `.docx` (≤50MB, magic byte `PK\x03\x04`). 기타 확장자 → 400 "PDF 또는 DOCX 파일만 지원합니다"
+   - **PDF 경로**: `classify_all_pages_brief(pdf_path)` + `extract_pdf(..., is_brief=True)` (기존 그대로)
+   - **DOCX 경로**: `split_docx_to_blocks(docx_path)` → `classify_all_blocks_brief(blocks)` → `extract_docx(docx_path, page_map, is_brief=True)`. 이미지 토큰 0
+   - SSE 라벨 분기: docx → "지침서 블록 분류 중" / pdf → "지침서 페이지 분류 중"
+   - `_brief_meta.source_format`: `"pdf"` | `"docx"` — 다운스트림 (UI 라벨, list 응답) 에서 사용
+   - SSE `complete` 이벤트 + `GET /brief/list` 응답에 `source_format` 포함
    - `GET /brief/list` — `{db_path}/_briefs/*.json` 최신순 목록
    - `GET /brief/exports/{filename}` — md / xlsx 다운로드 (path traversal 방지)
    - 저장 위치: `{db_path}/_briefs/{YYYYMMDD_HHMMSS}_{facility_type}_{slug}.{json|md|xlsx}`
@@ -78,12 +84,25 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
   - `get_diagnosis_report_path(filename) → Path | None`
   - `list_diagnosis_reports() → list[dict]` — 타임스탬프·라벨 파싱 목록 (최신순)
   - `get_losing_submissions(facility_type) → list[dict]` — `*_lose.json` 전체 수집
+- `services/docx_loader.py` - DOCX 지침서를 블록 단위로 분할 (PDF 흐름과 완전 독립)
+  - `split_docx_to_blocks(path) → list[dict]` — 본문 순회 후 R1~R5 + F1~F3 규칙으로 블록 분할. 각 블록: `{block_num, header_text, paragraphs[], table_markdown, merge_info[]}`. block_num이 page_map의 `page` 역할.
+  - **분할 규칙:** R1 Heading 1/2/3 스타일 / R2 폰트 휴리스틱(굵게+14pt 이상 또는 16pt 이상) / R3 섹션 번호(`^(제\d+장|\d+(\.\d+){0,3})\s`) / R4 캡션(`[표/양식/서식/별표 N]`) / R5 표는 항상 단독 블록의 마지막 요소
+  - **필터/머지:** F1 TOC(`\t\d+$`) → "(목차)" 단일 블록 압축 / F2 orphan 헤더(단락1개+표없음+R3매칭) → 다음 블록의 breadcrumb 누적 ("A > B > C") / F3 단락 30개 OR 8000자 초과 → 강제 컷, " (계속)" suffix
+  - **헤더 폴백 순서:** A(Heading) → B(폰트 visual) → C(캡션) → **D(표 첫 행 텍스트 60자)** → E(첫 단락) → F("(블록 N)" 디폴트)
+  - **vMerge 감지:** `cell._tc` identity 비교 우선 + tcPr 내 `w:vMerge` element 검사. python-docx 가 vMerge 그룹 전체에 동일 `_tc` 인스턴스를 반환하는 동작을 활용 — XML state만으로는 그룹 시작/끝을 정확히 구분 못 함. **두 시그널을 조합한 로직을 되돌리면 merge_info 가 비게 됨.**
+  - 표 → 파이프 마크다운: vMerge continue 행은 빈 칸 출력, 셀 60자 컷 + "…", 셀 안 `|` → `&#124;`, 셀 내 개행 → 공백
+  - `get_block_source_text(block) → str` — 헤더+단락+표 미리보기(최대 10행) 결합. 6000자 초과 시 앞 4000 + 뒤 2000 (중간 "[...생략...]"). 분류·추출 공통 입력.
+  - 의존성: `python-docx>=1.1.0` (양쪽 requirements 동기화 필수 — Important Notes 참조)
 - `services/page_classifier.py` - Classifies PDF pages (cover, floor plan, section, etc.)
   - `classify_all_pages_brief()` — 지침서 PDF 전용 분류. PRIORITY RULE 2: 비중/배점/점수 컬럼이 있는 표 → `BRIEF_EVALUATION` (BRIEF_DESIGN_GUIDE보다 우선). 응답 JSON에 `has_scoring_table` 필드 추가 (판단 근거 추적용).
+  - `classify_all_blocks_brief(blocks) → list[dict]` — DOCX 블록 분류. 텍스트 전용 (이미지 토큰 0). 기존 `BRIEF_CLASSIFY_PROMPT`에 DOCX preamble만 prepend. `_BRIEF_DOCX_PREAMBLE` 에 "이미지 없이 텍스트와 표만으로 분류" 명시. 응답에서 `has_drawing`/`has_rendering` 항상 false 강제, `has_table` 은 block의 `table_markdown` 보유 여부로 결정 (LLM 응답 무시). page_map 스키마는 PDF 경로와 동일 (`page` 필드는 block_num).
   - BRIEF_EVALUATION vs BRIEF_DESIGN_GUIDE 구분 기준: 배점 표(비중/배점/점수 컬럼, 합계 ≈ 100) → BRIEF_EVALUATION / 글머리기호(•) 위주 텍스트, 표 없음 → BRIEF_DESIGN_GUIDE
   - **`has_scoring_table=False` 강등:** `_normalise_brief_result()`에서 LLM이 `has_scoring_table=False`를 반환하면 BRIEF_EVALUATION → BRIEF_ADMIN으로 강등. 참여자 명단·등록업체 목록(표 있으나 배점 없음)의 오분류 방지.
   - **BRIEF_ADMIN 조건 (f):** "참여자 명단·참가업체 목록·설계공모 참여자·등록업체" 페이지는 표 유무와 무관하게 BRIEF_ADMIN. BRIEF_EVALUATION NOT 조건에 명시.
 - `services/data_extractor.py` - Extracts structured design data from pages; `merge_extracted_data()` returns `_quantitative` dict at top level
+  - `extract_docx(docx_path, page_map, is_brief=True) → list[dict]` — DOCX 블록별 추출. rasterize 없음, 이미지 토큰 0. 반환 스키마는 `extract_pdf` 와 동일 (`[{"page": block_num, "type", "data", ...}, ...]`). 분기: ① `BRIEF_ADMIN` / priority≥3 → 스킵 ② `BRIEF_EVALUATION` + `table_markdown` 존재 → `_extract_docx_eval_from_table()` (LLM 없이 표 구조 직접 파싱, **환각 원천 차단**) ③ 그 외 → `_extract_docx_block_with_llm()` (텍스트+표 마크다운만 전달, 이미지 없음)
+  - `_extract_docx_eval_from_table(block) → dict` — 표 첫 행에서 `비중|배점|점수|가중` 컬럼 자동 식별. **두 가지 vMerge 패턴 처리**: (A) name_col vMerge + 행별 points → 한 카테고리의 sub_items + 행별 점수 합 / (B) points_col vMerge → shared_with 배열 자동 생성 (영등포 환각 차단). 소계/합계 행(`소\s*계|합\s*계|총\s*계|^합계|^total`) 자동 제외 → total_points에서 빠짐. 명시적 총계 행이 95~105 범위면 그대로 total_points로 사용 (LLM 무환각 fast-path).
+  - `BRIEF_PROJECT_INFO` 스키마에 **`unit_program[]` 필드** (2026-06-18 추가) — 단위세대 분배/시설별 면적 제약 표를 한 행씩 entry로 캡쳐. 필드: `{block, tenure(분양/임대/""), type_label(84형 등), area_text, ratio_text, note}`. KT 케이스(1,2BL/3BL/근린생활/부대복리/공공기여시설) 처럼 단일 site 스칼라 필드로 표현 불가한 분배 정보를 모두 보존. 프롬프트에 "표의 모든 행 빠짐없이 / 자기검열 금지" 룰 명시. `_merge_brief_project_info_pages()`가 `_TOP_LISTS`에 `unit_program` 포함 — dict 항목은 JSON repr 해시로 dedup.
   - `DIGITAL_TEXT_EXCLUDE_TYPES` — `{"AREA_TABLE","TECHNICAL","INCENTIVE_TABLE","BUSINESS_VIABILITY","AREA_INCREASE","BRIEF_PROGRAM","BRIEF_REGULATIONS","BRIEF_EVALUATION","BRIEF_PROJECT_INFO"}`. 이 타입들은 fitz.get_text() Tier 0을 건너뛰고 타일-비전 경로로 처리. `BRIEF_EVALUATION` / `BRIEF_PROJECT_INFO` 추가 이유: HWP→PDF 변환 시 병합 셀 구조 붕괴 → 구분/항목/비중 관계 오독 위험.
   - `BRIEF_EVALUATION` 추출 스키마: `evaluation_categories[].sub_items`(구분 하위 세부항목 문자열 배열) + `evaluation_categories[].shared_with`(병합 셀로 배점이 공유된 형제 구분 이름 목록) 추가. `total_points`는 배점 합계(통상 100).
   - **BRIEF_EVALUATION 다중 페이지 스태킹:** `extract_pdf(is_brief=True)` 진입 시 BRIEF_EVALUATION 페이지가 2개 이상이면 `_stack_images_vertically()` (PIL)로 세로 이어붙임 → LLM에 1회 전달. `precomputed_eval`에 결과 저장, 나머지 페이지는 `{"data": {}, "_merged": True}` 반환. 병합 셀이 페이지 경계를 넘어도 표 구조를 한 번에 파악 가능.
@@ -121,10 +140,9 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
 - `services/grade_helpers.py` - 등급 처리 단일 소스. `LEGACY_GRADE_MAP`, `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade(d, *, check_overall=False)`. `report_generator` / `diagnosis_report_generator` / `myproject_report_generator` 모두 여기서 import.
 - `services/diagnosis_report_generator.py` - 진단 결과 HTML 리포트 생성 (LLM 호출 없음). `generate_diagnosis_report(diagnosis: dict) -> str`. 섹션: 종합점수 링 → 페이지 구성 바 → 패턴 편차 경고 → 지침서 충족도 → 요구사항 매핑 → 평가축별 상세 → 보강 포인트
 - `services/pattern_builder.py` - Builds patterns from winner data + qualitative LLM summary; `build_pattern()` now also collects `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords) for loser anti-pattern comparison
-- `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser
+- `services/utils.py` - PDF rasterizer using PyMuPDF (`rasterize_pdf`), SSE helper, JSON parser. **공유 dict 헬퍼 `_first(data, key) → dict`, `_as_list(data, key) → list` 도 여기 단일 정의** — 다른 모듈에서 `from services.utils import _first, _as_list`. 이전엔 `brief_checklist_exporter` / `brief_validator` 에 중복 정의돼 있던 것을 통합 (2026-06-18).
   - `user_error_msg(e: Exception) → str` — 예외를 사용자 친화적 한국어 메시지로 변환. `LocalProtocolError`/illegal header(API 키 형식 불량) → 401/502/429/timeout/PDF/JSON 패턴 매핑 순. `accumulate.py` / `diagnose.py`에서 공통 사용.
   - `parse_json_response(text)` — 3단계 복구: ① 펜스 제거 → ② 직접 파싱 → ③ `{...}` 또는 `[...]` 추출 + 후행 쉼표 제거. LLM이 마크다운 코드블록이나 산문을 섞어도 JSON 추출 가능.
-- `services/pdf_rasterizer.py` - Legacy fallback rasterizer (not used by default)
 
 **Configuration:**
 
@@ -161,7 +179,10 @@ Located in `frontend/` (repo root), the app has seven main tabs (정의: `App.js
    - 하단에 `PatternViewer` 컴포넌트 포함 (시설유형별 당선/낙선 패턴 통계 시각화)
 6. **ArchiveMode** - 아카이브 자연어 검색 (검색창 + 카드 그리드 + 슬라이드오버 상세)
 7. **BriefMode** - 지침서 단독 분석 UI (`POST /api/brief/analyze`)
-   - 지침서 PDF 업로드 → SSE 진행 → 분석 완료 시 md/xlsx 다운로드 링크 + 검증 경고 요약 표시
+   - 지침서 PDF **또는 DOCX** 업로드 → SSE 진행 → 분석 완료 시 md/xlsx 다운로드 + 검증 경고 요약 표시
+   - DropZone `accept=".pdf,.docx"` — 두 형식 모두 허용. docx 선택 시 "텍스트와 표만 분석됩니다. 도면이 포함된 지침서는 PDF로 업로드해주세요" 안내 박스 표시
+   - `sourceFormat` 결정: complete 이벤트의 `source_format` 우선, 없으면 업로드 파일 확장자
+   - flag location 라벨: `sourceFormat==="docx"` 일 때 `p.N` → `블록 N` 정규식 치환 (UI 일관성)
    - `routers/brief.py`와 짝을 이루는 유일한 프론트 모드
 
 **Key Components:**
@@ -263,13 +284,20 @@ Test with curl or Postman by uploading files to:
 
 **Brief Pipeline (지침서 단독 분석 — `POST /api/brief/analyze`):**
 
-1. Upload brief PDF (multipart 또는 `/api/upload` `file_ref`)
-2. `classify_all_pages_brief()` → 14개 BRIEF_* 타입으로 분류 (`config.py::BRIEF_PAGE_TYPES`)
-3. `extract_pdf(pdf_path, page_map, is_brief=True)` → `merge_extracted_data()` → `brief_data`
-4. `extract_brief_requirements(brief_data, facility_type)` → `brief_data["_requirements"]`
-5. `validate_brief(brief_data, requirements)` → `brief_data["validation"]` (flags / summary)
-6. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write_bytes(xlsx)`
-7. SSE `complete` 이벤트: `{brief_id, md_filename, xlsx_filename, validation_summary}`
+1. Upload brief **PDF or DOCX** (multipart 또는 `/api/upload` `file_ref`). `_validate_brief_file()` 가 확장자 + magic byte 검증 후 `source_format` 결정 (`"pdf"` | `"docx"`).
+2. **분류 (분기):**
+   - PDF: `classify_all_pages_brief(pdf_path)` — 이미지 기반 vision 분류
+   - DOCX: `split_docx_to_blocks(docx_path)` → `classify_all_blocks_brief(blocks)` — 텍스트 기반 분류 (이미지 토큰 0)
+   - 결과 스키마는 동일 (page_map). DOCX 경우 `page` = `block_num`.
+3. **추출 (분기):**
+   - PDF: `extract_pdf(pdf_path, page_map, is_brief=True)` — vision/tiled/OCR/digital text 다단 추출
+   - DOCX: `extract_docx(docx_path, page_map, is_brief=True)` — 텍스트+표 마크다운만 전달. BRIEF_EVALUATION 표는 `_extract_docx_eval_from_table()` 로 LLM 없이 직접 파싱 (환각 차단)
+4. `merge_extracted_data(page_map, extractions)` → `brief_data`. BRIEF_PROJECT_INFO 다중 페이지/블록은 `_merge_brief_project_info_pages()` 로 합쳐짐 (sites[]·special_conditions[]·unit_program[] 모두).
+5. `extract_brief_requirements(brief_data, facility_type)` → `brief_data["_requirements"]`
+6. `validate_brief(brief_data, requirements)` → `brief_data["validation"]` (flags / summary)
+7. `_brief_meta` 에 `source_format` 기록 (검증 단계 이전에 설정 — `_check_facility_keyword_conflict` 가 facility_type 읽음)
+8. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write_bytes(xlsx)`
+9. SSE `complete` 이벤트: `{brief_id, md_filename, xlsx_filename, validation_summary, source_format}`
 
 **Diagnose Pipeline:**
 
@@ -340,7 +368,7 @@ Test with curl or Postman by uploading files to:
 - **File Naming:** Components PascalCase. API paths kebab-case.
 - **Page Types:** 27개 — 일반 20개 + 재건축 전용 7개(`BUSINESS_VIABILITY`, `AREA_INCREASE`, `VIEW_ANALYSIS`, `COMMUNITY_PROGRAM`, `COMPANY_PORTFOLIO`, `CONSTRUCTION_PLAN`, `UNIT_PLAN_PENTHOUSE`). `PAGE_TYPES_META`에 전체 한국어명 정의.
 - **ProgressLog Events:** All SSE events must include `_timestamp` for elapsed time display.
-- **PDF Rasterizer:** Primary: `services/utils.py::rasterize_pdf` (PyMuPDF). `services/pdf_rasterizer.py` is legacy. PaddleOCR은 `services/utils.py::ocr_page()`에서 lazy-load — `requirements-ocr.txt` 미설치 시 자동 스킵.
+- **PDF Rasterizer:** `services/utils.py::rasterize_pdf` (PyMuPDF) 가 단일 경로. PaddleOCR은 `services/utils.py::ocr_page()`에서 lazy-load — `requirements-ocr.txt` 미설치 시 자동 스킵.
 - **FastAPI Lifespan:** `main.py`는 `@app.on_event` 대신 `@asynccontextmanager async def lifespan()` 사용. `init_db()` 실패해도 서버가 뜨도록 graceful 처리.
 - **데스크톱 앱 (PyWebView + PyInstaller):** `backend/launcher.py`가 진입점. uvicorn을 백그라운드 스레드로 띄운 뒤 `webview.create_window()`로 EdgeChromium 네이티브 창 표시 (`gui` 미지정 시 Windows에서 자동 선택). `JsApi.open_external(url)` JS API 노출 → 프론트의 `App.jsx`가 `target="_blank"` 클릭을 가로채 `window.pywebview.api.open_external()`로 시스템 기본 브라우저에 위임 (리포트 인쇄/다운로드 편의). `frozen` 모드 감지(`getattr(sys, 'frozen', False)`)로 `sys._MEIPASS` 안의 `frontend_dist` 서빙.
 - **PyInstaller spec:** `backend/competition_analyzer.spec`. `collect_all('webview')`, `collect_all('clr_loader')`, `collect_all('pythonnet')` 필수 — pywebview는 .NET 어셈블리(`System`, `System.Windows`, `System.Drawing`)를 동적 로드하므로 정적 분석으로 못 잡힘. PaddleOCR 등 무거운 의존성은 `excludes`. 산출물: `backend/dist/CompetitionAnalyzer/CompetitionAnalyzer.exe` (~14MB) + `_internal/` (~120MB). `console=False` (windowed 빌드) — CMD 창 미표시.
@@ -368,6 +396,8 @@ Test with curl or Postman by uploading files to:
 - **ProjectList Filtering:** 데이터 존재하는 시설 유형만 탭 노출. 첫 번째 유형 자동 선택.
 - **New Machine Setup:** `git clone` → `pip install -r requirements.txt` + `npm install` → 백엔드 실행 → 브라우저에서 설정 탭에서 DB 경로 입력 + API 키 입력. DB 경로 미입력 시 `~/CompetitionAnalyzerDB` 자동 사용.
 - **PaddleOCR (선택):** 이미지 기반 PDF(텍스트 없는) OCR 필요 시만 `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision으로 동작하므로 불필요.
+- **DOCX 지침서 지원:** `python-docx`(필수, 양쪽 requirements 동기화) + `services/docx_loader.py` 모듈. PDF 흐름과 완전 독립 — `classify_all_blocks_brief` / `extract_docx` 가 별도 함수. block_num을 page 필드로 재사용해 page_map 스키마 호환. **이미지 토큰 0**(텍스트+표 마크다운만 LLM에 전달). 도면/렌더링 페이지는 인식 불가 — UI에서 "도면 포함 지침서는 PDF로" 안내.
+- **테스트 스위트 — DOCX 흐름:** `tests/test_docx_extractor.py` (pytest). 15개 단위 테스트: split (빈 docx, 표만, 텍스트만, Heading 없는 KT 케이스, vMerge, TOC, force-cut) + eval (정상/공유배점/소계제외/빈 컬럼) + merge/exporter (unit_program 페이지간 합치기, xlsx/md 렌더링, 부재 시 미렌더링). 실행: `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py -v`. **신규 docx 관련 코드 추가 시 회귀 보호 필수 — 새 시나리오는 반드시 테스트 추가**.
 - **Page Taxonomy 갱신:** `init_db()`는 `_config/page_taxonomy.json` 없을 때만 생성. PAGE_TYPES 추가 후 기존 DB 반영하려면 해당 파일 삭제 후 백엔드 재시작.
 - **재건축사업 타입:** `facility_type="reconstruction"` / `"alternative"`. 분류 신뢰도 < `REDEV_CONFIDENCE_FLOOR=0.65`이면 `REDEV_FALLBACK`으로 안전 강등(`page_classifier.py::_normalise_result`).
 - **Cross-Compare:** `routers/accumulate.py::cross_compare` — 여러 프로젝트 제출물 임의 조합 비교. `{db_path}/_cross_reports/` 저장.
@@ -473,6 +503,16 @@ Test with curl or Postman by uploading files to:
 
    - **이번 세션 이력:** 로컬 JPEG 수정이 5월 21일 이후 배포되지 않아 6월 17일까지 GCP에서 400 오류 지속. 2회 배포 후 해결(revision 00055, 00056).
 
+1. **신규 의존성 추가 시 양쪽 requirements 동기화 (CRITICAL)**
+   - **증상:** 로컬은 정상 동작하는데 GCP 배포 후 `ModuleNotFoundError: No module named 'xxx'` 발생.
+   - **원인:** `backend/requirements.txt` (로컬 dev 용) 와 `backend/requirements-server.txt` (Docker/Cloud Run 용) 는 **분리된 파일**. Dockerfile 16행이 `requirements-server.txt` 를 설치하므로 거기 없으면 GCP 컨테이너에 미설치.
+   - **체크리스트 — 신규 Python 패키지 추가 시 항상 두 파일 모두 수정:**
+     1. `backend/requirements.txt` 에 추가 (로컬 dev용, 보통 `>=` 버전 핀)
+     2. `backend/requirements-server.txt` 에 추가 (서버용, `==` 정확한 버전 핀)
+     3. `backend/competition_analyzer.spec` PyInstaller 빌드 영향 여부 확인 (`hiddenimports` / `datas` 필요할 수 있음)
+   - **OCR 전용 패키지는 예외:** PaddleOCR 등 무거운 의존성은 `requirements-ocr.txt` 에만 (선택 설치).
+   - **이번 세션 이력:** 2026-06-18 DOCX 지원 추가 시 `python-docx` 를 `requirements.txt` 에만 추가하고 `requirements-server.txt` 누락 → GCP 배포 후 첫 DOCX 분석 시 ModuleNotFoundError. 두 파일 동기화 후 재배포로 해결.
+
 ---
 
 ### 🟡 미해결 버그
@@ -571,6 +611,32 @@ python tools/eval/run_harness.py --pdf-dir pdfs/ --force-rerun
 - 정답지 형식: `tools/eval/ground_truth/TEMPLATE_gt.json` 참고
 - 대상: `D:\EVAL_DB\` (GCS kunwon-competition-db 로컬 복사본)
 - 다음 단계: B-3 (ground_truth 2건 이상 완성 후 `run_harness.py` 실행)
+
+---
+
+## 시퀀스 C — 멀티파일 지침서 업로드 (보류, 2026-06-18 결정)
+
+같은 프로젝트에 지침서 + 과업지시서가 별도 파일(또는 별첨/부록)로 분리돼 있는 케이스를 지원. 현재는 `/brief/analyze` 가 단일 파일만 받음. 형식 혼합(PDF + DOCX) 도 흔하므로 형식 무관 처리 필요.
+
+**검토한 3가지 접근:**
+
+- **A. 업로드 시점 multi-file 동시 분석 (권장)** — DropZone `multiple=true`, 백엔드는 파일별로 분할/분류 후 `page_map` 항목에 `source_file: "지침서.docx"` 필드 추가하여 단일 `brief_id` 로 머지. xlsx/검증 flag 마다 출처 라벨 노출. 작업량: ① 업로드 multi-file + ② page_map source_file 필드 + ③ exporter 출처 라벨링.
+- **B. 파일별 별도 brief + 프로젝트 그룹 개념** — 각 파일이 독립 brief_id, `project_group_id` 로 묶음. 그룹 카드 UI 신설. 장점: 파일 단위 재분석 가능. 단점: 그룹 모델·UI·통합 비교 로직 모두 신규.
+- **C. 파일 병합 후 단일 분석** — PDF 는 PyMuPDF 머지, DOCX 는 본문 이어붙이기. 단순하지만 `p.50` 이 어느 파일인지 모르게 되어 검증 flag location 추적이 의미 잃음. 채택 비권장.
+
+**보류 사유:** 우선 1파일 케이스 안정화 (Adjustment A/B/C 검증 + 영등포 PDF 회귀 확인) 가 선행되어야 함.
+
+**재개 조건:**
+
+1. 사용자가 실제 멀티파일 케이스(지침서 + 과업지시서) 샘플 제공.
+2. **충돌 우선순위 룰 결정** — 두 파일이 같은 사업개요·심사기준을 중복 담고 있을 때 어느 쪽이 우선인지 (예: "지침서" 라벨 파일 우선, 또는 파일명 알파벳순, 또는 사용자 명시 순서).
+3. 진행 시 접근 A 부터 시작 — `_brief_meta.source_files: list[{name, format, blocks_or_pages_range}]` 도입.
+
+**영향 범위 (재개 시):**
+
+- 백엔드: `routers/brief.py::analyze_brief` 시그니처 변경 (`UploadFile | list[UploadFile]`), `_validate_brief_file` 파일별 호출, `merge_extracted_data` 가 source_file 보존
+- 프론트: `BriefMode.jsx` DropZone `multiple` + 업로드 리스트 UI
+- exporter: 시트1 r4~ 행에 "[지침서] / [과업지시서]" 라벨 컬럼 추가, 검증 flag location 에 `source_file` 포함
 
 ---
 

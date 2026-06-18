@@ -346,7 +346,33 @@ def _normalise_brief_result(raw: dict) -> dict:
         if any(p.search(header) for p in _NOT_EVAL_HEADER_PATTERNS):
             result["primary_type"] = "BRIEF_ADMIN"
             result["has_scoring_table"] = False
+    # ④ 서식/별첨 헤더 → BRIEF_PROJECT_INFO 강등 (Adjustment A):
+    #    [서식N] 건축개요·면적표·견적표 같은 빈 템플릿 양식이 표가 있다는 이유로
+    #    BRIEF_PROJECT_INFO 로 잘못 분류되면 sites[] 머지에 빈 entry 가 들어가
+    #    리포트에 orphan 부지가 노출됨. 헤더 텍스트가 "[서식"/"[양식"/"별첨"/"부록"
+    #    같은 양식 키워드로 시작하면 BRIEF_SUBMISSION 으로 강등 (서식은 제출 양식이므로).
+    #    BRIEF_EVALUATION 강등 룰과 동일 키워드 셋(_NOT_EVAL_HEADER_PATTERNS) 일부 재사용.
+    #    페이지 번호 하드코딩 없음.
+    if result["primary_type"] == "BRIEF_PROJECT_INFO" and result["page_header_text"]:
+        header = result["page_header_text"]
+        if any(p.search(header) for p in _FORM_TEMPLATE_HEADER_PATTERNS):
+            result["primary_type"] = "BRIEF_SUBMISSION"
     return result
+
+
+# 양식 페이지 강등 패턴 — BRIEF_PROJECT_INFO 가 [서식N] 등 빈 템플릿일 때 발동.
+# _NOT_EVAL_HEADER_PATTERNS 의 부분집합 (양식/별첨/부록만 포함) — 결과 발표·시상금 같은
+# 행정성 키워드는 PROJECT_INFO 와 의미상 충돌 없어서 강등 대상에서 제외.
+_FORM_TEMPLATE_HEADER_PATTERNS = [
+    re.compile(p) for p in (
+        r"\[\s*서식",            # "[서식 3]", "[서식3]"
+        r"\[\s*양식",            # "[양식 N]"
+        r"\bForm\b",
+        r"별\s*첨",              # "별첨 #2"
+        r"부\s*록",              # "부록"
+        r"\bAppendix\b",
+    )
+]
 
 
 def _call_classify_brief(batch: list) -> list[dict]:

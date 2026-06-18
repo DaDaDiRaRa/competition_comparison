@@ -351,3 +351,21 @@ def safe_encode_image(img_bytes: bytes, fmt: str = "png", max_bytes: int = 4_500
 # ── SSE ───────────────────────────────────────────────────────────────────────
 def sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+# ── dict 헬퍼 (다중 모듈 공유) ──────────────────────────────────────────────
+# 이전엔 brief_checklist_exporter / brief_validator 에 각각 중복 정의돼 있었음.
+# 통합 후 단일 정의 — 다른 모듈은 `from services.utils import _first, _as_list` 로 사용.
+
+def _first(data: dict, key: str) -> dict:
+    """dict 에서 키를 꺼내 리스트면 첫 요소, 없으면 {} 반환."""
+    v = data.get(key) or {}
+    if isinstance(v, list):
+        v = v[0] if v else {}
+    return v if isinstance(v, dict) else {}
+
+
+def _as_list(data: dict, key: str) -> list:
+    """dict 에서 키를 꺼내 항상 list 반환. None/falsy 면 []."""
+    v = data.get(key) or []
+    return v if isinstance(v, list) else ([v] if v else [])

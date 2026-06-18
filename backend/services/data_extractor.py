@@ -337,6 +337,40 @@ FALLBACK_PROMPT = {
 
 # ── 지침서(Brief) 전용 추출 스키마 ─────────────────────────────────────────────
 # BRIEF_* 타입(9개)은 이 dict에서 전용 스키마로 추출.
+
+# 공통 출력 필드: design_guidelines_grouped[]
+# 단일 시설 (KT 같은 공동주택 공모) + 멀티 시설 (영등포 청사·구의회·어린이집 등)
+# 양쪽을 동일 스키마로 표현. facility_scope/space_scope/category 가 "전체" 면 단일 케이스,
+# 실값이면 멀티 케이스.
+#
+# category enum (12): "배치계획" | "단지계획" | "평면계획" | "동선계획" | "입면·재료" |
+#                    "색채·조명·사이니지" | "조경" | "친환경·에너지·인증" |
+#                    "보안·안전·CPTED" | "공간구성" | "일반사항" | "기타"
+_DESIGN_GROUPED_SCHEMA = (
+    '"design_guidelines_grouped":[\n'
+    '  {"facility_scope":"전체","space_scope":"전체","category":"기타",\n'
+    '   "section_path":"","items":[{"label":"","text":""}]}\n'
+    ']'
+)
+
+_DESIGN_GROUPED_NOTES = (
+    '\n- design_guidelines_grouped[]: 본 페이지/블록에 보이는 모든 설계지침을 계층 보존해 추출.\n'
+    '  facility_scope: 시설 단위 라벨. 단일 시설(공동주택 공모 등)이면 "전체". '
+    '멀티 시설(청사·구의회·어린이집 등)이면 헤더에 보이는 시설명("구청"/"구의회"/"어린이집"/"보건소"/"공동주택" 등) 그대로.\n'
+    '  space_scope: 시설 내 공간/부서 단위 라벨. 분기 없으면 "전체". '
+    '예: "간부공간"/"직무공간"/"민원실"/"조경"/"옥상"/"공용부".\n'
+    '  category: 다음 12개 enum 중 하나 — 배치계획 / 단지계획 / 평면계획 / 동선계획 / '
+    '입면·재료 / 색채·조명·사이니지 / 조경 / 친환경·에너지·인증 / 보안·안전·CPTED / '
+    '공간구성 / 일반사항 / 기타. 매핑 애매하면 "기타".\n'
+    '  section_path: 원문 출처 헤더 그대로. 예: "3.2.3 계획지침 > 1) 토지이용 및 배치계획" / '
+    '"II.3 공간구성 > ① 구 청 > 간부공간". 같은 그룹의 다음 페이지로 이어질 때 헤더 재사용.\n'
+    '  items[].label: 원문 글머리 그대로 보존. "가)" / "나)" / "①" / "-" / "•" / "Ÿ" 등.\n'
+    '  items[].text: 라벨을 제외한 본문 텍스트. 라벨 중복 제거.\n'
+    '  중요: 표(예: 면적 행) 본문이 들어오면 그건 area_rows 가 처리하므로 grouped 에는 넣지 말 것. '
+    '서술형 글머리(가/나/다, ①②③) 만 grouped 대상.\n'
+    '  비어있으면 [] 반환 (해당 페이지에 설계지침 서술 없음).\n'
+)
+
 # 구 submission 타입 override(AREA_TABLE/TECHNICAL/SPECIAL_SPACE)도 하위호환 유지.
 EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
     # ── 신규 BRIEF_* 타입 ─────────────────────────────────────────────────────
@@ -451,8 +485,9 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '  {"row_type":"space","name":"","area":null,"subtotal_area":null,\n'
             '   "is_subtotal":false,"note":"","dept":""}\n'
             '],\n'
-            '"shared_areas":[{"name":"","area_sqm":null,"notes":""}]\n'
-            '}\n\n'
+            '"shared_areas":[{"name":"","area_sqm":null,"notes":""}],\n'
+            + _DESIGN_GROUPED_SCHEMA +
+            '\n}\n\n'
             'FIELD NOTES:\n'
             '- sites[].zoning: list of all 지역지구 strings\n'
             '- sites[].construction_type: 건축구분 (e.g. "해체 및 신축")\n'
@@ -481,6 +516,7 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '- estimated_design_fee: 예정 설계비 텍스트\n'
             '- design_period: 예정 설계 기간 텍스트\n'
             '- Do NOT invent values. null/[] if not visible on page.'
+            + _DESIGN_GROUPED_NOTES
         ),
     },
     "BRIEF_DESIGN_MASSING": {
@@ -494,7 +530,9 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '"pedestrian_requirements":[],'
             '"connection_requirements":[],'
             '"height_strategy":"",'
-            '"massing_guidelines":[]}'
+            '"massing_guidelines":[],'
+            + _DESIGN_GROUPED_SCHEMA +
+            '}'
             '\n\nFIELD NOTES:\n'
             '- building_setback_m: numeric setback distance from boundary (meters), null if not specified\n'
             '- open_space_requirements[]: 공개공지·외부공간 조성 요구사항 문자열 목록\n'
@@ -504,6 +542,7 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '- height_strategy: 높이 계획 방향 (단일 문자열, 수치 제한이 아닌 매싱 전략)\n'
             '- massing_guidelines[]: 그 외 배치·매싱 관련 지침 문자열 목록\n'
             '- Do NOT invent values. null/[] if not visible on page.'
+            + _DESIGN_GROUPED_NOTES
         ),
     },
     "BRIEF_DESIGN_FACADE": {
@@ -515,7 +554,9 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '"prohibited_materials":[],'
             '"color_requirements":[],'
             '"facade_guidelines":[],'
-            '"landscape_requirements":[]}'
+            '"landscape_requirements":[],'
+            + _DESIGN_GROUPED_SCHEMA +
+            '}'
             '\n\nFIELD NOTES:\n'
             '- primary_materials[]: 지정 또는 권장 외장 마감재 목록\n'
             '- prohibited_materials[]: 사용 금지 재료 목록\n'
@@ -523,6 +564,7 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '- facade_guidelines[]: 입면 디자인·파사드 구성 관련 지침\n'
             '- landscape_requirements[]: 조경·경관 관련 요구사항\n'
             '- Do NOT invent values. null/[] if not visible on page.'
+            + _DESIGN_GROUPED_NOTES
         ),
     },
     "BRIEF_DESIGN_SUSTAIN": {
@@ -533,13 +575,16 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '{"required_certifications":[{"name":"","required_grade":""}],'
             '"renewable_energy_min_pct":null,'
             '"energy_guidelines":[],'
-            '"sustainability_requirements":[]}'
+            '"sustainability_requirements":[],'
+            + _DESIGN_GROUPED_SCHEMA +
+            '}'
             '\n\nFIELD NOTES:\n'
             '- required_certifications[]: 필수 인증 목록. name=인증명(G-SEED/ZEB/LEED/BF인증 등), required_grade=요구 등급 문자열\n'
             '- renewable_energy_min_pct: 신재생에너지 최소 의무 비율(%), null if not specified\n'
             '- energy_guidelines[]: 에너지 절약·BEMS 등 에너지 관련 지침 문자열 목록\n'
             '- sustainability_requirements[]: 그 외 친환경·지속가능성 요구사항\n'
             '- Do NOT invent values. null/[] if not visible on page.'
+            + _DESIGN_GROUPED_NOTES
         ),
     },
     "BRIEF_DESIGN_SPECIAL": {
@@ -550,13 +595,16 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '{"security_requirements":[],'
             '"accessibility_requirements":[],'
             '"safety_requirements":[],'
-            '"special_technical_requirements":[]}'
+            '"special_technical_requirements":[],'
+            + _DESIGN_GROUPED_SCHEMA +
+            '}'
             '\n\nFIELD NOTES:\n'
             '- security_requirements[]: 보안·CPTED·범죄예방 관련 요구사항\n'
             '- accessibility_requirements[]: 장애인 편의·유니버설디자인·BF 관련 요구사항\n'
             '- safety_requirements[]: 소방·내진·방재·철도보호구역 관련 안전 요구사항\n'
             '- special_technical_requirements[]: 그 외 특수 기술 요건\n'
             '- Do NOT invent values. null/[] if not visible on page.'
+            + _DESIGN_GROUPED_NOTES
         ),
     },
     "BRIEF_DESIGN_GUIDE": {
@@ -567,7 +615,10 @@ EXTRACTION_PROMPTS_BRIEF: dict[str, dict] = {
             '{"design_requirements":[],"height_limit_m":null,'
             '"setback_requirements":[],"materials_required":[],'
             '"sustainability_requirements":[],"concept_direction":"",'
-            '"prohibited_items":[],"special_guidelines":[]}'
+            '"prohibited_items":[],"special_guidelines":[],'
+            + _DESIGN_GROUPED_SCHEMA +
+            '}'
+            + _DESIGN_GROUPED_NOTES
         ),
     },
     "BRIEF_TECHNICAL": {
@@ -1377,6 +1428,169 @@ def _extract_docx_block_with_llm(block: dict, page_type: str, prompt_cfg: dict) 
     return data
 
 
+def _extract_docx_unit_program_from_table(block: dict) -> list[dict]:
+    """BRIEF_PROJECT_INFO 표에서 unit_program 행을 LLM 없이 직접 추출.
+
+    LLM 이 자기검열로 일부 행만 뽑는 KT 같은 케이스에서 누락 행을 보강.
+    호출자는 LLM 결과(unit_program[]) 와 본 결과를 dedupe-merge.
+
+    인식 패턴 (보수적 — 잘못 인식하면 회귀 우려):
+      ① 첫 컬럼이 시설/블록 명 ("1,2BL", "3BL (임대)", "근린생활시설" 등)
+      ② 면적/규모 컬럼 = 둘째~넷째 컬럼 중 "전용 N㎡|N평|적정 규모|N㎡ 이내" 패턴이 보이는 칸
+      ③ 비율 컬럼 = "N% 내외|N%" 패턴
+      ④ 명백한 비-분배 표는 제외 — 헤더에 평가/심사/배점/일정/시간/심사위원 키워드 / 첫 행에 "용역명", "공모명", "위치", "주소" 같은 메타데이터 라벨
+
+    빈 결과면 [] — 호출자는 LLM 결과만 사용.
+    """
+    import re as _re
+    table_md = block.get("table_markdown") or ""
+    if not table_md:
+        return []
+
+    lines = [l for l in table_md.split("\n") if l.strip()]
+    if len(lines) < 3:
+        return []
+
+    def _parse_row(line: str) -> list[str]:
+        s = line.strip()
+        if s.startswith("|"):
+            s = s[1:]
+        if s.endswith("|"):
+            s = s[:-1]
+        return [c.strip().replace("&#124;", "|") for c in s.split("|")]
+
+    header_row = _parse_row(lines[0])
+    body_rows  = [_parse_row(l) for l in lines[2:]]
+    n_cols     = max(len(header_row), max((len(r) for r in body_rows), default=0))
+
+    # ── 가드: 분배표가 아닌 표는 빈 결과 ──────────────────────────────────
+    # "구분" 만 있는 표는 분배표일 수 있으므로 차단 안 함. 본문에 분배 패턴 없으면 자동 [].
+    # 배점표·심사일정·심사위원 등은 본질적으로 분배표가 아니므로 차단.
+    head_text = " ".join(header_row)
+    if any(kw in head_text for kw in ("배점", "심사", "평가", "일정", "시간", "위원")):
+        return []
+
+    # ── 패턴 정의 ─────────────────────────────────────────────────────────
+    _AREA_PATTERNS = [
+        _re.compile(r"전\s*용\s*\d+[~\-]?\d*\s*[㎡평]"),
+        _re.compile(r"\d{1,5}[,\d]*\s*[㎡평]"),
+        _re.compile(r"적\s*정\s*(규모|면적)"),
+    ]
+    _RATIO_PATTERN = _re.compile(r"\d{1,3}\s*%")
+    _BLOCK_PATTERNS = [
+        _re.compile(r"\d+(?:[,~\-]\d+)*\s*BL"),    # "1,2BL", "3BL"
+        _re.compile(r"근린\s*생활\s*시설"),
+        _re.compile(r"부대\s*복리\s*시설"),
+        _re.compile(r"공공\s*기여\s*시설"),
+        _re.compile(r"^[가-힣A-Za-z]+\s*시설(?:[^가-힣]|$)"),  # generic "OO시설"
+    ]
+    _TENURE_PATTERN = _re.compile(r"\((분양|임대|일반|특별|기타)\)")
+    _TYPE_LABEL_PATTERN = _re.compile(r"^\d+(?:~\d+)?\s*형\b")
+
+    def _matches_block_label(text: str) -> bool:
+        return any(p.search(text) for p in _BLOCK_PATTERNS)
+
+    def _has_area_signal(text: str) -> bool:
+        return any(p.search(text) for p in _AREA_PATTERNS)
+
+    # ── 행별 unit_program 추출 ───────────────────────────────────────────
+    result: list[dict] = []
+    current_block: str = ""        # vMerge continuation 행에서 직전 block 유지
+    current_tenure: str = ""
+
+    for cells in body_rows:
+        if not cells or all(not c for c in cells):
+            continue
+        cells = cells + [""] * max(0, n_cols - len(cells))
+
+        # 첫 컬럼: block + tenure 식별
+        first_col = cells[0].strip()
+        if first_col and _matches_block_label(first_col):
+            # 새 block 시작
+            m_ten = _TENURE_PATTERN.search(first_col)
+            current_tenure = m_ten.group(1) if m_ten else ""
+            current_block  = _TENURE_PATTERN.sub("", first_col).strip()
+
+        if not current_block:
+            continue   # 헤더/메타 등 분배 행 아님
+
+        # 둘째 컬럼: 평형/유형 라벨 후보 ("84형", "59~110형", "59형")
+        second_col = cells[1].strip() if len(cells) > 1 else ""
+        type_label = second_col if _TYPE_LABEL_PATTERN.match(second_col) else ""
+
+        # 면적/규모 — 셀들 순회하여 area 패턴 최초 발견
+        area_text = ""
+        for cell in cells[1:]:
+            text = cell.strip()
+            if text and _has_area_signal(text):
+                area_text = text
+                break
+
+        # 비율
+        ratio_text = ""
+        for cell in cells[1:]:
+            text = cell.strip()
+            if text and _RATIO_PATTERN.search(text):
+                ratio_text = text
+                break
+
+        # 비고: 면적/비율과 겹치지 않는 마지막 비어있지 않은 셀
+        note = ""
+        for cell in reversed(cells[1:]):
+            text = cell.strip()
+            if not text or text == area_text or text == ratio_text or text == type_label:
+                continue
+            # type_label 도 아니고 area/ratio 도 아닌 의미있는 텍스트 → 비고 후보
+            if not _matches_block_label(text):
+                note = text
+                break
+
+        # 행이 분배 entry 로 인정될 조건: area_text 또는 ratio_text 중 하나 이상 보유.
+        # note 만 있는 행은 분배 정보 아님 (서식 템플릿 잡음 차단).
+        if not (area_text or ratio_text):
+            continue
+
+        entry = {
+            "block":      current_block,
+            "tenure":     current_tenure,
+            "type_label": type_label,
+            "area_text":  area_text,
+            "ratio_text": ratio_text,
+            "note":       note,
+        }
+        # 중복 방지 — 같은 (block, tenure, type_label, area_text) 는 한 번만
+        sig = (entry["block"], entry["tenure"], entry["type_label"], entry["area_text"])
+        if any((r["block"], r["tenure"], r["type_label"], r["area_text"]) == sig for r in result):
+            continue
+        result.append(entry)
+
+    return result
+
+
+def _merge_unit_program_rows(llm_rows: list, table_rows: list[dict]) -> list[dict]:
+    """LLM 추출 + 표 직접 추출 머지. LLM 우선, 표 추출은 누락분 보충.
+
+    동일성 판단: (block, type_label) 페어 기반. tenure/area/ratio 차이는 LLM 신뢰.
+    """
+    out: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for r in (llm_rows or []):
+        if not isinstance(r, dict):
+            continue
+        key = ((r.get("block") or "").strip(), (r.get("type_label") or "").strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    for r in (table_rows or []):
+        key = (r["block"].strip(), r["type_label"].strip())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
 async def extract_docx(
     docx_path: str,
     page_map: list[dict],
@@ -1431,6 +1645,21 @@ async def extract_docx(
             data = await asyncio.to_thread(
                 _extract_docx_block_with_llm, block, page_type, prompt_cfg
             )
+
+        # 4. BRIEF_PROJECT_INFO 보강 (Adjustment C):
+        #    LLM 이 unit_program[] 표 행을 자기검열로 누락하는 케이스 대응.
+        #    표가 있고 분배표로 인식되면 행별 직접 추출 후 LLM 결과와 머지.
+        #    (block, type_label) dedupe 으로 LLM 우선, 표 추출이 누락분만 보충.
+        if (
+            page_type == "BRIEF_PROJECT_INFO"
+            and block.get("table_markdown")
+            and isinstance(data, dict)
+        ):
+            table_unit_rows = _extract_docx_unit_program_from_table(block)
+            if table_unit_rows:
+                llm_unit_rows = data.get("unit_program") or []
+                data["unit_program"] = _merge_unit_program_rows(llm_unit_rows, table_unit_rows)
+
         return {"page": bn, "type": page_type, "data": data, "_source": "docx_llm"}
 
     target_blocks = [block_by_num[entry["page"]] for entry in page_map if entry["page"] in block_by_num]
@@ -1579,6 +1808,28 @@ def _merge_brief_project_info_pages(items: list[dict]) -> dict:
         sites_order = numbered
         sites_by_id = {s: sites_by_id[s] for s in numbered}
 
+    # 빈 site orphan skip: site_id 외 모든 _SITE_FIELDS 가 null/빈값이면 제외.
+    # 단, 유일한 site 인 경우는 사용자에게 "부지가 있긴 함" 정보를 위해 유지 (정보 손실 방지).
+    # 발동 케이스: 양식/별첨 페이지(예: [서식3] 건축개요 및 시설별 면적표)가
+    # BRIEF_PROJECT_INFO 로 잘못 분류되어 빈 dict 가 sites[]에 들어왔을 때.
+    def _site_is_empty(s: dict) -> bool:
+        for fld in _SITE_FIELDS:
+            if fld == "site_id":
+                continue
+            v = s.get(fld)
+            if isinstance(v, list):
+                if v:
+                    return False
+            elif v not in (None, "", 0):
+                return False
+        return True
+
+    if len(sites_order) >= 2:
+        non_empty = [sid for sid in sites_order if not _site_is_empty(sites_by_id[sid])]
+        if non_empty:        # 적어도 하나는 유효해야 필터 적용
+            sites_order = non_empty
+            sites_by_id = {s: sites_by_id[s] for s in non_empty}
+
     merged["sites"] = [sites_by_id[sid] for sid in sites_order]
     merged["_page"] = items[0].get("_page")  # 첫 페이지 번호 보존
     return merged
@@ -1631,6 +1882,52 @@ def merge_extracted_data(
     bpi_raw = result.get("brief_project_info")
     if isinstance(bpi_raw, list) and len(bpi_raw) > 1:
         result["brief_project_info"] = _merge_brief_project_info_pages(bpi_raw)
+
+    # design_guidelines_grouped[] 전체 집계:
+    # BRIEF_DESIGN_* / BRIEF_PROGRAM 페이지마다 grouped[] 가 추출됨 → 모두 모아 단일 리스트로.
+    # facility_scope · space_scope · section_path · items 단위로 dedupe.
+    # 호출자 (exporter) 는 이 단일 리스트를 facility / category 별로 다시 그룹화해 렌더.
+    grouped_all: list[dict] = []
+    seen_keys: set = set()
+    _DESIGN_GROUPED_SOURCES = (
+        "brief_program", "brief_design_guide", "brief_design_massing",
+        "brief_design_facade", "brief_design_sustain", "brief_design_special",
+    )
+    for src_key in _DESIGN_GROUPED_SOURCES:
+        src = result.get(src_key)
+        # 단일 dict 또는 list 모두 지원
+        src_pages = src if isinstance(src, list) else ([src] if isinstance(src, dict) else [])
+        for page_data in src_pages:
+            if not isinstance(page_data, dict):
+                continue
+            for grp in (page_data.get("design_guidelines_grouped") or []):
+                if not isinstance(grp, dict):
+                    continue
+                items = grp.get("items") or []
+                # dedupe key: section_path 가 있으면 그것 위주, 없으면 facility+space+category+첫 항목 텍스트
+                first_text = ""
+                if items and isinstance(items[0], dict):
+                    first_text = (items[0].get("text") or "")[:60]
+                key = (
+                    (grp.get("facility_scope") or "").strip(),
+                    (grp.get("space_scope") or "").strip(),
+                    (grp.get("section_path") or "").strip(),
+                    first_text,
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                grouped_all.append({
+                    "facility_scope": grp.get("facility_scope") or "전체",
+                    "space_scope":    grp.get("space_scope") or "전체",
+                    "category":       grp.get("category") or "기타",
+                    "section_path":   grp.get("section_path") or "",
+                    "items":          [i for i in items if isinstance(i, dict) and (i.get("text") or "").strip()],
+                    "_source_page":   page_data.get("_page"),
+                    "_source_key":    src_key,
+                })
+    if grouped_all:
+        result["design_guidelines_grouped"] = grouped_all
 
     # 정량 데이터: AREA_TABLE 우선, SITE_PLAN 보완
     # AREA_TABLE은 타일 추출로 가장 신뢰도 높음

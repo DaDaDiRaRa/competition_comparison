@@ -35,6 +35,19 @@ _RE_TOC        = re.compile(r'\t\d+\s*$')          # F1: 탭+페이지번호
 _RE_FIGURE     = re.compile(r'^(그림\s*\d+|Fig\.)')
 _RE_CONTINUE   = re.compile(r'\(\s*계속\s*\)')
 
+# 설계지침 글머리 라벨 패턴 (BRIEF_DESIGN_* 계층 보존용)
+# LLM 프롬프트에 "이 페이지에 N)/가)/① 등 글머리 보입니다" 힌트로 전달돼
+# design_guidelines_grouped[] 추출 정확도 향상.
+_LABEL_PATTERNS = {
+    "1)":   re.compile(r'^\d+\)\s'),                # 1) 토지이용 (그룹 헤더)
+    "가)":  re.compile(r'^[가-힣]\)\s'),             # 가) 대지 주변 (세부 항목)
+    "①":    re.compile(r'^[①-⑳]\s?'),               # ① 구 청 / ① 비서실 (시설/세부 라벨)
+    "·":    re.compile(r'^[•·]\s'),       # • 또는 · 글머리
+    "-":    re.compile(r'^[-–—]\s'),      # - 또는 – (en/em dash)
+    "Ÿ":    re.compile(r'^Ÿ\s'),                    # 영등포 PDF 의 워드 글머리 변환 잔여
+    "I.":   re.compile(r'^[IVX]+\.\s'),             # I./II./III. (로마숫자 챕터)
+}
+
 
 # ── 폰트 휴리스틱 ───────────────────────────────────────────────────────────────
 def _para_visual_heading(p) -> bool:
@@ -497,15 +510,29 @@ def split_docx_to_blocks(path: str) -> list[dict]:
 
 
 # ── source text 생성 (분류·추출 공통 입력) ──────────────────────────────────
+def _detect_label_patterns(paragraphs: list[str]) -> list[str]:
+    """단락 리스트에서 발견된 글머리 라벨 종류 반환 (LLM 힌트용)."""
+    found: list[str] = []
+    for name, pat in _LABEL_PATTERNS.items():
+        if any(pat.match(p) for p in paragraphs):
+            found.append(name)
+    return found
+
+
 def get_block_source_text(block: dict) -> str:
     """블록의 헤더 + 단락 + 표 미리보기를 결합한 텍스트.
 
     6,000자 초과 시 앞 4,000 + 뒤 2,000 (중간 "[...생략...]") 으로 컷.
+    설계지침 글머리 라벨(1)/가)/① 등) 감지되면 헤더에 힌트 추가 — LLM 이
+    design_guidelines_grouped[] 계층 보존 시 참조.
     """
     parts: list[str] = []
     parts.append(f"[HEADER] {block.get('header_text', '')}")
 
     paragraphs = block.get("paragraphs") or []
+    labels_found = _detect_label_patterns(paragraphs) if paragraphs else []
+    if labels_found:
+        parts.append(f"[LABEL_PATTERNS_DETECTED] {' '.join(labels_found)}")
     if paragraphs:
         parts.append("[PARAGRAPHS]")
         parts.append("\n".join(paragraphs))

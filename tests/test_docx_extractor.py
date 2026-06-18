@@ -48,6 +48,22 @@ if "config" not in sys.modules:
     _cfg = types.ModuleType("config")
     _cfg.settings = _S()
     _cfg.axes_keys_for = lambda *a, **k: []
+    # page_classifier 가 import 시 사용하는 타입 집합 — 실제 config 값과 동일하게 채움
+    _cfg.PAGE_TYPES = {
+        "COVER", "TOC_HERO", "SITE_CONTEXT", "CONCEPT", "SPECIAL_SPACE",
+        "RENDERING_EXT", "RENDERING_INT", "SITE_PLAN", "LANDSCAPE",
+        "FLOOR_PLAN", "SECTION", "ELEVATION", "CIRCULATION", "HEALTH_CENTER",
+        "TECHNICAL", "AREA_TABLE", "SUSTAINABILITY", "UNIT_PLAN",
+        "INCENTIVE_TABLE", "BRANDING", "BUSINESS_VIABILITY", "AREA_INCREASE",
+        "VIEW_ANALYSIS", "COMMUNITY_PROGRAM", "COMPANY_PORTFOLIO",
+        "CONSTRUCTION_PLAN", "UNIT_PLAN_PENTHOUSE",
+    }
+    _cfg.BRIEF_PAGE_TYPES = {
+        "BRIEF_OVERVIEW", "BRIEF_PROJECT_INFO", "BRIEF_SITE", "BRIEF_PROGRAM",
+        "BRIEF_DESIGN_MASSING", "BRIEF_DESIGN_FACADE", "BRIEF_DESIGN_SUSTAIN",
+        "BRIEF_DESIGN_SPECIAL", "BRIEF_DESIGN_GUIDE", "BRIEF_TECHNICAL",
+        "BRIEF_REGULATIONS", "BRIEF_EVALUATION", "BRIEF_SUBMISSION", "BRIEF_ADMIN",
+    }
     sys.modules["config"] = _cfg
 
 if "services.llm_client" not in sys.modules:
@@ -60,6 +76,17 @@ if "services.utils" not in sys.modules:
     for n in ("get_page_text", "ocr_page", "parse_json_response",
              "rasterize_pdf", "rasterize_page_tiled", "safe_encode_image"):
         setattr(_utils, n, lambda *a, **k: None)
+    # 공유 dict 헬퍼 — 실제 utils.py 와 동일 동작 (test 시 import 가능하도록)
+    def _first(data, key):
+        v = (data or {}).get(key) or {}
+        if isinstance(v, list):
+            v = v[0] if v else {}
+        return v if isinstance(v, dict) else {}
+    def _as_list(data, key):
+        v = (data or {}).get(key) or []
+        return v if isinstance(v, list) else ([v] if v else [])
+    _utils._first = _first
+    _utils._as_list = _as_list
     sys.modules["services.utils"] = _utils
 
 from services.docx_loader import split_docx_to_blocks   # noqa: E402
@@ -467,6 +494,390 @@ def test_exporter_renders_unit_program_in_md():
     assert "84형" in md
     assert "전용 85㎡" in md
     assert "80%" in md
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Adjustment B — _merge_brief_project_info_pages: empty-site skip
+# ════════════════════════════════════════════════════════════════════════════
+
+def _make_pi_page(site_id: str, *, page: int, **site_overrides) -> dict:
+    """공통 BRIEF_PROJECT_INFO 페이지 payload — site 1개만 포함."""
+    site = {
+        "site_id": site_id, "address": "", "zoning": "", "scope": "",
+        "facilities": [], "site_area_sqm": None, "floor_area_sqm": None,
+        "building_coverage_pct": None, "floor_area_ratio_pct": None,
+        "max_height_m": None, "open_space_sqm": None, "open_space_notes": "",
+    }
+    site.update(site_overrides)
+    return {
+        "competition_name": "X", "organizer": None, "competition_type": None,
+        "construction_cost_100m_won": None, "design_cost_100m_won": None,
+        "construction_period_months": None,
+        "budget_notes": [], "special_conditions": [], "unit_program": [],
+        "sites": [site], "_page": page,
+    }
+
+
+def test_merge_drops_empty_orphan_site_when_other_has_data():
+    """B: 한 페이지가 비어있는 site_id 만 보고 → 다른 페이지에 실값 있으면 빈 site 제거."""
+    from services.data_extractor import _merge_brief_project_info_pages
+    page_a = _make_pi_page("단일부지", page=3,
+                            site_area_sqm=104223, address="대전")
+    page_b = _make_pi_page("공동주택 1BL", page=40)  # 모든 필드 빈 양식 페이지
+    merged = _merge_brief_project_info_pages([page_a, page_b])
+    sites = merged["sites"]
+    assert len(sites) == 1
+    assert sites[0]["site_id"] == "단일부지"
+    assert sites[0]["site_area_sqm"] == 104223
+
+
+def test_merge_keeps_single_empty_site():
+    """B: site 가 1개뿐인 경우는 비어있어도 유지 (사용자에게 '부지가 있긴 함' 정보)."""
+    from services.data_extractor import _merge_brief_project_info_pages
+    page = _make_pi_page("단일부지", page=3)   # 모든 필드 비어있음
+    merged = _merge_brief_project_info_pages([page])
+    sites = merged["sites"]
+    assert len(sites) == 1
+    assert sites[0]["site_id"] == "단일부지"
+
+
+def test_merge_keeps_all_when_all_have_data():
+    """B: 다중 부지 모두 실값 보유 → 모두 유지 (정상 다중 부지 케이스 회귀 방지)."""
+    from services.data_extractor import _merge_brief_project_info_pages
+    page = {
+        "competition_name": "X", "organizer": None, "competition_type": None,
+        "construction_cost_100m_won": None, "design_cost_100m_won": None,
+        "construction_period_months": None,
+        "budget_notes": [], "special_conditions": [], "unit_program": [],
+        "sites": [
+            {"site_id": "부지1", "site_area_sqm": 100, "address": "주소1",
+             "zoning": "", "scope": "", "facilities": [],
+             "floor_area_sqm": None, "building_coverage_pct": None,
+             "floor_area_ratio_pct": None, "max_height_m": None,
+             "open_space_sqm": None, "open_space_notes": ""},
+            {"site_id": "부지2", "site_area_sqm": 200, "address": "주소2",
+             "zoning": "", "scope": "", "facilities": [],
+             "floor_area_sqm": None, "building_coverage_pct": None,
+             "floor_area_ratio_pct": None, "max_height_m": None,
+             "open_space_sqm": None, "open_space_notes": ""},
+        ],
+        "_page": 3,
+    }
+    merged = _merge_brief_project_info_pages([page])
+    assert {s["site_id"] for s in merged["sites"]} == {"부지1", "부지2"}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Adjustment A — page_classifier: 양식/별첨 헤더 강등
+# ════════════════════════════════════════════════════════════════════════════
+
+def test_form_header_downgrades_brief_project_info():
+    """A: [서식N] / [양식N] / 별첨 / 부록 헤더 + BRIEF_PROJECT_INFO → BRIEF_SUBMISSION 강등."""
+    from services.page_classifier import _normalise_brief_result
+    for hdr in ("[서식3] 건축개요 및 시설별 면적표",
+                "[서식 4] 단위세대 면적표",
+                "[양식 1] 견적서",
+                "별첨 #2 용역범위 구분표",
+                "부록 A",
+                "Appendix B"):
+        result = _normalise_brief_result({
+            "type": "BRIEF_PROJECT_INFO", "confidence": 0.85,
+            "has_table": True, "has_text": True,
+            "page_header_text": hdr,
+        })
+        assert result["primary_type"] == "BRIEF_SUBMISSION", \
+            f"헤더 '{hdr}' 강등 실패 (got {result['primary_type']})"
+
+
+def test_normal_project_info_header_unaffected():
+    """A: 일반 사업개요 헤더는 강등 영향 없음 (PDF/영등포 회귀 방지)."""
+    from services.page_classifier import _normalise_brief_result
+    for hdr in ("1.2 사업개요",
+                "제3장 제안서 작성지침 > 3.1 계획 개요",
+                "사업 개요"):
+        result = _normalise_brief_result({
+            "type": "BRIEF_PROJECT_INFO", "confidence": 0.90,
+            "has_table": True, "has_text": True,
+            "page_header_text": hdr,
+        })
+        assert result["primary_type"] == "BRIEF_PROJECT_INFO", \
+            f"헤더 '{hdr}' 가 잘못 강등됨"
+
+
+def test_form_header_on_other_types_unaffected():
+    """A: 양식 헤더라도 BRIEF_PROJECT_INFO 가 아니면 강등 대상 아님."""
+    from services.page_classifier import _normalise_brief_result
+    result = _normalise_brief_result({
+        "type": "BRIEF_SUBMISSION", "confidence": 0.9,
+        "has_table": True, "has_text": True,
+        "page_header_text": "[서식3] 건축개요 및 시설별 면적표",
+    })
+    assert result["primary_type"] == "BRIEF_SUBMISSION"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Adjustment C — _extract_docx_unit_program_from_table
+# ════════════════════════════════════════════════════════════════════════════
+
+def _make_unit_block(table_md: str) -> dict:
+    return {
+        "block_num": 1, "header_text": "3.1 계획 개요",
+        "paragraphs": [], "table_markdown": table_md, "merge_info": [],
+    }
+
+
+def test_unit_program_extracts_all_distribution_rows():
+    """C: KT 케이스 — 1,2BL 분양 + 3BL 임대 + 시설 행 모두 추출."""
+    from services.data_extractor import _extract_docx_unit_program_from_table
+    md = "\n".join([
+        "| 구 분 | 평형 | 면적 | 비율 | 비 고 |",
+        "| --- | --- | --- | --- | --- |",
+        "| 1,2BL (분양) | 84형 | 전용 85㎡ 내외 | 80% 내외 | 비율조정 가능 |",
+        "| 1,2BL (분양) | 59~110형 | 전용 59~110㎡ 내외 | 20% 내외 | 비율조정 가능 |",
+        "| 3BL (임대) | 59형 | 전용 59㎡ 내외 | 20% 내외 | 비율조정 가능 |",
+        "| 3BL (임대) | 84형 | 전용 85㎡ 내외 | 80% 내외 | 비율조정 가능 |",
+        "| 근린생활시설 |  | 적정 규모 제안 |  | 전체 연면적의 3% 이내 |",
+        "| 공공기여시설 |  | 4,800평 |  | 용적률 400% 이내 |",
+    ])
+    rows = _extract_docx_unit_program_from_table(_make_unit_block(md))
+    blocks_set = {r["block"] for r in rows}
+    # 4개 카테고리 모두 등장
+    assert "1,2BL" in blocks_set
+    assert "3BL" in blocks_set
+    assert any("근린생활시설" in b for b in blocks_set)
+    assert any("공공기여시설" in b for b in blocks_set)
+    # 분양/임대 tenure 식별
+    tenures = {r["tenure"] for r in rows}
+    assert "분양" in tenures and "임대" in tenures
+    # type_label
+    types = {r["type_label"] for r in rows if r["type_label"]}
+    assert "84형" in types and "59형" in types and "59~110형" in types
+    # 전체 행 수: 1,2BL 2종 + 3BL 2종 + 근린 + 공공 = 6
+    assert len(rows) == 6
+
+
+def test_unit_program_skips_scoring_table():
+    """C: 배점표는 분배표가 아니므로 빈 결과 (영등포 회귀 방지)."""
+    from services.data_extractor import _extract_docx_unit_program_from_table
+    md = "\n".join([
+        "| 구분 | 평가사항 | 배점 |",
+        "| --- | --- | --- |",
+        "| 디자인 | x | 30 |",
+        "| 친환경 | y | 40 |",
+    ])
+    rows = _extract_docx_unit_program_from_table(_make_unit_block(md))
+    assert rows == []
+
+
+def test_unit_program_skips_empty_template_table():
+    """C: 빈 양식 면적표 ([서식4] 단위세대 면적표 같은 케이스) — area/ratio 빈 행 차단.
+
+    Adjustment A 가 [서식N] 헤더를 BRIEF_SUBMISSION 으로 강등하므로 실제 파이프라인에선
+    이 함수 호출 안 됨. 그래도 C 단독 호출 시 false positive 차단해야 회귀 안전.
+    """
+    from services.data_extractor import _extract_docx_unit_program_from_table
+    md = "\n".join([
+        "| 구 분 | 유 형 | 세대수 | 전용 면적 | 비고 |",
+        "| --- | --- | --- | --- | --- |",
+        "| 공동 주택 (1BL) | 00 ty (평형) |  |  |  |",
+        "| 공동 주택 (1BL) | 00 ty (평형) |  |  |  |",
+        "| 공동 주택 (2BL) | 00 ty (평형) |  |  |  |",
+    ])
+    rows = _extract_docx_unit_program_from_table(_make_unit_block(md))
+    assert rows == []
+
+
+def test_unit_program_skips_simple_metadata_table():
+    """C: 사업명/위치 같은 메타데이터 표는 빈 결과 (Block #3 사업개요 표 회귀 방지)."""
+    from services.data_extractor import _extract_docx_unit_program_from_table
+    md = "\n".join([
+        "| 사 업 명 | 사 업 명 | 대전인재개발원 도시개발사업 설계용역 |",
+        "| --- | --- | --- |",
+        "| 대지위치 | 대지위치 | 대전광역시 서구 |",
+        "| 시설 개요 | 대지면적 | 104,223㎡ |",
+    ])
+    rows = _extract_docx_unit_program_from_table(_make_unit_block(md))
+    # 시설개요/대지위치 등은 block 패턴에 안 맞으므로 빈 결과
+    assert rows == []
+
+
+def test_unit_program_merge_dedupes_by_block_and_type_label():
+    """C: LLM + 표 머지 — (block, type_label) 동일한 entry 중복 제거."""
+    from services.data_extractor import _merge_unit_program_rows
+    llm = [{"block": "1,2BL", "tenure": "분양", "type_label": "84형",
+            "area_text": "85㎡", "ratio_text": "80%", "note": "조정"}]
+    table = [
+        {"block": "1,2BL", "tenure": "분양", "type_label": "84형",
+         "area_text": "85㎡", "ratio_text": "80%", "note": "조정"},   # dup → skip
+        {"block": "3BL", "tenure": "임대", "type_label": "59형",
+         "area_text": "59㎡", "ratio_text": "20%", "note": ""},        # new
+    ]
+    merged = _merge_unit_program_rows(llm, table)
+    assert len(merged) == 2
+    keys = {(r["block"], r["type_label"]) for r in merged}
+    assert keys == {("1,2BL", "84형"), ("3BL", "59형")}
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# design_guidelines_grouped[] — 스키마 보존 + merge + exporter 렌더링
+# ════════════════════════════════════════════════════════════════════════════
+
+def test_docx_loader_emits_label_pattern_hint(tmp_path):
+    """docx_loader: 가)/나)/다) 또는 1)/2) 글머리가 있으면 source text 에 힌트 출력."""
+    from services.docx_loader import split_docx_to_blocks, get_block_source_text
+    doc = Document()
+    p1 = doc.add_paragraph()
+    r1 = p1.add_run("3.2.3 계획지침")
+    _set_run_font(r1, size_pt=18.0)
+    doc.add_paragraph("1) 토지이용 및 배치계획")
+    doc.add_paragraph("가) 대지 주변의 토지이용을 고려한다.")
+    doc.add_paragraph("나) 교통편의 시설과의 연계성을 고려한다.")
+    doc.add_paragraph("2) 단지계획")
+    doc.add_paragraph("가) 인공구조물은 최소화한다.")
+
+    path = _doc_to_path(doc, tmp_path, "labels.docx")
+    blocks = split_docx_to_blocks(path)
+    assert blocks
+    src = get_block_source_text(blocks[0])
+    # 힌트 라인이 포함되어야 함
+    assert "[LABEL_PATTERNS_DETECTED]" in src
+    # 1) 와 가) 둘 다 감지돼야 함
+    hint_line = next(l for l in src.split("\n") if l.startswith("[LABEL_PATTERNS_DETECTED]"))
+    assert "1)" in hint_line and "가)" in hint_line
+
+
+def test_merge_aggregates_design_guidelines_grouped():
+    """merge_extracted_data: 여러 BRIEF_DESIGN_* / BRIEF_PROGRAM 페이지의 grouped[] 단일 리스트로 집계."""
+    from services.data_extractor import merge_extracted_data
+    classifications = [
+        {"page": 1, "primary_type": "BRIEF_DESIGN_MASSING"},
+        {"page": 2, "primary_type": "BRIEF_DESIGN_FACADE"},
+        {"page": 3, "primary_type": "BRIEF_PROGRAM"},
+    ]
+    extractions = [
+        {"page": 1, "type": "BRIEF_DESIGN_MASSING", "data": {
+            "design_guidelines_grouped": [
+                {"facility_scope": "전체", "space_scope": "전체", "category": "배치계획",
+                 "section_path": "3.2.3 > 1) 토지이용", "items": [
+                     {"label": "가)", "text": "대지 주변 ..."},
+                     {"label": "나)", "text": "교통편의 ..."},
+                 ]}
+            ]}},
+        {"page": 2, "type": "BRIEF_DESIGN_FACADE", "data": {
+            "design_guidelines_grouped": [
+                {"facility_scope": "전체", "space_scope": "전체", "category": "입면·재료",
+                 "section_path": "3.2.3 > 5) 입면", "items": [
+                     {"label": "가)", "text": "지역의 랜드마크 ..."},
+                 ]}
+            ]}},
+        {"page": 3, "type": "BRIEF_PROGRAM", "data": {
+            "design_guidelines_grouped": [
+                {"facility_scope": "구청", "space_scope": "간부공간", "category": "공간구성",
+                 "section_path": "II.3 > ① 구청 > 간부공간", "items": [
+                     {"label": "-", "text": "직무공간의 배치를 고려 ..."},
+                 ]}
+            ]}},
+    ]
+    merged = merge_extracted_data(classifications, extractions)
+    grouped = merged.get("design_guidelines_grouped") or []
+    assert len(grouped) == 3
+    scopes = {(g["facility_scope"], g["category"]) for g in grouped}
+    assert ("전체", "배치계획") in scopes
+    assert ("전체", "입면·재료") in scopes
+    assert ("구청", "공간구성") in scopes
+
+
+def test_merge_dedupes_grouped_by_section_path():
+    """같은 section_path + 같은 첫 항목 텍스트면 중복 제거."""
+    from services.data_extractor import merge_extracted_data
+    classifications = [
+        {"page": 1, "primary_type": "BRIEF_DESIGN_GUIDE"},
+        {"page": 2, "primary_type": "BRIEF_DESIGN_GUIDE"},
+    ]
+    same_group = {"facility_scope": "전체", "space_scope": "전체", "category": "배치계획",
+                  "section_path": "3.2.3 > 1) 토지이용",
+                  "items": [{"label": "가)", "text": "대지 주변의 토지이용 ..."}]}
+    extractions = [
+        {"page": 1, "type": "BRIEF_DESIGN_GUIDE", "data": {"design_guidelines_grouped": [same_group]}},
+        {"page": 2, "type": "BRIEF_DESIGN_GUIDE", "data": {"design_guidelines_grouped": [same_group]}},
+    ]
+    merged = merge_extracted_data(classifications, extractions)
+    assert len(merged.get("design_guidelines_grouped") or []) == 1
+
+
+def test_exporter_renders_facility_specific_and_common_sections(tmp_path):
+    """to_xlsx + to_markdown: 시설별 + 공통 grouped 섹션 모두 렌더링."""
+    from services.brief_checklist_exporter import to_xlsx, to_markdown
+    from openpyxl import load_workbook
+
+    brief_data = {
+        "_brief_meta": {"facility_type": "public", "source_format": "pdf",
+                        "brief_id": "test", "brief_name": ""},
+        "brief_project_info": {"competition_name": "X", "sites": [{"site_id": "단일부지"}],
+                               "construction_cost_100m_won": None, "design_cost_100m_won": None,
+                               "construction_period_months": None,
+                               "budget_notes": [], "special_conditions": [], "unit_program": []},
+        "_quantitative": {},
+        "design_guidelines_grouped": [
+            {"facility_scope": "구청", "space_scope": "간부공간", "category": "공간구성",
+             "section_path": "II.3 > ① 구청 > 간부공간",
+             "items": [{"label": "-", "text": "직무공간 배치 고려"}]},
+            {"facility_scope": "구의회", "space_scope": "전체", "category": "공간구성",
+             "section_path": "II.3 > ② 구의회",
+             "items": [{"label": "-", "text": "본회의장 동선 고려"}]},
+            {"facility_scope": "전체", "space_scope": "전체", "category": "배치계획",
+             "section_path": "II.4 > 1) 배치",
+             "items": [{"label": "가)", "text": "남향 우선 배치"}]},
+        ],
+    }
+    # xlsx
+    xlsx_bytes = to_xlsx(brief_data, {"summary": {"high": 0, "medium": 0, "low": 0}, "flags": []})
+    out = tmp_path / "out.xlsx"
+    out.write_bytes(xlsx_bytes)
+    wb = load_workbook(str(out))
+    ws = wb["3.요구사항"]
+    all_text = "\n".join(
+        str(ws.cell(row=r, column=c).value or "")
+        for r in range(1, ws.max_row + 1) for c in range(1, ws.max_column + 1)
+    )
+    assert "시설별 설계지침" in all_text
+    assert "공통 설계지침" in all_text
+    assert "[구청]" in all_text and "[구의회]" in all_text
+    assert "남향 우선 배치" in all_text
+    assert "직무공간 배치 고려" in all_text
+
+    # markdown
+    md = to_markdown(brief_data, {"summary": {"high": 0, "medium": 0, "low": 0}, "flags": []})
+    assert "### 시설별 설계지침" in md
+    assert "### 공통 설계지침" in md
+    assert "[구청]" in md
+    assert "남향 우선 배치" in md
+
+
+def test_exporter_skips_grouped_section_when_empty(tmp_path):
+    """grouped 가 비어있으면 새 섹션은 렌더링 안 됨 (회귀 방지)."""
+    from services.brief_checklist_exporter import to_xlsx
+    from openpyxl import load_workbook
+
+    brief_data = {
+        "_brief_meta": {"facility_type": "residential", "source_format": "pdf",
+                        "brief_id": "test", "brief_name": ""},
+        "brief_project_info": {"competition_name": "X", "sites": [{"site_id": "단일부지"}],
+                               "construction_cost_100m_won": None, "design_cost_100m_won": None,
+                               "construction_period_months": None,
+                               "budget_notes": [], "special_conditions": [], "unit_program": []},
+        "_quantitative": {},
+        # design_guidelines_grouped 없음 (구 데이터 시뮬레이션)
+    }
+    xlsx_bytes = to_xlsx(brief_data, {"summary": {"high": 0, "medium": 0, "low": 0}, "flags": []})
+    wb = load_workbook(io.BytesIO(xlsx_bytes))
+    ws = wb["3.요구사항"]
+    all_text = "\n".join(
+        str(ws.cell(row=r, column=c).value or "")
+        for r in range(1, ws.max_row + 1) for c in range(1, ws.max_column + 1)
+    )
+    assert "시설별 설계지침" not in all_text
+    assert "공통 설계지침" not in all_text
 
 
 def test_exporter_skips_unit_program_when_absent():

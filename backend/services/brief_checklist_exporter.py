@@ -29,16 +29,10 @@ import io
 from datetime import datetime
 from typing import Any
 
+from services.utils import _first, _as_list  # 공유 dict 헬퍼
+
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
-
-def _first(data: dict, key: str) -> dict:
-    """dict에서 키를 꺼내 리스트면 첫 요소 반환, 없으면 {}."""
-    v = data.get(key) or {}
-    if isinstance(v, list):
-        v = v[0] if v else {}
-    return v if isinstance(v, dict) else {}
-
 
 def _collect(data: dict, key: str, *list_keys: str) -> dict[str, list]:
     """다중 페이지 타입에서 list_key별 값을 모든 페이지에서 집계.
@@ -54,12 +48,6 @@ def _collect(data: dict, key: str, *list_keys: str) -> dict[str, list]:
             for lk in list_keys:
                 result[lk].extend(page.get(lk) or [])
     return result
-
-
-def _as_list(data: dict, key: str) -> list:
-    """dict에서 키를 꺼내 항상 list로 반환. None/빈값이면 []."""
-    v = data.get(key) or []
-    return v if isinstance(v, list) else ([v] if v else [])
 
 
 def _str_item(item: Any) -> str:
@@ -326,6 +314,9 @@ def _extract_sections(brief_data: dict) -> dict:
             "special_conditions": _as_list(bpi, "special_conditions"),
             "unit_program": _as_list(bpi, "unit_program"),
         },
+        # 계층 보존 설계지침 (merge_extracted_data 가 집계한 단일 리스트)
+        # facility_scope/space_scope/category/section_path 기준으로 정렬·그룹화는 렌더링 단계에서 수행
+        "guidelines_grouped": brief_data.get("design_guidelines_grouped") or [],
     }
 
 
@@ -674,6 +665,57 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
             L.append(f"{lbl}: (없음)")
 
     # ── 기타 설계 지침 (구 데이터 폴백) ─────────────────────────────────────
+    # 계층 보존 설계지침 (시설별 / 공통 — design_guidelines_grouped 출처)
+    grouped_all = s.get("guidelines_grouped") or []
+    if grouped_all:
+        # facility_scope 별 정렬 (멀티 시설 우선, 그 다음 "전체")
+        facility_specific = [g for g in grouped_all
+                             if (g.get("facility_scope") or "전체") != "전체"]
+        common_grouped   = [g for g in grouped_all
+                             if (g.get("facility_scope") or "전체") == "전체"]
+
+        def _md_grouped_block(rows: list[dict], heading: str) -> None:
+            if not rows:
+                return
+            L.append(f"\n### {heading}")
+            # facility_scope 순서 유지 그룹화
+            order: list[str] = []
+            by_fac: dict[str, list[dict]] = {}
+            for g in rows:
+                fs = (g.get("facility_scope") or "전체").strip() or "전체"
+                if fs not in by_fac:
+                    order.append(fs)
+                    by_fac[fs] = []
+                by_fac[fs].append(g)
+            for fs in order:
+                if fs != "전체":
+                    L.append(f"\n#### [{fs}]")
+                for g in by_fac[fs]:
+                    space    = (g.get("space_scope") or "전체").strip() or "전체"
+                    cat      = (g.get("category") or "기타").strip() or "기타"
+                    sec_path = (g.get("section_path") or "").strip()
+                    items    = g.get("items") or []
+                    if not items:
+                        continue
+                    head_parts: list[str] = []
+                    if space != "전체":
+                        head_parts.append(f"[{space}]")
+                    head_parts.append(cat)
+                    if sec_path:
+                        head_parts.append(f"— {sec_path}")
+                    L.append(f"\n**{' '.join(head_parts)}**")
+                    for it in items:
+                        if not isinstance(it, dict):
+                            continue
+                        label = (it.get("label") or "").strip()
+                        text  = (it.get("text") or "").strip()
+                        if not text:
+                            continue
+                        L.append(f"- {label} {text}" if label else f"- {text}")
+
+        _md_grouped_block(facility_specific, "시설별 설계지침")
+        _md_grouped_block(common_grouped,   "공통 설계지침 (그룹별)")
+
     _misc = [
         ("특수요구사항", r["special_reqs"]),
         ("기타설계지침", r["design_reqs"]),
@@ -1358,7 +1400,78 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             _ws3_labeled(lbl, items)
         row += 1
 
+    # ── 계층 보존 설계지침 (design_guidelines_grouped) ─────────────────────────
+    # 시설별 (facility_scope != "전체") 과 공통 (facility_scope == "전체") 으로 분리,
+    # facility → space → category 순으로 중첩 렌더링.
+    grouped_all = s.get("guidelines_grouped") or []
+
+    def _ws3_grouped_section(rows: list[dict]) -> None:
+        """grouped rows 를 facility / space / category 순으로 정렬·렌더."""
+        nonlocal row
+        # facility_scope 별 그룹화 (순서 유지)
+        facility_order: list[str] = []
+        by_facility: dict[str, list[dict]] = {}
+        for g in rows:
+            fs = (g.get("facility_scope") or "전체").strip() or "전체"
+            if fs not in by_facility:
+                facility_order.append(fs)
+                by_facility[fs] = []
+            by_facility[fs].append(g)
+        for fs in facility_order:
+            # 시설 헤더 (멀티 시설일 때만 별도 표시 — facility_scope == "전체" 면 생략)
+            if fs != "전체":
+                row = _write_subsection(ws3, f"[{fs}]", row, span=_S3_SPAN)
+            # space_scope → category 순으로 정렬
+            for g in by_facility[fs]:
+                space    = (g.get("space_scope") or "전체").strip() or "전체"
+                cat      = (g.get("category") or "기타").strip() or "기타"
+                sec_path = (g.get("section_path") or "").strip()
+                items    = g.get("items") or []
+                if not items:
+                    continue
+                # 라벨: "[공간] 카테고리 — section_path" 형태
+                head_parts = []
+                if space != "전체":
+                    head_parts.append(f"[{space}]")
+                head_parts.append(cat)
+                if sec_path:
+                    head_parts.append(f"— {sec_path}")
+                head = " ".join(head_parts)
+                c_h = ws3.cell(row=row, column=1, value=head)
+                c_h.font = _bold
+                c_h.alignment = _wrap_top
+                ws3.merge_cells(start_row=row, start_column=1,
+                                end_row=row, end_column=_S3_SPAN)
+                row += 1
+                for it in items:
+                    if not isinstance(it, dict):
+                        continue
+                    label = (it.get("label") or "").strip()
+                    text  = (it.get("text") or "").strip()
+                    if not text:
+                        continue
+                    line = f"{label} {text}" if label else f"• {text}"
+                    c = ws3.cell(row=row, column=2, value=line)
+                    c.alignment = _wrap_top
+                    ws3.merge_cells(start_row=row, start_column=2,
+                                    end_row=row, end_column=_S3_SPAN)
+                    row += 1
+            row += 1
+
+    if grouped_all:
+        facility_specific = [g for g in grouped_all
+                             if (g.get("facility_scope") or "전체") != "전체"]
+        common_grouped   = [g for g in grouped_all
+                             if (g.get("facility_scope") or "전체") == "전체"]
+        if facility_specific:
+            row = _write_subsection(ws3, "시설별 설계지침", row, span=_S3_SPAN)
+            _ws3_grouped_section(facility_specific)
+        if common_grouped:
+            row = _write_subsection(ws3, "공통 설계지침 (그룹별)", row, span=_S3_SPAN)
+            _ws3_grouped_section(common_grouped)
+
     # ── 기타 설계 지침 (폴백 / 구 데이터) ───────────────────────────────────
+    # 호환을 위해 평탄 필드도 유지 (사용자 합의 옵션 X). grouped 가 있어도 중복 표시.
     list_sections = [
         ("특수 요구사항", r["special_reqs"]),
         ("기타 설계 지침", r["design_reqs"]),

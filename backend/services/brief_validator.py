@@ -22,6 +22,7 @@ TODO v2 (LLM 판단 필요):
 from __future__ import annotations
 
 from config import facility_conflict_keywords
+from services.utils import _first  # 공유 dict 헬퍼 (_as_list 는 본 모듈에서 미사용)
 
 # ── 상수 ──────────────────────────────────────────────────────────────────────
 _CONFIDENCE_LOW = 0.55      # 이 미만이면 low_confidence 플래그
@@ -41,20 +42,7 @@ _CHECKED_RULES = [
 
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
-
-def _first(data: dict, key: str) -> dict:
-    """dict에서 키를 꺼내 리스트면 첫 요소 반환, 없으면 {}."""
-    v = data.get(key) or {}
-    if isinstance(v, list):
-        v = v[0] if v else {}
-    return v if isinstance(v, dict) else {}
-
-
-def _as_list(data: dict, key: str) -> list:
-    """dict에서 키를 꺼내 항상 list로 반환."""
-    v = data.get(key) or []
-    return v if isinstance(v, list) else [v]
-
+# _first / _as_list 는 services.utils 단일 소스 (위 import).
 
 def _any_nonnull(*pairs: tuple[dict, str]) -> bool:
     """(dict, key) 쌍 중 하나라도 non-None 값이 있으면 True."""
