@@ -138,8 +138,8 @@ Located in `backend/` (repo root), the FastAPI application serves seven routers,
   - **`brief_evaluation` 다중 페이지 처리:** `_extract_sections()`에서 `brief_evaluation` 리스트 내 non-null 배점 수가 가장 많은 페이지를 `max(key=_eval_pts)`로 선택. `_first()`(항상 첫 페이지)를 쓰면 BRIEF_EVALUATION 스태킹 폴백 시 p.21이 빈 결과여도 p.117의 실제 배점표가 무시됨. **`_first(brief_evaluation)`으로 되돌리면 비연속 페이지 케이스에서 심사기준 Sheet 전체 누락 재발.**
   - **`_COST_KW` 필터:** area_table 조립 후 `{"공사비","내역서","공종","원가","견적"}` 키워드를 group_name에 포함한 그룹 제거 (개략공사비 내역서 등 비설계 항목 배제).
   - **`_fmt_bullets(subs, desc) → str`:** sub_items를 Excel 셀 멀티라인으로 변환. 복수 항목 → 항목별 한 줄 / 단일 항목: `\n` 개행 분리 우선(`table_rows_raw` 원본 경로), 없으면 인라인 불릿 문자(▪•·◦▸▶▷) 분리. 각 줄 앞에 `•` 없으면 자동 추가.
-  - **Excel (4 시트):** Sheet 1(면적·프로그램) `freeze_panes="A3"`, KV `val_end_col=4`로 병합. Sheet 2(심사기준) **3열 구조 `구분|세부기준|배점`** — Col A 동일 이름 연속 행 병합, Col B `_fmt_bullets`로 멀티라인 세부기준(한 셀에 불릿 여러 줄), Col C 항목별 독립 배점(병합 안 함), `freeze_panes="A3"`. Sheet 3(요구사항) 2열 라벨+내용 구조, 각 설계 섹션(배치·동선/입면·재료/친환경·인증/특수·보안/기타)을 라벨화된 서브리스트로 렌더링, `freeze_panes="A3"`. Sheet 4(검증경고) `freeze_panes="A3"`.
-  - **MD (`to_markdown`):** 프로그램·LLM 연동용 구조화 데이터 덤프. 마크다운 표 없음. 형식: `key: value` 한 줄 / `- item` / 들여쓰기 `- sub_item` 계층 리스트. null 필드는 `(없음)` 명시. 5개 섹션: 1.사업개요 / 2.면적프로그램 / 3.심사기준(평가항목별 `### Name` 블록) / 4.요구사항·설계지침(모든 서브라벨 열거) / 5.검증경고(`[심각도] type: message | 위치: ...` 형식).
+  - **Excel (4 시트):** Sheet 1(면적·프로그램) `freeze_panes="A3"`, KV `val_end_col=4`로 병합. Sheet 2(심사기준) **3열 구조 `구분|세부기준|배점`** — Col A 동일 이름 연속 행 병합, Col B `_fmt_bullets`로 멀티라인 세부기준(한 셀에 불릿 여러 줄), Col C 항목별 독립 배점(병합 안 함), `freeze_panes="A3"`. Sheet 3(요구사항) 2열 라벨+내용 구조, `design_guidelines_grouped` 기반 — `facility_scope != "전체"` → **"시설별 지침"** 섹션, `facility_scope == "전체"` → **"설계 지침 및 요구사항"** 섹션. `grouped`가 비어 있을 때만 flat 폴백(특수요구사항/기타설계지침/후퇴선요건 등) 표시, `freeze_panes="A3"`. Sheet 4(검증경고) `freeze_panes="A3"`.
+  - **MD (`to_markdown`):** 프로그램·LLM 연동용 구조화 데이터 덤프. 마크다운 표 없음. 형식: `key: value` 한 줄 / `- item` / 들여쓰기 `- sub_item` 계층 리스트. null 필드는 `(없음)` 명시. 5개 섹션: 1.사업개요 / 2.면적프로그램 / 3.심사기준(평가항목별 `### Name` 블록) / 4.요구사항·설계지침(`design_guidelines_grouped` 기반 "시설별 지침" + "설계 지침 및 요구사항"; grouped 없을 때만 flat 폴백 표시) / 5.검증경고(`[심각도] type: message | 위치: ...` 형식).
 - `services/grade_helpers.py` - 등급 처리 단일 소스. `LEGACY_GRADE_MAP`, `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade(d, *, check_overall=False)`. `report_generator` / `diagnosis_report_generator` / `myproject_report_generator` 모두 여기서 import.
 - `services/diagnosis_report_generator.py` - 진단 결과 HTML 리포트 생성 (LLM 호출 없음). `generate_diagnosis_report(diagnosis: dict) -> str`. 섹션: 종합점수 링 → 페이지 구성 바 → 패턴 편차 경고 → 지침서 충족도 → 요구사항 매핑 → 평가축별 상세 → 보강 포인트
 - `services/pattern_builder.py` - Builds patterns from winner data + qualitative LLM summary; `build_pattern()` now also collects `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords) for loser anti-pattern comparison
@@ -323,7 +323,7 @@ Test with curl or Postman by uploading files to:
   "raster_dpi_classify": 72,
   "raster_dpi_extract": 120,
   "model_id": "claude-sonnet-4-6",
-  "model_id_classify": "claude-haiku-4-5-20251001"
+  "model_id_classify": "claude-sonnet-4-6"
 }
 ```
 
@@ -487,7 +487,7 @@ Test with curl or Postman by uploading files to:
    - **진단 방법:**
      1. `_brief.json`의 `page_map`에서 각 페이지 `page_header_text` 확인 → "결과 발표"/"시상금"/"[서식"/"별첨"/"소명서" 포함 페이지가 BRIEF_EVALUATION이면 분류 오류
      2. `_brief.json.validation.flags`에 `facility_keyword_conflict` 플래그가 보이면 PDF와 대조 필수
-     3. 발견 시 `app_settings.json`의 `model_id_classify`가 최신 Haiku인지 확인 후 재분석
+     3. 발견 시 `app_settings.json`의 `model_id_classify`가 `"claude-sonnet-4-6"` (Sonnet)인지 확인 후 재분석 — **Haiku로 되돌리면 헤더 환각으로 방어 로직 무력화**
 
 ---
 
@@ -495,9 +495,9 @@ Test with curl or Postman by uploading files to:
 
 1. **로컬 코드 변경이 GCP에 반영되지 않는 문제**
    - **증상:** 로컬에서 수정·테스트 후 오류가 사라졌는데 GCP 앱에서는 동일 오류 재발.
-   - **원인:** `gcloud run deploy` 실행을 잊음. GCP Cloud Run은 소스를 자동으로 감시하지 않음.
-   - **진단:** `gcloud run services describe competition-analyzer --region asia-northeast3 --format="value(status.latestCreatedRevisionName,metadata.creationTimestamp)"` — 타임스탬프가 최근 커밋 이전이면 재배포 필요.
-   - **배포 명령:**
+   - **배포 방식:** GitHub `main` 브랜치에 push하면 **GitHub Actions가 자동으로 GCP Cloud Run에 배포**. 수동 `gcloud run deploy` 불필요.
+   - **진단:** `gcloud run services describe competition-analyzer --region asia-northeast3 --format="value(status.latestCreatedRevisionName,metadata.creationTimestamp)"` — 타임스탬프가 최근 커밋 이전이면 GitHub Actions 실행 여부 확인.
+   - **수동 배포 (Actions 실패 시 fallback):**
 
      ```powershell
      cd d:\APPS\competition_comparison
