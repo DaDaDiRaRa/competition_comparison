@@ -659,23 +659,24 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
         _md_grouped_block(facility_specific, "시설별 지침")
         _md_grouped_block(common_grouped,   "설계 지침 및 요구사항")
 
-    _misc = [
-        ("특수요구사항", r["special_reqs"]),
-        ("기타설계지침", r["design_reqs"]),
-        ("후퇴선요건",   r["setbacks"]),
-        ("재료요건",     r["materials"]),
-        ("친환경요건",   r["sustainability"]),
-        ("금지사항",     r["prohibited"]),
-        ("특별지침",     r["special_guide"]),
-    ]
-    has_misc = any(v for _, v in _misc)
-    if has_misc:
-        L.append("\n### 기타 설계 지침")
-        for lbl, lst in _misc:
-            if lst:
-                L.append(f"{lbl}:")
-                for x in lst:
-                    L.append(f"- {_str_item(x)}")
+    if not grouped_all:
+        _misc = [
+            ("특수요구사항", r["special_reqs"]),
+            ("기타설계지침", r["design_reqs"]),
+            ("후퇴선요건",   r["setbacks"]),
+            ("재료요건",     r["materials"]),
+            ("친환경요건",   r["sustainability"]),
+            ("금지사항",     r["prohibited"]),
+            ("특별지침",     r["special_guide"]),
+        ]
+        has_misc = any(v for _, v in _misc)
+        if has_misc:
+            L.append("\n### 기타 설계 지침")
+            for lbl, lst in _misc:
+                if lst:
+                    L.append(f"{lbl}:")
+                    for x in lst:
+                        L.append(f"- {_str_item(x)}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # 5. 검증 경고
@@ -1357,23 +1358,23 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             row = _write_subsection(ws3, "설계 지침 및 요구사항", row, span=_S3_SPAN)
             _ws3_grouped_section(common_grouped)
 
-    # ── 기타 설계 지침 (폴백 / 구 데이터) ───────────────────────────────────
-    # 호환을 위해 평탄 필드도 유지 (사용자 합의 옵션 X). grouped 가 있어도 중복 표시.
-    list_sections = [
-        ("특수 요구사항", r["special_reqs"]),
-        ("기타 설계 지침", r["design_reqs"]),
-        ("후퇴선 요건",   r["setbacks"]),
-        ("재료 요건",     r["materials"]),
-        ("친환경 요건",   r["sustainability"]),
-        ("금지 사항",     r["prohibited"]),
-        ("특별 지침",     r["special_guide"]),
-    ]
-    for lbl, items in list_sections:
-        if not items:
-            continue
-        row = _write_subsection(ws3, lbl, row, span=_S3_SPAN)
-        _ws3_bullets(items)
-        row += 1
+    # ── 기타 설계 지침 (폴백 / 구 데이터 — grouped 없을 때만) ─────────────────
+    if not grouped_all:
+        list_sections = [
+            ("특수 요구사항", r["special_reqs"]),
+            ("기타 설계 지침", r["design_reqs"]),
+            ("후퇴선 요건",   r["setbacks"]),
+            ("재료 요건",     r["materials"]),
+            ("친환경 요건",   r["sustainability"]),
+            ("금지 사항",     r["prohibited"]),
+            ("특별 지침",     r["special_guide"]),
+        ]
+        for lbl, items in list_sections:
+            if not items:
+                continue
+            row = _write_subsection(ws3, lbl, row, span=_S3_SPAN)
+            _ws3_bullets(items)
+            row += 1
 
     ws3.column_dimensions["A"].width = 16
     ws3.column_dimensions["B"].width = 55
