@@ -639,6 +639,52 @@ python tools/eval/run_harness.py --pdf-dir pdfs/ --force-rerun
 
 ---
 
+## 시퀀스 D — BRIEF_DESIGN_* 다중 페이지 섹션 연속성 (보류, 2026-06-18 결정)
+
+PDF 지침서의 설계지침 섹션이 페이지 경계를 넘어갈 때 자식 항목이 부모 섹션과 분리되어 가공의 top-level 헤더 아래에 평탄화되는 문제. 영등포구 통합 신청사 PDF p.45~46 직무공간 케이스에서 확인.
+
+**전체 분석 문서:** [`docs/BRIEF_DESIGN_MULTIPAGE_CONTINUITY.md`](docs/BRIEF_DESIGN_MULTIPAGE_CONTINUITY.md)
+
+**증상 요약:**
+
+- p.45의 "직무공간 (부서 사무실)" 섹션이 p.46까지 이어지면서 면대실/비품창고/기타 부서별 요청사항이 직무공간의 자식이어야 함
+- 그러나 LLM이 p.46을 단독 처리 → 페이지 상단의 자식 항목들에 부모 헤더가 안 보이므로 가공의 "외부시설 계획지침" 부모를 만들어 붙임
+- p.46의 진짜 새 섹션(통합 민원실, 회의 및 행사공간)과 자식 항목(면대실 등)이 같은 평면에 평탄화됨
+- 데이터는 JSON에 다 존재하지만 계층이 무너져 엑셀 시트 3에 정확히 반영 안 됨
+
+**채택 방안: A안 (BRIEF_DESIGN_* 연속 페이지 스태킹)**
+
+- BRIEF_EVALUATION / BRIEF_PROGRAM에서 검증된 `_stack_images_vertically()` 패턴 재사용
+- 3~4페이지 청크 단위로 묶어 1회 LLM 호출 → 시각적 들여쓰기로 부모-자식 관계 자연스럽게 보존
+- JPEG 출력, `_STACK_MAX_DIM=7500`, 폴백 패턴 모두 기존 코드 재활용
+- 스태킹 실패 시 페이지별 폴백 (`precomputed_design = None` 패턴)
+
+**채택 안 된 방안:**
+
+- **B안 (이전 페이지 컨텍스트 주입):** 순차 실행 강제 → 추출 시간 N배 악화
+- **C안 (후처리 머지, 사용자 제안):** LLM이 이미 평탄화한 JSON에서는 자식과 형제를 구분할 시각 정보가 없음
+
+**재개 조건:**
+
+1. 다른 우선순위 작업(BRIEF_EVALUATION 100점 초과 환각 등)이 정리된 후 진행
+2. 영등포 PDF로 회귀 테스트 가능한 상태
+
+**구현 시 작업 항목 (`docs/BRIEF_DESIGN_MULTIPAGE_CONTINUITY.md` 참조):**
+
+1. `backend/services/data_extractor.py::extract_pdf()` 진입부에 BRIEF_DESIGN_* 그룹핑 + 청크 스태킹 로직 추가
+2. `_DESIGN_STACK_CHUNK = 3` (또는 4) 상수 정의
+3. BRIEF_DESIGN_* 스태킹 프롬프트에 "각 항목의 `source_page` 필드 명시" 룰 추가
+4. 스태킹 시 `max_out ≥ 8000` 확보
+5. 청크 경계가 섹션 한가운데를 자르는지 휴리스틱 점검 (선택적)
+6. 영등포 PDF 회귀: p.45+46 스태킹 → 면대실/비품창고가 직무공간 자식으로, 통합 민원실/회의 및 행사공간은 별도 top-level로 추출되는지 확인
+
+**사이드 이슈 (별도 추적):**
+
+- 페이지 46 데이터는 JSON에 있지만 엑셀 시트 3에 안 나타나는 라우팅 문제
+- `brief_checklist_exporter.py`에서 `facility_scope="전체"` 처리 / `section_path`에 가공 헤더가 붙은 경우 dedup·필터 동작 확인 필요
+
+---
+
 ## 앱 실행 검증 체크리스트 (API 키 필요)
 
 아래 항목들은 코드 로직은 완성됐으나, 실제 Claude API 호출이 필요한 end-to-end 검증이 아직 이루어지지 않은 부분이다. 앱을 기동하고 소규모 실제 데이터로 한 번씩 확인한다.
