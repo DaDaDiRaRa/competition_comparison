@@ -367,6 +367,8 @@ def validate_brief(brief_data: dict, requirements: dict) -> dict:
             }
         }
     """
+    if not isinstance(requirements, dict):
+        requirements = {}
     flags: list[dict] = []
     flags.extend(_check_points_mismatch(brief_data, requirements))
     flags.extend(_check_duplicate(requirements))

@@ -1695,7 +1695,10 @@ def _extract_brief_reqs_sync(brief_trimmed: dict, axes_str: str) -> dict:
             system=_BRIEF_REQ_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        return parse_json_response(raw)
+        result = parse_json_response(raw)
+        if not isinstance(result, dict):
+            return {"requirements": [], "evaluation_criteria": [], "special_requirements": []}
+        return result
     except Exception:
         return {"requirements": [], "evaluation_criteria": [], "special_requirements": []}
 
