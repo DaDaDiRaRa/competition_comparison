@@ -1196,25 +1196,35 @@ def _extract_docx_eval_from_table(block: dict) -> dict:
     """
     import re as _re
 
-    table_md = block.get("table_markdown") or ""
     merge_info = block.get("merge_info") or []
-    if not table_md:
+
+    # table_rows_raw 우선 사용 (잘림 없는 원본 텍스트).
+    # 없으면 table_markdown 파싱으로 폴백 (하위 호환).
+    rows_raw = block.get("table_rows_raw") or []
+    if rows_raw and len(rows_raw) >= 2:
+        headers   = [c.strip() for c in (rows_raw[0] or [])]
+        body_rows = [[c.strip() for c in (r or [])] for r in rows_raw[1:]]
+    else:
+        table_md = block.get("table_markdown") or ""
+        if not table_md:
+            return {"evaluation_categories": [], "total_points": None}
+        lines = [l for l in table_md.split("\n") if l.strip()]
+        if len(lines) < 3:
+            return {"evaluation_categories": [], "total_points": None}
+
+        def _parse_row(line: str) -> list[str]:
+            s = line.strip()
+            if s.startswith("|"):
+                s = s[1:]
+            if s.endswith("|"):
+                s = s[:-1]
+            return [c.strip().replace("&#124;", "|") for c in s.split("|")]
+
+        headers   = _parse_row(lines[0])
+        body_rows = [_parse_row(l) for l in lines[2:]]
+
+    if not headers:
         return {"evaluation_categories": [], "total_points": None}
-
-    lines = [l for l in table_md.split("\n") if l.strip()]
-    if len(lines) < 3:
-        return {"evaluation_categories": [], "total_points": None}
-
-    def _parse_row(line: str) -> list[str]:
-        s = line.strip()
-        if s.startswith("|"):
-            s = s[1:]
-        if s.endswith("|"):
-            s = s[:-1]
-        return [c.strip().replace("&#124;", "|") for c in s.split("|")]
-
-    headers = _parse_row(lines[0])
-    body_rows = [_parse_row(l) for l in lines[2:]]
 
     # 컬럼 인덱스 식별
     name_col   = 0
@@ -1314,36 +1324,32 @@ def _extract_docx_eval_from_table(block: dict) -> dict:
                 })
             continue
 
-        # 패턴 (A): name_col vMerge — 한 구분의 sub_items가 행별로 분리, 각 행이 자체 점수
+        # 패턴 (A): name_col vMerge — sub-row별 배점을 각각 독립 카테고리로 분리
+        # 변경 전: 그룹 전체를 하나로 묶고 점수를 합산 (개발계획 15점으로 통합)
+        # 변경 후: 각 행이 자신의 배점을 유지 (10점 / 5점 행 분리) — 표 원본 구조 보존
         if body_idx in name_groups:
             grp = name_groups[body_idx]
             if grp["start"] in seen_name_starts:
                 continue
             seen_name_starts.add(grp["start"])
 
-            primary  = (grp["value"] or "").replace("\n", " ").strip()
-            sub_items: list[str] = []
-            row_points: list[float] = []
+            primary = (grp["value"] or "").replace("\n", " ").strip()
             for r in range(grp["start"], grp["end"] + 1):
                 if r >= len(body_rows):
                     continue
                 row = body_rows[r]
+                dt = ""
                 if 0 <= detail_col < len(row):
                     dt = row[detail_col].strip()
-                    if dt:
-                        sub_items.append(dt)
+                pv = None
                 if 0 <= points_col < len(row):
                     pv = _parse_points(row[points_col])
-                    if pv is not None:
-                        row_points.append(pv)
-            # 카테고리 총점 = 행별 점수 합계 (각 sub_item이 자체 점수를 가질 때)
-            cat_points = sum(row_points) if row_points else None
-            categories.append({
-                "name":        primary or name_text,
-                "points":      cat_points,
-                "shared_with": [],
-                "sub_items":   sub_items,
-            })
+                categories.append({
+                    "name":        primary or name_text,
+                    "points":      pv,
+                    "shared_with": [],
+                    "sub_items":   [dt] if dt else [],
+                })
             continue
 
         # 단일 행
@@ -1413,7 +1419,15 @@ def _extract_docx_block_with_llm(block: dict, page_type: str, prompt_cfg: dict) 
         f"{instruction}"
     )
 
-    max_out = 8000 if page_type in {"BRIEF_PROGRAM", "BRIEF_EVALUATION"} else 2000
+    _HIGH_OUT   = {"BRIEF_PROGRAM", "BRIEF_EVALUATION"}
+    _DESIGN_OUT = {"BRIEF_DESIGN_MASSING", "BRIEF_DESIGN_GUIDE", "BRIEF_DESIGN_FACADE",
+                   "BRIEF_DESIGN_SUSTAIN", "BRIEF_DESIGN_SPECIAL"}
+    if page_type in _HIGH_OUT:
+        max_out = 8000
+    elif page_type in _DESIGN_OUT:
+        max_out = 4000
+    else:
+        max_out = 2000
     try:
         raw = call_messages(
             model=settings.model_id,

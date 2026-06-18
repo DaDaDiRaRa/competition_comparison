@@ -119,7 +119,7 @@ def _escape_cell_text(text: str) -> str:
     return cleaned
 
 
-def _table_to_markdown(table) -> tuple[str, list[dict]]:
+def _table_to_markdown(table) -> tuple[str, list[dict], list[list[str]]]:
     """표를 파이프 마크다운 + 병합 메타 정보로 변환.
 
     vMerge 감지 전략:
@@ -129,13 +129,16 @@ def _table_to_markdown(table) -> tuple[str, list[dict]]:
       2순위: tcPr 내 w:vMerge 요소 검사 (보조).
 
     Returns:
-        (markdown_string, merge_info_list)
+        (markdown_string, merge_info_list, rows_raw)
         merge_info_list: [{row, col, merged_rows, value}, ...]
+        rows_raw: 2D list of full cell text (no truncation, newlines preserved),
+                  vMerge continue cells = "". rows_raw[0] = header row.
     """
     if not table.rows:
-        return "", []
+        return "", [], []
 
     rows_text: list[list[str]] = []
+    rows_raw: list[list[str]] = []
     merge_info: list[dict] = []
 
     n_cols = len(table.rows[0].cells) if table.rows else 0
@@ -148,6 +151,7 @@ def _table_to_markdown(table) -> tuple[str, list[dict]]:
 
     for r_idx, row in enumerate(table.rows):
         row_cells: list[str] = []
+        row_raw: list[str] = []
         for c_idx, cell in enumerate(row.cells):
             tc = cell._tc
             xml_state = _cell_vmerge_state(cell)
@@ -160,6 +164,7 @@ def _table_to_markdown(table) -> tuple[str, list[dict]]:
 
             if is_continue and c_idx in vmerge_run_len:
                 row_cells.append("")  # 병합 계속 → 빈 칸
+                row_raw.append("")
                 vmerge_run_len[c_idx] += 1
             else:
                 # 이전 병합 종료
@@ -174,9 +179,11 @@ def _table_to_markdown(table) -> tuple[str, list[dict]]:
                 vmerge_start_text[c_idx] = raw_text.strip()
                 vmerge_run_len[c_idx]    = 1
                 row_cells.append(_escape_cell_text(raw_text))
+                row_raw.append(raw_text.strip())
 
             prev_tc_per_col[c_idx] = tc
         rows_text.append(row_cells)
+        rows_raw.append(row_raw)
 
     # 마지막 행까지 진행한 후 미종료 병합 flush
     for c_idx, run_len in vmerge_run_len.items():
@@ -189,7 +196,7 @@ def _table_to_markdown(table) -> tuple[str, list[dict]]:
             })
 
     if not rows_text or not n_cols:
-        return "", merge_info
+        return "", merge_info, rows_raw
 
     # 첫 행 = 헤더
     header  = rows_text[0]
@@ -205,7 +212,7 @@ def _table_to_markdown(table) -> tuple[str, list[dict]]:
     for row in body:
         lines.append("| " + " | ".join(_pad(row)) + " |")
 
-    return "\n".join(lines), merge_info
+    return "\n".join(lines), merge_info, rows_raw
 
 
 # ── 본문 순회 ─────────────────────────────────────────────────────────────────
@@ -483,7 +490,7 @@ def split_docx_to_blocks(path: str) -> list[dict]:
     for idx, blk in enumerate(merged_blocks, start=1):
         para_objs = blk["paragraphs"]
         para_texts = [(p.text or "").strip() for p in para_objs if (p.text or "").strip()]
-        table_md, merge_info = ("", []) if blk["table"] is None else _table_to_markdown(blk["table"])
+        table_md, merge_info, table_rows_raw = ("", [], []) if blk["table"] is None else _table_to_markdown(blk["table"])
 
         breadcrumbs = blk.get("breadcrumbs") or []
 
@@ -502,8 +509,9 @@ def split_docx_to_blocks(path: str) -> list[dict]:
             "block_num":      idx,
             "header_text":    header_text,
             "paragraphs":     para_texts,
-            "table_markdown": table_md or None,
-            "merge_info":     merge_info,
+            "table_markdown":  table_md or None,
+            "table_rows_raw":  table_rows_raw or None,
+            "merge_info":      merge_info,
         })
 
     return result
@@ -537,16 +545,30 @@ def get_block_source_text(block: dict) -> str:
         parts.append("[PARAGRAPHS]")
         parts.append("\n".join(paragraphs))
 
-    tbl = block.get("table_markdown")
-    if tbl:
-        lines = tbl.split("\n")
-        # 헤더 2줄(헤더 행 + 구분선) + 본문 최대 _TABLE_PREVIEW_ROWS 행
-        head_lines = lines[:2]
-        body_lines = lines[2:2 + _TABLE_PREVIEW_ROWS]
-        if len(lines) > 2 + _TABLE_PREVIEW_ROWS:
-            body_lines.append(f"| ... ({len(lines) - 2 - _TABLE_PREVIEW_ROWS}행 생략) |")
+    rows_raw = block.get("table_rows_raw")
+    tbl      = block.get("table_markdown")
+    if rows_raw or tbl:
         parts.append("[TABLE]")
-        parts.append("\n".join(head_lines + body_lines))
+        if rows_raw and len(rows_raw) >= 1:
+            # table_rows_raw: 원본 전체 텍스트 사용 (60자 잘림 없음).
+            # 셀 내 개행은 공백으로 합쳐서 한 줄 표현.
+            _CELL_SOFT_CAP = 200  # 셀당 소프트 캡 (과도한 셀 1개가 전체를 밀어내지 않도록)
+            def _cell_str(t: str) -> str:
+                return t.replace("\n", " ").replace("|", "&#124;")[:_CELL_SOFT_CAP]
+            header = rows_raw[0]
+            body   = rows_raw[1:]
+            md_header  = "| " + " | ".join(_cell_str(c) for c in header) + " |"
+            md_sep     = "| " + " | ".join(["---"] * len(header)) + " |"
+            md_body    = ["| " + " | ".join(_cell_str(c) for c in row) + " |" for row in body]
+            parts.append("\n".join([md_header, md_sep] + md_body))
+        else:
+            # 폴백: 기존 table_markdown (60자 셀 제한 있음, 10행 제한)
+            lines = tbl.split("\n")
+            head_lines = lines[:2]
+            body_lines = lines[2:2 + _TABLE_PREVIEW_ROWS]
+            if len(lines) > 2 + _TABLE_PREVIEW_ROWS:
+                body_lines.append(f"| ... ({len(lines) - 2 - _TABLE_PREVIEW_ROWS}행 생략) |")
+            parts.append("\n".join(head_lines + body_lines))
 
     text = "\n\n".join(parts)
     if len(text) <= _SOURCE_TEXT_CAP:

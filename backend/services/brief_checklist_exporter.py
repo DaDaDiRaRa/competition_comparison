@@ -1146,88 +1146,106 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         row = _write_header(ws2, ["구분", "세부기준", "배점"], row)
         running_total: float = 0.0
 
-        def _build_groups(rows: list) -> list:
-            """pts != null이면 그룹 리더, null이면 직전 그룹에 편입."""
+        def _group_by_name(rows: list) -> list:
+            """같은 이름의 연속 항목을 하나의 그룹으로 묶음 (Col A 병합 기준)."""
             groups: list = []
-            current: list = []
             for ev in rows:
                 if not isinstance(ev, dict):
-                    if current:
-                        groups.append(current); current = []
                     groups.append([ev]); continue
-                if ev.get("points") is not None:
-                    if current:
-                        groups.append(current)
-                    current = [ev]
-                elif current:
-                    current.append(ev)
+                name = ev.get("name") or ""
+                if (groups
+                        and isinstance(groups[-1][-1], dict)
+                        and (groups[-1][-1].get("name") or "") == name):
+                    groups[-1].append(ev)
                 else:
-                    current = [ev]
-            if current:
-                groups.append(current)
+                    groups.append([ev])
             return groups
 
-        for group in _build_groups(e["rows"]):
+        def _fmt_bullets(subs: list, desc: str) -> str:
+            """sub_items 리스트를 셀 내 멀티라인 불릿 텍스트로 변환.
+            - 복수 항목: 각 항목 한 줄
+            - 단일 항목: 개행 → 줄 분리, 인라인 ▪/•/· 구분자 → 줄 분리
+            """
+            import re as _r
+            _BULLET_CHARS = ("▪", "•", "·", "◦", "▸", "▶", "▷")
+
+            def _normalise(t: str) -> str:
+                t = t.strip()
+                if not t:
+                    return ""
+                return t if t[0] in _BULLET_CHARS else f"• {t}"
+
+            items = subs if subs else ([desc] if desc else [])
+            if not items:
+                return ""
+
+            # 복수 sub_items → 각각 한 줄
+            if len(items) > 1:
+                return "\n".join(_normalise(_str_item(s)) for s in items if _str_item(s).strip())
+
+            text = _str_item(items[0])
+
+            # 개행이 있으면 줄 단위로 분리 (table_rows_raw 원본 텍스트 경로)
+            if "\n" in text:
+                parts = [p.strip() for p in text.split("\n") if p.strip()]
+                if len(parts) > 1:
+                    return "\n".join(_normalise(p) for p in parts)
+
+            # 인라인 불릿 문자(▪ • ·)로 분리
+            parts = [p.strip() for p in _r.split(r'[▪•·◦]\s*', text) if p.strip()]
+            if len(parts) > 1:
+                return "\n".join(f"• {p}" for p in parts)
+
+            return text if (text and text[0] in _BULLET_CHARS) else (f"• {text}" if text else "")
+
+        for name_group in _group_by_name(e["rows"]):
+            dicts = [ev for ev in name_group if isinstance(ev, dict)]
+
             # 비-dict 항목: 전 열 병합 단일 행
-            if not any(isinstance(ev, dict) for ev in group):
-                for ev in group:
+            if not dicts:
+                for ev in name_group:
                     c = ws2.cell(row=row, column=1, value=_str_item(ev))
                     ws2.merge_cells(start_row=row, start_column=1,
                                     end_row=row, end_column=_S2_SPAN)
                     row += 1
                 continue
 
-            group_cats     = [ev for ev in group if isinstance(ev, dict)]
-            cat_row_counts = [max(1, len(ev.get("sub_items") or [])) for ev in group_cats]
-            group_total    = sum(cat_row_counts)
-            leader_pts     = group_cats[0].get("points") if group_cats else None
+            name   = dicts[0].get("name") or ""
+            n_rows = len(dicts)
 
-            # ── Col C (배점): 그룹 전체 행 병합 ─────────────────────────
-            c_pts = ws2.cell(row=row, column=3, value=leader_pts)
-            if leader_pts is not None:
-                c_pts.font = _bold
-                c_pts.fill = _grp_fill
-                if isinstance(leader_pts, (int, float)):
-                    c_pts.number_format = _NUM_FMT
-            c_pts.alignment = _center
-            c_pts.border = _border_thin
-            if group_total > 1:
-                ws2.merge_cells(start_row=row, start_column=3,
-                                end_row=row + group_total - 1, end_column=3)
+            # ── Col A (구분): 같은 이름 전체 행 병합 ──────────────────
+            c1 = ws2.cell(row=row, column=1, value=name)
+            c1.font = _bold
+            c1.fill = _grp_fill
+            c1.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            c1.border = _border_thin
+            if n_rows > 1:
+                ws2.merge_cells(start_row=row, start_column=1,
+                                end_row=row + n_rows - 1, end_column=1)
 
-            if isinstance(leader_pts, (int, float)):
-                running_total += leader_pts
+            for i, ev in enumerate(dicts):
+                cur  = row + i
+                pts  = ev.get("points")
+                subs = ev.get("sub_items") or []
+                desc = ev.get("description") or ""
 
-            cat_start = row
-            for ev, n_cat in zip(group_cats, cat_row_counts):
-                name   = ev.get("name") or ""
-                subs   = ev.get("sub_items") or []
-                desc   = ev.get("description") or ""
-                detail = subs if subs else ([desc] if desc else [""])
+                # ── Col B (세부기준): 한 셀 멀티라인 불릿 ────────────
+                c2 = ws2.cell(row=cur, column=2, value=_fmt_bullets(subs, desc))
+                c2.alignment = _wrap_top
+                c2.border = _border_thin
 
-                # ── Col A (구분): 카테고리 내 행 병합 ──────────────────
-                c1 = ws2.cell(row=cat_start, column=1, value=name)
-                c1.font = _bold
-                if leader_pts is not None:
-                    c1.fill = _grp_fill
-                c1.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-                c1.border = _border_thin
-                if n_cat > 1:
-                    ws2.merge_cells(start_row=cat_start, start_column=1,
-                                    end_row=cat_start + n_cat - 1, end_column=1)
+                # ── Col C (배점): 항목별 독립 점수 (병합 안 함) ───────
+                c3 = ws2.cell(row=cur, column=3, value=pts)
+                if pts is not None:
+                    c3.font = _bold
+                    c3.fill = _grp_fill
+                    if isinstance(pts, (int, float)):
+                        c3.number_format = _NUM_FMT
+                        running_total += pts
+                c3.alignment = _center
+                c3.border = _border_thin
 
-                # ── Col B (세부기준): 각 항목 개별 행 ──────────────────
-                for i, sub in enumerate(detail):
-                    text = _str_item(sub)
-                    if text and not text.startswith("•"):
-                        text = f"• {text}"
-                    c2 = ws2.cell(row=cat_start + i, column=2, value=text)
-                    c2.alignment = _wrap_top
-                    c2.border = _border_thin
-
-                cat_start += n_cat
-
-            row += group_total
+            row += n_rows
 
         # 합계 행 — points_sum_warning 시 주황색 경고 강조
         _sum_fill = _warn_fill if e["points_sum_warning"] else _grp_fill
