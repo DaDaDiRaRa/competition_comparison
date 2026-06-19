@@ -1491,18 +1491,17 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                 ws3.merge_cells(start_row=row, start_column=1,
                                 end_row=row, end_column=_S3_SPAN)
                 row += 1
-                # sub_path 별로 inline sub-header 줄 (B열 시작, 굵게) + items
+                # sub_path 별로 inline sub-header 줄 (굵지 않음) + items
                 for sub in subs:
                     sub_path = (sub.get("sub_path") or "").strip()
                     sub_items = sub.get("items") or []
                     if not sub_items:
                         continue
                     if sub_path:
-                        # inline sub-header: B열 시작, 굵게 (item 라벨 "-" 와 시각 정렬)
-                        c_sub = ws3.cell(row=row, column=2, value=sub_path)
-                        c_sub.font = _bold
+                        # inline sub-header: "- 비품창고" — column 1, 굵지 않음
+                        c_sub = ws3.cell(row=row, column=1, value=f"- {sub_path}")
                         c_sub.alignment = _wrap_top
-                        ws3.merge_cells(start_row=row, start_column=2,
+                        ws3.merge_cells(start_row=row, start_column=1,
                                         end_row=row, end_column=_S3_SPAN)
                         row += 1
                     for it in sub_items:
