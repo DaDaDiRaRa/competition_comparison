@@ -858,9 +858,12 @@ def _extract_page_sync(
     # 표가 빽빽한 페이지(면적 프로그램·배점표)는 행이 많아 출력 토큰 많이 필요.
     # 예: BRIEF_PROGRAM 단일 페이지 50행 × ~70 tokens/행 ≈ 3500. 안전 마진 8000.
     # BRIEF_DESIGN_*: 복합 스키마(+ design_guidelines_grouped) → 6000 (DOCX 경로와 동일).
+    # 스택된 BRIEF_DESIGN_* (3페이지 청크): 항목 3배 → 8000.
     # 그 외 페이지는 2000으로 충분 (텍스트 요약 위주).
+    _is_stacked = bool(prompt_cfg.get("_stacked"))
     max_out = (
         8000 if page_type in {"BRIEF_PROGRAM", "BRIEF_EVALUATION"}
+        else 8000 if (_is_stacked and page_type in _DESIGN_BRIEF_TYPES)
         else 6000 if page_type in _DESIGN_BRIEF_TYPES
         else 2000
     )
@@ -1135,6 +1138,87 @@ async def extract_pdf(
     precomputed_program: dict | None = None
     stacked_prog_set: set[int] = set()
 
+    # ── BRIEF_DESIGN_* 연속 페이지 청크 스태킹 (CLAUDE.md 시퀀스 D) ───────────
+    # 같은 type의 연속 페이지를 _DESIGN_STACK_CHUNK 페이지씩 청크로 묶어 1회 LLM
+    # 호출 → 시각적 들여쓰기/번호체계로 부모-자식 관계 자연스럽게 보존.
+    # 예: p.45 "직무공간 (부서 사무실)" 섹션이 p.46까지 이어지는 케이스에서
+    # 면대실/비품창고 자식 항목들이 가공의 "외부시설 계획지침" 부모 아래에 평탄화
+    # 되는 문제 해결. 빈 결과(grouped=[])면 해당 청크는 페이지별 폴백.
+    _DESIGN_STACK_CHUNK = 3
+    design_chunks: list[list[int]] = []
+    if is_brief:
+        _sorted_design = sorted(
+            pg for pg, pt in type_by_page.items() if pt in _DESIGN_BRIEF_TYPES
+        )
+        _current: list[int] = []
+        _current_type: str | None = None
+        for _pg in _sorted_design:
+            _pt = type_by_page.get(_pg)
+            if (
+                _current
+                and _pt == _current_type
+                and _pg == _current[-1] + 1
+                and len(_current) < _DESIGN_STACK_CHUNK
+            ):
+                _current.append(_pg)
+            else:
+                if len(_current) >= 2:
+                    design_chunks.append(_current)
+                _current = [_pg]
+                _current_type = _pt
+        if len(_current) >= 2:
+            design_chunks.append(_current)
+
+    precomputed_design: dict[int, dict] = {}      # chunk first page -> result
+    stacked_design_set: set[int] = set()
+    design_chunk_first: dict[int, int] = {}       # any chunk page -> first page
+    design_chunk_type: dict[int, str] = {}        # first page -> page_type
+
+    for _chunk in design_chunks:
+        _chunk_type = type_by_page.get(_chunk[0], "BRIEF_DESIGN_GUIDE")
+        _chunk_imgs = [pages_by_num[pg] for pg in _chunk if pg in pages_by_num]
+        if len(_chunk_imgs) < 2:
+            continue
+        try:
+            _stacked = _stack_images_vertically(_chunk_imgs)
+        except Exception:
+            continue
+        _base_cfg = EXTRACTION_PROMPTS_BRIEF.get(_chunk_type)
+        if not _base_cfg:
+            continue
+        _stacked_note = (
+            f'\n[주의: 이 이미지는 {len(_chunk)}개 연속 페이지(p.{_chunk[0]}~p.{_chunk[-1]})를 '
+            '수직으로 이어붙인 것입니다. '
+            '섹션 헤더(예: "직무공간 (부서 사무실)", "통합 민원실")가 페이지 경계를 넘어 '
+            '자식 항목(예: - 비품창고, - 기타 부서별 요청사항)이 다음 페이지에 이어지는 경우, '
+            '자식 항목의 facility_scope / space_scope / section_path에 부모 헤더 컨텍스트를 '
+            '그대로 유지하라. '
+            '시각적으로 명확히 새로운 굵은 헤더(•, ■, 큰 글자)가 시작되는 지점에서만 '
+            '새 section_path를 부여하라. '
+            '존재하지 않는 가공의 상위 헤더(예: "외부시설 계획지침")를 생성하지 말 것.]'
+        )
+        _design_prompt_cfg = {
+            **_base_cfg,
+            "instruction": _base_cfg["instruction"] + _stacked_note,
+            "_stacked": True,
+        }
+        try:
+            _result = _extract_page_sync(
+                _stacked, _chunk[0], _chunk_type, _design_prompt_cfg
+            )
+        except Exception:
+            continue
+        _grouped = ((_result or {}).get("data") or {}).get("design_guidelines_grouped") or []
+        if not _grouped:
+            # 스태킹 결과가 비면 stacked_design_set에 등록 안 함 → 페이지별 폴백
+            continue
+        _result["_stacked_pages"] = _chunk
+        precomputed_design[_chunk[0]] = _result
+        design_chunk_type[_chunk[0]] = _chunk_type
+        for _pg in _chunk:
+            stacked_design_set.add(_pg)
+            design_chunk_first[_pg] = _chunk[0]
+
     sem = asyncio.Semaphore(4)
 
     async def extract_one(img_bytes: bytes, page_num: int) -> dict:
@@ -1150,6 +1234,18 @@ async def extract_pdf(
             if page_num == prog_page_nums[0]:
                 return precomputed_program
             return {"page": page_num, "type": "BRIEF_PROGRAM", "data": {}, "_merged": True}
+
+        # BRIEF_DESIGN_* 청크 스택 결과: 청크 첫 페이지는 결과, 나머지는 빈 마커
+        if page_num in stacked_design_set:
+            _first = design_chunk_first[page_num]
+            if page_num == _first:
+                return precomputed_design[_first]
+            return {
+                "page": page_num,
+                "type": type_by_page.get(page_num, design_chunk_type.get(_first, "BRIEF_DESIGN_GUIDE")),
+                "data": {},
+                "_merged": True,
+            }
 
         page_type = type_by_page.get(page_num, "CONCEPT")
         confidence = confidence_by_page.get(page_num, 1.0)
