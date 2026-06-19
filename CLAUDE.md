@@ -35,7 +35,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `myproject_analyzer.py` | MyProject 멀티패스 deep-analysis. narrative + deep evidence + 정량 + 키워드 + auto_meta. |
 | `myproject_report_generator.py` | `_deep.json` → HTML. LLM 호출 없음. |
 | `archive_search.py` | in-memory SQLite FTS5. `build_index()` 시작 시 1회, `rerun-compare` 후 `rebuild_index()`. `check_same_thread=False` 필수. |
-| `brief_validator.py` | 지침서 검증. LLM 호출 없음. `requirements` 가 dict 아니면 `{}` 교체 (LLM 배열 반환 방어). |
+| `brief_validator.py` | 지침서 검증. LLM 호출 없음. `requirements` 가 dict 아니면 `{}` 교체 (LLM 배열 반환 방어). `_check_points_mismatch` 는 `shared_with` non-empty 또는 합계가 만점과 일치 시 null 항목을 정성평가로 인정 (영등포 false positive 차단). |
 | `brief_checklist_exporter.py` | 지침서 체크리스트 MD/xlsx. LLM 호출 금지. openpyxl lazy import. 4 시트: 면적·프로그램 / 심사기준 / 요구사항 / 검증경고. |
 | `grade_helpers.py` | 등급 단일 소스. `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade()`. 모든 리포트 generator 가 공통 import. |
 | `utils.py` | PDF rasterizer (`rasterize_pdf` PyMuPDF), SSE helper, `parse_json_response()` 3단계 복구, 공유 dict 헬퍼 `_first()` / `_as_list()`, `user_error_msg()`, `normalize_design_guidelines_grouped()`. |
@@ -192,6 +192,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 - **BRIEF_PROGRAM 스태킹:** `_stack_images_vertically()` 는 JPEG(quality=85) 출력 + `_STACK_MAX_DIM=7500` 픽셀 한도 + 에러 시 `precomputed_program = None` 폴백. PNG 로 되돌리거나 한도 제거 시 5MB / 8192px 초과로 400 재발.
 - **BRIEF_EVALUATION 비연속 스태킹:** non-null points 합계 0 이면 `precomputed_eval = None` 폴백. `brief_checklist_exporter._extract_sections()` 는 `max(key=_eval_pts)` 로 페이지 선택 — `_first()` 로 되돌리면 비연속 케이스 누락.
 - **BRIEF_EVALUATION 환각 방어 (5중):** ① `BRIEF_CLASSIFY_PROMPT` NOT 조건 (g)~(j) ② `_NOT_EVAL_HEADER_PATTERNS` 후처리 강등 (`상품 및 내용` 패턴 포함) ③ `MODEL_ID_CLASSIFY` Sonnet 유지 (Haiku 헤더 환각) ④ `FACILITY_CONFLICT_KEYWORDS` + `brief_validator._check_facility_keyword_conflict()` ⑤ `data_extractor` BRIEF_EVALUATION 프롬프트 "환각 금지 (CRITICAL)" 블록. 어느 하나 제거하면 청사 → 연구원 환각 재발.
+- **BRIEF_EVALUATION null 점수 시맨틱:** `_check_points_mismatch` 는 `shared_with` 가 채워졌거나 numeric 합이 만점과 ±1 이내 일치 시 null 항목을 정성평가로 인정 (경고 X). 단순 `points is None → missing` 으로 되돌리면 영등포 (배치계획↔공간계획 병합, 설계의 적정성·창의성 정성평가) false positive 재발. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
 - **`_image_block()` JPEG 마법 바이트:** `img_bytes[:3] == b'\xff\xd8\xff'` 이면 `image/jpeg`, 아니면 `image/png`. 포맷 불일치는 400 원인.
 - **BRIEF_DESIGN_* 그룹 처리:** `_process_design_group()` 그룹 내부는 **순차** 실행 (직전 페이지 컨텍스트 주입), 그룹간만 `asyncio.gather` 병렬. 그룹 내부 병렬화하면 컨텍스트 누적 깨짐.
 - **design_guidelines_grouped 정규화:** 그룹 키 = `(facility_scope, section_path 첫 segment)` — space_scope 제외 (LLM 추출 불안정). exporter 는 `items_by_sub` 사용. `space_scope` 를 키에 다시 포함하면 비품창고 케이스 재발.
@@ -211,7 +212,15 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 ## Open Issues
 
 - **🟡 BRIEF_EVALUATION 100점 초과 추출 — 안전망만 적용:** HWP→PDF 병합셀 붕괴로 중복 집계. `merge_extracted_data()` 끝에서 `points_sum > 110` 또는 `total_points > 110` 이면 `points_sum_warning=True` 후처리 flag (사용자 인지용). 근본 해결 (추출 프롬프트 가드) 은 재현 케이스 확보 후.
+- **🟢 BRIEF_EVALUATION null 항목 false positive (해소, commit 3db1100):** 정성평가 항목 (점수 미부여) 과 `shared_with` 병합셀에 medium 경고가 잘못 발생했었음. 영등포 통합신청사 케이스로 재현·수정. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
 - **🟢 BRIEF_SUBMISSION 오분류 페이지에 배점표** — 분류기 수정 없이는 해결 불가. 재분석 후 심사기준 비면 `page_map` 의 `has_scoring_table` 확인.
+
+## 다음 작업 (단기)
+
+- **V-10e 정확 검증:** 백엔드 시작 시 `uvicorn ... 2>stderr.log` 로 stderr 캡처 후 영등포 PDF 재분석. 로그에서 BRIEF_DESIGN_GUIDE/MASSING/SUSTAIN/SPECIAL 그룹 시작 시각이 동시 (병렬) 인지 확인. PDF 1회 재분석 비용으로 처리.
+- **🟡 BRIEF_EVALUATION 100점 초과 근본 해결:** Open Issue 🟡 연계. HWP→PDF 변환된 지침서 (병합셀 붕괴 케이스) 1건 확보 시 `data_extractor.py` BRIEF_EVALUATION 추출 프롬프트에 중복 집계 가드 추가. 현재는 `points_sum_warning` 후처리 플래그만 있음.
+- **API 검증 일괄 실행 (P0-3/P1-3/P2-3):** memory `project_api_validation_deferred.md` 의 P0-3 (BRIEF_PROJECT_INFO 병합), P1-3 (area_table 계층), P2-3 (BRIEF_DESIGN_* 5 타입 분산 분류). 영등포는 `_brief.json` 보유, 종로구청 PDF 만 추가 분석. 같이 돌려서 비용 절감.
+- **시퀀스 D 참조 정리:** "앱 실행 검증 체크리스트" 우선순위 라인 "시퀀스 D 회귀" 표현이 Sequences 섹션에 미정의. design_guidelines_grouped 정규화 작업이었을 것으로 추정 — 표현 수정 또는 D 정의 추가.
 
 ## Sequences (Future Work, 보류)
 
@@ -233,13 +242,21 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | V-7 | `rubric_version` MyProject | MyProject 등록 → `_deep.json` | `"rubric_version": "v1"` |
 | V-8 | 스캔본 PDF → Vision fallback | 스캔 PDF 파이프라인 | Tier 0 None → Vision 자연 전환, `_source: "vision"` |
 | V-9 | `grade_justification` 출력 | 비교/MyProject JSON·HTML | 각 axis 에 `"신호 X/Y개 충족 → <등급> 기준 행과 일치"` |
-| V-10a | BRIEF_DESIGN_* 페이지별 추출 | 영등포 청사 PDF → `_brief.json` | 각 페이지 자체 `design_guidelines_grouped`. `_merged: true` 없음 |
-| V-10b | 컨텍스트 주입 정상화 | p.46/47 면대실·비품창고 항목 | `facility_scope: "구청"` + `section_path: "직무공간 (부서 사무실) > ..."` |
-| V-10c | 엑셀 시트 3 라우팅 | xlsx 시트 3 "시설별 지침" | "구청 > 직무공간" 아래 p.45+46 함께. 통합 민원실 별도 top-level |
-| V-10d | 컨텍스트 과적용 방지 | p.46 새 헤더 항목 | 새 헤더는 직전 컨텍스트 미계승 |
-| V-10e | 그룹 병렬·내부 순차 | 영등포 분석 로그 | GUIDE/MASSING/SUSTAIN/SPECIAL 동시 시작, 그룹 내 직렬 |
+| V-10a ✓ | BRIEF_DESIGN_* 페이지별 추출 | 영등포 청사 PDF → `_brief.json` | 각 페이지 자체 `design_guidelines_grouped`. `_merged: true` 없음 |
+| V-10b ✓ | 컨텍스트 주입 정상화 | p.46/47 면대실·비품창고 항목 | `facility_scope: "구청"` + `section_path: "직무공간 (부서 사무실) > ..."` |
+| V-10c ✓ | 엑셀 시트 3 라우팅 | xlsx 시트 3 `[직무공간] (부서 사무실)` 헤더 | 대민업무상담실·비품창고·기타 부서별 자식으로 묶임 |
+| V-10d ✓ | 컨텍스트 과적용 방지 | p.46 새 헤더 항목 | 새 헤더는 직전 컨텍스트 미계승 |
+| V-10e ⚪ | 그룹 병렬·내부 순차 | 영등포 분석 로그 | GUIDE/MASSING/SUSTAIN/SPECIAL 동시 시작, 그룹 내 직렬 — SSE 만으론 확인 불가, 백엔드 `2>stderr.log` 필요 |
 
 **우선순위:** V-2/V-3/V-4 (지침서 핵심) → V-10a~e (시퀀스 D 회귀, 영등포 PDF 필수) → V-1 → V-6/V-7 → V-9.
+
+**V-10 자동 회귀:** 2026-06-19 영등포 청사 PDF 로 V-10a~d PASS 확정 (V-10e SSE 한계로 SKIP). 코드 변경 시 무료 재검증:
+
+```powershell
+backend\venv\Scripts\python.exe tools\v10_validate.py
+```
+
+스크립트가 `C:\Temp\CompTestDB\_briefs\20260619_161407_public_*.{json,xlsx}` fixture 기준 4 PASS 확인. PDF 재분석으로 brief_id 바뀌면 `PATTERN` 상수 갱신.
 
 ## Local Dev
 
@@ -260,7 +277,7 @@ npm run dev
 
 **PaddleOCR (선택):** `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision 으로 동작하므로 불필요.
 
-**테스트:** `backend/venv/Scripts/python.exe -m pytest tests/ -v`. DOCX 관련 코드 추가 시 `tests/test_docx_extractor.py` 회귀 보호 필수 (10개 케이스). `tests/test_normalize_design_grouped.py` 13 케이스도 동일.
+**테스트:** `backend/venv/Scripts/python.exe -m pytest tests/ -v`. DOCX 관련 코드 추가 시 `tests/test_docx_extractor.py` 회귀 보호 필수 (10개 케이스). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일.
 
 ## Deployment
 
