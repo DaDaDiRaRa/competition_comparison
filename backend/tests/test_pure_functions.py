@@ -509,13 +509,37 @@ class TestBriefValidatorPointsMismatch:
         flags = _flags_of(validate_brief(bd, {}), "points_mismatch")
         assert any(f["severity"] == "high" for f in flags)
 
-    def test_null_item_is_medium(self):
+    def test_null_with_sum_match_treated_as_qualitative(self):
+        # 합계가 만점과 일치하면 null 항목은 정성평가로 간주 — 무경고
+        # (영등포 통합신청사 케이스: 설계의 적정성·창의성 등 점수 없는 정성 항목)
         bd = {"brief_evaluation": {"total_points": 100, "evaluation_categories": [
             {"name": "A", "points": 100},
             {"name": "B", "points": None},
         ]}}
-        flags = _flags_of(validate_brief(bd, {}), "points_mismatch")
-        assert any(f["severity"] == "medium" for f in flags)
+        assert not _flags_of(validate_brief(bd, {}), "points_mismatch")
+
+    def test_null_with_shared_with_no_flag(self):
+        # shared_with 가 있으면 점수 공유 (영등포: 공간계획 → 배치계획 40점 합산)
+        bd = {"brief_evaluation": {"total_points": 100, "evaluation_categories": [
+            {"name": "배치계획", "points": 40, "shared_with": ["공간계획"]},
+            {"name": "공간계획", "points": None, "shared_with": ["배치계획"]},
+            {"name": "기술계획", "points": 60},
+        ]}}
+        assert not _flags_of(validate_brief(bd, {}), "points_mismatch")
+
+    def test_yeongdeungpo_mixed_null_pattern_no_flag(self):
+        # 영등포 통합신청사 실제 케이스: 7개 카테고리, 4개 numeric, 3개 null
+        # (1개 shared_with, 2개 정성평가). numeric 합 100 == total 100 → 무경고
+        bd = {"brief_evaluation": {"total_points": 100, "evaluation_categories": [
+            {"name": "과업의 목적",            "points": 20},
+            {"name": "배치계획",               "points": 40, "shared_with": ["공간계획"]},
+            {"name": "공간계획",               "points": None, "shared_with": ["배치계획"]},
+            {"name": "기술계획",               "points": 20},
+            {"name": "설계의 적정성",          "points": None},
+            {"name": "경관 및 주변과의 조화",  "points": 20},
+            {"name": "창의성 및 공공성",       "points": None},
+        ]}}
+        assert not _flags_of(validate_brief(bd, {}), "points_mismatch")
 
     def test_null_plus_sum_mismatch_gives_two_flags(self):
         bd = {"brief_evaluation": {"total_points": 100, "evaluation_categories": [
@@ -528,6 +552,21 @@ class TestBriefValidatorPointsMismatch:
         assert len(flags) == 2
         severities = {f["severity"] for f in flags}
         assert "high" in severities and "medium" in severities
+
+    def test_null_with_shared_with_excluded_from_missing_count(self):
+        # 합계 불일치 (high) 발생 시 shared_with 있는 null 은 missing 카운트에서 제외
+        bd = {"brief_evaluation": {"total_points": 100, "evaluation_categories": [
+            {"name": "A", "points": 40, "shared_with": ["B"]},
+            {"name": "B", "points": None, "shared_with": ["A"]},  # 공유 — missing 아님
+            {"name": "C", "points": 30},
+            {"name": "D", "points": None},                          # 진짜 missing
+        ]}}
+        flags = _flags_of(validate_brief(bd, {}), "points_mismatch")
+        # 합 70 ≠ 100 → high
+        assert any(f["severity"] == "high" for f in flags)
+        # missing 메시지에 D 만 포함, B 제외
+        medium_msgs = [f["message"] for f in flags if f["severity"] == "medium"]
+        assert any("1개" in m and "D" in m for m in medium_msgs)
 
     def test_epsilon_tolerance_no_flag(self):
         # ±1점 이내 → 플래그 없음
@@ -551,13 +590,23 @@ class TestBriefValidatorPointsMismatch:
         flags = _flags_of(validate_brief({}, reqs), "points_mismatch")
         assert any(f["severity"] == "high" for f in flags)
 
-    def test_fallback_criteria_null_item(self):
+    def test_fallback_criteria_null_with_sum_match_no_flag(self):
+        # fallback 경로도 합계 일치 시 null 은 정성평가로 간주
         reqs = {"evaluation_criteria": [
             {"item": "A", "points": 100},
             {"item": "B", "points": None},
         ]}
+        assert not _flags_of(validate_brief({}, reqs), "points_mismatch")
+
+    def test_fallback_criteria_null_with_sum_mismatch_medium(self):
+        # 합계 불일치 시 null 항목 미기재로 medium 경고
+        reqs = {"evaluation_criteria": [
+            {"item": "A", "points": 60},
+            {"item": "B", "points": None},   # 합 60 ≠ 100 → high + medium
+        ]}
         flags = _flags_of(validate_brief({}, reqs), "points_mismatch")
-        assert any(f["severity"] == "medium" for f in flags)
+        severities = {f["severity"] for f in flags}
+        assert "high" in severities and "medium" in severities
 
     def test_primary_path_takes_priority_over_fallback(self):
         # brief_evaluation.evaluation_categories가 있으면 requirements.evaluation_criteria 무시

@@ -2,6 +2,6 @@
   "raster_dpi_classify": 72,
   "raster_dpi_extract": 120,
   "model_id": "claude-sonnet-4-6",
-  "model_id_classify": "claude-haiku-4-5-20251001",
+  "model_id_classify": "claude-sonnet-4-6",
   "db_path": "C:\\Temp\\CompTestDB"
 }

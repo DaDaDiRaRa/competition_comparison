@@ -65,7 +65,13 @@ def _flag(type_: str, severity: str, message: str, location: str) -> dict:
 # ── 규칙별 검증 함수 ──────────────────────────────────────────────────────────
 
 def _check_points_mismatch(brief_data: dict, requirements: dict) -> list[dict]:
-    """배점 합계 불일치 / null 항목 검출."""
+    """배점 합계 불일치 / 진짜 미기재 항목 검출.
+
+    null 점수 분류:
+      - shared_with non-empty → 공유 점수 (정상, 무경고)
+      - 합계가 만점과 일치 → 정성평가 항목 (정상, 무경고)
+      - 합계 불일치 + null 존재 → null 이 누락 원인일 수 있어 medium 경고
+    """
     flags: list[dict] = []
 
     # ── Primary: brief_evaluation.evaluation_categories (새 BRIEF taxonomy 경로) ──
@@ -74,28 +80,31 @@ def _check_points_mismatch(brief_data: dict, requirements: dict) -> list[dict]:
 
     if categories:
         stated_total = be.get("total_points")
-        null_names = [c.get("name") or f"항목{i + 1}" for i, c in enumerate(categories)
-                      if c.get("points") is None]
+        expected = stated_total if isinstance(stated_total, (int, float)) else 100
         numeric = [c["points"] for c in categories if isinstance(c.get("points"), (int, float))]
         computed = sum(numeric) if numeric else None
+        sum_ok = computed is not None and abs(computed - expected) <= _POINTS_EPSILON
 
-        if null_names:
+        if computed is not None and not sum_ok:
+            diff = computed - expected
             flags.append(_flag(
-                "points_mismatch", "medium",
-                f"배점 미기재 항목 {len(null_names)}개: "
-                f"{', '.join(null_names[:3])}{'...' if len(null_names) > 3 else ''}",
+                "points_mismatch", "high",
+                f"배점 합계 {computed:.0f}점 ≠ 만점 {expected:.0f}점 (차이 {diff:+.0f}점)",
                 "brief_evaluation.evaluation_categories",
             ))
 
-        if computed is not None:
-            expected = stated_total if isinstance(stated_total, (int, float)) else 100
-            diff = computed - expected
-            if abs(diff) > _POINTS_EPSILON:
-                flags.append(_flag(
-                    "points_mismatch", "high",
-                    f"배점 합계 {computed:.0f}점 ≠ 만점 {expected:.0f}점 (차이 {diff:+.0f}점)",
-                    "brief_evaluation.evaluation_categories",
-                ))
+        truly_missing = [
+            c.get("name") or f"항목{i + 1}"
+            for i, c in enumerate(categories)
+            if c.get("points") is None and not (c.get("shared_with") or [])
+        ]
+        if truly_missing and not sum_ok:
+            flags.append(_flag(
+                "points_mismatch", "medium",
+                f"배점 미기재 항목 {len(truly_missing)}개: "
+                f"{', '.join(truly_missing[:3])}{'...' if len(truly_missing) > 3 else ''}",
+                "brief_evaluation.evaluation_categories",
+            ))
         return flags
 
     # ── Fallback: _requirements.evaluation_criteria (레거시 / 구 AREA_TABLE 경로) ──
@@ -103,23 +112,27 @@ def _check_points_mismatch(brief_data: dict, requirements: dict) -> list[dict]:
     if not criteria:
         return flags
 
-    null_names = [c.get("item") or f"항목{i + 1}" for i, c in enumerate(criteria)
-                  if c.get("points") is None]
     numeric = [c["points"] for c in criteria if isinstance(c.get("points"), (int, float))]
     computed = sum(numeric) if numeric else None
+    sum_ok = computed is not None and abs(computed - 100) <= _POINTS_EPSILON
 
-    if null_names:
-        flags.append(_flag(
-            "points_mismatch", "medium",
-            f"배점 미기재 항목 {len(null_names)}개: "
-            f"{', '.join(null_names[:3])}{'...' if len(null_names) > 3 else ''}",
-            "_requirements.evaluation_criteria",
-        ))
-
-    if computed is not None and abs(computed - 100) > _POINTS_EPSILON:
+    if computed is not None and not sum_ok:
         flags.append(_flag(
             "points_mismatch", "high",
             f"배점 합계 {computed:.0f}점 ≠ 100점 (차이 {computed - 100:+.0f}점)",
+            "_requirements.evaluation_criteria",
+        ))
+
+    truly_missing = [
+        c.get("item") or f"항목{i + 1}"
+        for i, c in enumerate(criteria)
+        if c.get("points") is None and not (c.get("shared_with") or [])
+    ]
+    if truly_missing and not sum_ok:
+        flags.append(_flag(
+            "points_mismatch", "medium",
+            f"배점 미기재 항목 {len(truly_missing)}개: "
+            f"{', '.join(truly_missing[:3])}{'...' if len(truly_missing) > 3 else ''}",
             "_requirements.evaluation_criteria",
         ))
 
