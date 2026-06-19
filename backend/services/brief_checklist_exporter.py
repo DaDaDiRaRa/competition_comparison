@@ -1154,6 +1154,9 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
               → 연속 행이고 서로 mutual reference 면 한 구간으로 묶음.
             - shared_with 가 빈 항목 or 비-dict 는 단일 행 구간.
             - 한 구간 안에서 non-null points 1개 → 그게 그룹 배점.
+            - Fallback: shared_with 가 비어 있어도 다음 행 points=None 이고 현재 run 에
+              이미 non-null points 가 있으면 같은 구간으로 흡수 (LLM 이 vMerge 쌍의
+              shared_with 를 누락하는 케이스 대비).
             """
             runs: list[tuple[int, int, float | int | None]] = []
             i = 0
@@ -1176,9 +1179,17 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                         break
                     nxt_name = (nxt.get("name") or "").strip()
                     nxt_sw = [s.strip() for s in (nxt.get("shared_with") or []) if s and isinstance(s, str)]
+                    nxt_pts = nxt.get("points")
+                    # 현재 run 에 non-null points 가 이미 있는지 (fallback 매칭 조건)
+                    run_has_pts = any(
+                        isinstance(rows[k], dict) and rows[k].get("points") is not None
+                        for k in range(i, j + 1)
+                    )
                     # 다음 행이 현재 그룹 안 누군가를 참조하거나, 현재 그룹이 다음 행을 참조하면 같은 구간
+                    # Fallback: 다음 행 points=None 이고 현재 run 에 non-null points 있으면 흡수
                     if (nxt_name and nxt_name in sw_targets) \
-                            or any(s in names_in_run for s in nxt_sw):
+                            or any(s in names_in_run for s in nxt_sw) \
+                            or (nxt_pts is None and run_has_pts):
                         names_in_run.add(nxt_name)
                         sw_targets.update(nxt_sw)
                         j += 1
