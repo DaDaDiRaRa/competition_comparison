@@ -2174,5 +2174,23 @@ def merge_extracted_data(
             if v is not None and dst not in quant:
                 quant[dst] = v
 
+    # BRIEF_EVALUATION 후처리: points 합계가 110점 초과면 points_sum_warning 플래그.
+    # HWP→PDF 변환 시 병합셀 구조 붕괴로 동일 배점이 여러 행에 중복 집계되는 케이스 방어.
+    # 스태킹 경로는 이미 95~105 범위 체크가 있지만(_pts_sum 라인), 개별 페이지 추출 경로는
+    # 누락. 여기서 일괄 적용 — 영등포 같은 정상 케이스(합계 100)는 영향 없음.
+    be_raw = result.get("brief_evaluation")
+    be_list = be_raw if isinstance(be_raw, list) else ([be_raw] if isinstance(be_raw, dict) else [])
+    for be in be_list:
+        if not isinstance(be, dict) or be.get("points_sum_warning"):
+            continue
+        _cats = be.get("evaluation_categories") or []
+        _pts_sum = sum(
+            c["points"] for c in _cats
+            if isinstance(c, dict) and isinstance(c.get("points"), (int, float))
+        )
+        _total = be.get("total_points")
+        if (_pts_sum and _pts_sum > 110) or (isinstance(_total, (int, float)) and _total > 110):
+            be["points_sum_warning"] = True
+
     result["_quantitative"] = quant
     return result

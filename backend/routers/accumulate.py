@@ -690,7 +690,7 @@ async def run_single_pipeline(
         }
         save_project_meta(
             cid, facility_type, competition_name, project_number, client, location,
-            extra=extra_meta,
+            extra=extra_meta, merge=True,
         )
         tmp_root = Path(tempfile.mkdtemp(prefix="comp_single_"))
 

@@ -101,16 +101,38 @@ def save_project_meta(
     client: str,
     location: str,
     extra: dict | None = None,
+    merge: bool = False,
 ) -> Path:
     """프로젝트 _meta.json 저장.
 
     extra: MyProjectMode 등에서 전달하는 선택 메타 (procurement_type, project_phase,
     role, partners, tags, memo, gross_floor_area, floors, units 등).
     빈 값/None은 자동 제거하여 _meta.json 비대화 방지.
+
+    merge=True 면 기존 _meta.json 의 submissions 리스트와 created_at 을 보존.
+    같은 cid 로 재실행되는 경우 (예: /run-single 두 번째 호출) 첫 회사 엔트리
+    유실 방지. top-level 메타는 항상 덮어씀.
     """
     comp_dir = get_competition_dir(facility_type, competition_id)
     comp_dir.mkdir(parents=True, exist_ok=True)
     (comp_dir / "submissions").mkdir(exist_ok=True)
+
+    existing_submissions: list = []
+    existing_created_at: str | None = None
+    meta_path = comp_dir / "_meta.json"
+    if merge and meta_path.exists():
+        try:
+            with open(meta_path, encoding="utf-8") as f:
+                _existing = json.load(f)
+            if isinstance(_existing, dict):
+                _subs = _existing.get("submissions")
+                if isinstance(_subs, list):
+                    existing_submissions = _subs
+                _ca = _existing.get("created_at")
+                if isinstance(_ca, str):
+                    existing_created_at = _ca
+        except (OSError, json.JSONDecodeError):
+            pass
 
     meta = {
         "competition_id": competition_id,
@@ -119,8 +141,8 @@ def save_project_meta(
         "project_number": project_number,
         "client": client,
         "location": location,
-        "created_at": datetime.now().isoformat(),
-        "submissions": [],
+        "created_at": existing_created_at or datetime.now().isoformat(),
+        "submissions": existing_submissions,
     }
     if extra:
         for k, v in extra.items():
