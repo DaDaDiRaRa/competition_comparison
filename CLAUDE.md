@@ -639,74 +639,50 @@ python tools/eval/run_harness.py --pdf-dir pdfs/ --force-rerun
 
 ---
 
-## 시퀀스 D — BRIEF_DESIGN_* 다중 페이지 섹션 연속성 (구현 완료, 2026-06-19)
+## 시퀀스 D — BRIEF_DESIGN_* 다중 페이지 섹션 연속성 (B안: 순차 + 컨텍스트 주입, 2026-06-19)
 
 PDF 지침서의 설계지침 섹션이 페이지 경계를 넘어갈 때 자식 항목이 부모 섹션과 분리되어 가공의 top-level 헤더 아래에 평탄화되는 문제. 영등포구 통합 신청사 PDF p.45~46 직무공간 케이스에서 확인.
 
-**구현 위치:** `data_extractor.py::extract_pdf()` 1141~1220행 (BRIEF_DESIGN_* 청크 스태킹 블록), `_extract_page_sync()` max_out 조건에 `_stacked` flag 처리.
+### 진화 이력
 
-**동작 요약:**
+- **A안 (청크 스태킹, 폐기됨, 2026-06-19):** 3페이지 청크로 `_stack_images_vertically()` → 1회 LLM. 시각적 들여쓰기로 부모-자식 관계 보존하려 했으나 두 가지 치명적 실패:
+  1. **해상도 페널티:** 3페이지 압축 → 페이지당 1/3 해상도 → 작은 글씨 자식 항목(면대실/비품창고 등) 누락
+  2. **계층 보존 실패:** 영등포 p.45 청크 결과가 여전히 `facility_scope="전체"` 평탄화 — 청크 안에서도 부모 헤더가 한 페이지에만 있으면 LLM이 컨텍스트 못 살림
+  - V-10b 회귀 검증에서 "오히려 내용이 사라진 것처럼 보임"으로 드러나 폐기. BRIEF_PROGRAM 스태킹이 같은 이유로 폐기된 전례 반복.
 
-- 같은 type의 연속 페이지를 `_DESIGN_STACK_CHUNK = 3`페이지씩 청크로 묶음
-- 청크 단위로 `_stack_images_vertically()` → JPEG 한 장 → 1회 LLM 호출 (max_tokens=8000)
-- 프롬프트에 "페이지 경계 너머 부모 헤더 컨텍스트 유지 / 가공 상위 헤더 생성 금지" 룰 추가
-- 결과의 `design_guidelines_grouped`가 비면 해당 청크는 페이지별 폴백 (`stacked_design_set`에 미등록)
-- 타입 경계 / 비연속 / 청크 크기 초과는 자동으로 새 청크 시작
-- 영등포 PDF: 22개 BRIEF_DESIGN_* 페이지 → 9개 청크 + 3개 singleton = 12 LLM 호출 (10 호출 절감)
+- **B안 (채택, 2026-06-19):** 같은 type 연속 페이지를 그룹핑하고, 그룹 내에서는 **순차 실행**하면서 직전 페이지의 마지막 grouped 항목(facility_scope/space_scope/section_path)을 다음 페이지 프롬프트에 컨텍스트 힌트로 주입.
 
-**테스트:** `tests/test_design_chunking.py` 9 케이스 (빈 입력, single page, two consecutive, 영등포 p.45+46+47, 청크 max size, 비연속 분리, 타입 경계 분리, 영등포 전체 분포, 청크 리셋 후 연속).
+### 구현 위치
 
-**사이드 이슈 (엑셀 시트 3 누락) 부분 해결:**
+- `data_extractor.py::extract_pdf()` 진입부 BRIEF_DESIGN_* 그룹 처리 블록
+- `_process_design_group()` 내부 async 함수 — 그룹 안에서는 순차, 다른 그룹끼리는 `asyncio.gather`로 병렬
 
-- 기존 버그: p.46 면대실/비품창고가 `facility_scope="전체"`로 가공의 "외부시설 계획지침" 부모에 평탄화 → 시트 3의 "설계 지침 및 요구사항" 섹션에 직무공간(구청)과 분리되어 표시
-- 스태킹 적용 후: LLM이 p.45+46+47을 같이 보고 면대실/비품창고에 `facility_scope="구청"` + `section_path="직무공간 (부서 사무실) > 비품창고"` 부여 → 시트 3의 "시설별 지침 > 구청" 아래에 정상 묶임
-- 기존에 추출 완료된 _brief.json은 재분석 필요
+### 동작 요약
 
----
+- 같은 type 연속 페이지를 그룹핑 (max chunk size 없음 — 그룹 크기 자유)
+- 그룹 첫 페이지: 컨텍스트 없이 추출
+- 그룹 N+1 페이지: 직전 페이지의 마지막 3개 grouped 항목에서 `{facility_scope, space_scope, section_path}` 추출 → 프롬프트에 한국어 힌트로 prepend
+- 프롬프트 룰: "이 페이지 상단에 새 굵은 헤더가 보이지 않으면 위 컨텍스트 계승. 새 헤더가 보이면 새 컨텍스트 시작. 가공의 상위 헤더 생성 금지."
+- type 경계(BRIEF_DESIGN_GUIDE → MASSING)에서는 새 그룹 → 컨텍스트 자동 리셋
+- 결과는 `precomputed_design: dict[int, dict]`에 저장 → `extract_one()`에서 캐시 조회
+- 페이지별 풀 해상도(150 DPI) 유지 → 자식 항목 누락 없음
 
-### 원본 보류 분석 (구현 전 작성, 참조용)
+### 비용/시간
 
-PDF 지침서의 설계지침 섹션이 페이지 경계를 넘어갈 때 자식 항목이 부모 섹션과 분리되어 가공의 top-level 헤더 아래에 평탄화되는 문제. 영등포구 통합 신청사 PDF p.45~46 직무공간 케이스에서 확인.
+- 영등포 PDF 22개 BRIEF_DESIGN_* 페이지 → 22회 LLM 호출 (스태킹: 12회)
+- 그룹 수만큼 병렬 (BRIEF_DESIGN_GUIDE / MASSING / SUSTAIN / SPECIAL 동시) → 분석 시간 ~2분 증가
+- 자식 항목 누락 회복 + 계층 정상화로 트레이드오프 우호적
 
-**전체 분석 문서:** [`docs/BRIEF_DESIGN_MULTIPAGE_CONTINUITY.md`](docs/BRIEF_DESIGN_MULTIPAGE_CONTINUITY.md)
+### 재발 조건
 
-**증상 요약:**
+- `_extract_page_sync()`에 `_is_stacked` 분기 추가하거나 `_stack_images_vertically()`를 BRIEF_DESIGN_*에 적용하면 A안 회귀
+- `_process_design_group()`를 병렬(`asyncio.gather` 내부)로 바꾸면 컨텍스트 누적 깨짐 — 반드시 그룹 내부 순차 유지
 
-- p.45의 "직무공간 (부서 사무실)" 섹션이 p.46까지 이어지면서 면대실/비품창고/기타 부서별 요청사항이 직무공간의 자식이어야 함
-- 그러나 LLM이 p.46을 단독 처리 → 페이지 상단의 자식 항목들에 부모 헤더가 안 보이므로 가공의 "외부시설 계획지침" 부모를 만들어 붙임
-- p.46의 진짜 새 섹션(통합 민원실, 회의 및 행사공간)과 자식 항목(면대실 등)이 같은 평면에 평탄화됨
-- 데이터는 JSON에 다 존재하지만 계층이 무너져 엑셀 시트 3에 정확히 반영 안 됨
+### 회귀 확인
 
-**채택 방안: A안 (BRIEF_DESIGN_* 연속 페이지 스태킹)**
-
-- BRIEF_EVALUATION / BRIEF_PROGRAM에서 검증된 `_stack_images_vertically()` 패턴 재사용
-- 3~4페이지 청크 단위로 묶어 1회 LLM 호출 → 시각적 들여쓰기로 부모-자식 관계 자연스럽게 보존
-- JPEG 출력, `_STACK_MAX_DIM=7500`, 폴백 패턴 모두 기존 코드 재활용
-- 스태킹 실패 시 페이지별 폴백 (`precomputed_design = None` 패턴)
-
-**채택 안 된 방안:**
-
-- **B안 (이전 페이지 컨텍스트 주입):** 순차 실행 강제 → 추출 시간 N배 악화
-- **C안 (후처리 머지, 사용자 제안):** LLM이 이미 평탄화한 JSON에서는 자식과 형제를 구분할 시각 정보가 없음
-
-**재개 조건:**
-
-1. 다른 우선순위 작업(BRIEF_EVALUATION 100점 초과 환각 등)이 정리된 후 진행
-2. 영등포 PDF로 회귀 테스트 가능한 상태
-
-**구현 시 작업 항목 (`docs/BRIEF_DESIGN_MULTIPAGE_CONTINUITY.md` 참조):**
-
-1. `backend/services/data_extractor.py::extract_pdf()` 진입부에 BRIEF_DESIGN_* 그룹핑 + 청크 스태킹 로직 추가
-2. `_DESIGN_STACK_CHUNK = 3` (또는 4) 상수 정의
-3. BRIEF_DESIGN_* 스태킹 프롬프트에 "각 항목의 `source_page` 필드 명시" 룰 추가
-4. 스태킹 시 `max_out ≥ 8000` 확보
-5. 청크 경계가 섹션 한가운데를 자르는지 휴리스틱 점검 (선택적)
-6. 영등포 PDF 회귀: p.45+46 스태킹 → 면대실/비품창고가 직무공간 자식으로, 통합 민원실/회의 및 행사공간은 별도 top-level로 추출되는지 확인
-
-**사이드 이슈 (별도 추적):**
-
-- 페이지 46 데이터는 JSON에 있지만 엑셀 시트 3에 안 나타나는 라우팅 문제
-- `brief_checklist_exporter.py`에서 `facility_scope="전체"` 처리 / `section_path`에 가공 헤더가 붙은 경우 dedup·필터 동작 확인 필요
+- 영등포 p.45 인접 페이지의 `design_guidelines_grouped`에서 면대실/비품창고가 `facility_scope="구청"` + `section_path="직무공간 (부서 사무실) > ..."`로 추출되는지
+- xlsx 시트 3 "시설별 지침 > 구청" 아래 정상 묶이는지
+- 통합 민원실 / 회의 및 행사공간은 별도 top-level로 유지되는지 (컨텍스트 과적용 방지 확인)
 
 ---
 
@@ -725,11 +701,12 @@ PDF 지침서의 설계지침 섹션이 페이지 경계를 넘어갈 때 자식
 | V-7 | MyProject `rubric_version` | MyProjectMode로 단일 제출물 등록 → `_deep.json` 확인 | `"rubric_version": "v1"` 존재 |
 | V-8 | 스캔본 PDF → Vision fallback | 텍스트 없는 스캔 PDF로 파이프라인 실행 (보유 시) | Tier 0 None 반환 → Vision(이미지 기반) 추출로 자연 전환. `_source: "vision"` 로그 |
 | V-9 | `grade_justification` 출력 | 비교분석 또는 MyProject 실행 후 JSON / HTML 리포트 확인 | 각 axis에 `grade_justification` 문자열 존재. 형식: `"신호 X/Y개 충족 (충족: ... / 미충족: ...) → <등급> 기준 행과 일치"` |
-| V-10a | BRIEF_DESIGN_* 청크 스태킹 동작 | 영등포구 통합 신청사 PDF로 `/api/brief/analyze` 실행 → `_brief.json` 의 `brief_design_guide` 배열에서 p.45 첫 페이지 결과 확인 | `_stacked_pages: [45, 46, 47]` 필드 존재. 같은 청크에 속한 p.46/47은 `data: {}` + `_merged: true` |
-| V-10b | 페이지 경계 너머 계층 보존 | V-10a 와 동일 `_brief.json` 에서 p.45 의 `design_guidelines_grouped` 중 면대실/비품창고/기타 부서별 요청사항 항목 확인 | `facility_scope: "구청"` (이전 버그: "전체") + `section_path` 가 `"직무공간 (부서 사무실) > ..."` 형식 (이전 버그: `"외부시설 계획지침 > ..."`) |
+| V-10a | BRIEF_DESIGN_* 페이지별 추출 (스태킹 폐기 확인) | 영등포구 통합 신청사 PDF로 `/api/brief/analyze` 실행 → `_brief.json` 의 `brief_design_guide` 배열 확인 | 각 페이지가 자체 `data.design_guidelines_grouped` 보유. `_stacked_pages` / `_merged: true` 필드 없음 (A안 잔재 부재) |
+| V-10b | 컨텍스트 주입 → facility_scope 정상화 | V-10a 와 동일 `_brief.json` 에서 p.46/47의 면대실·비품창고·기타 부서별 요청사항 항목 확인 | `facility_scope: "구청"` (이전 버그: "전체"·스태킹 후에도 "전체") + `section_path` 가 `"직무공간 (부서 사무실) > ..."` 형식 |
 | V-10c | 엑셀 시트 3 라우팅 정상화 | V-10a 와 동일 분석 결과의 xlsx 다운로드 → 시트 3 "시설별 지침" 섹션 확인 | "구청 > 직무공간" 아래에 페이지 45+46 항목 (직무공간 일반사항, 면대실, 비품창고, 기타 부서별 요청사항)이 함께 묶여 나타남. "통합 민원실", "회의 및 행사공간" 은 별도 top-level 섹션 |
-| V-10d | 청크 폴백 안전망 | 의도적으로 비연속 BRIEF_DESIGN_* 페이지로 PDF 생성하거나 영등포 PDF 그대로 사용 → 서버 로그에서 청크 빈 결과 발생 시 페이지별 폴백 확인 | 청크 결과가 `design_guidelines_grouped=[]` 면 해당 청크 페이지들이 `extract_one()` 일반 경로로 재추출 (singleton 처리) |
+| V-10d | 컨텍스트 과적용 방지 | V-10a 결과에서 p.46의 "통합 민원실" / "회의 및 행사공간" 같은 새 헤더가 시작되는 항목 확인 | 새 헤더 항목은 직전 컨텍스트("직무공간") 계승하지 않고 자체 facility_scope/section_path 부여 — LLM이 "새 굵은 헤더 보이면 새 컨텍스트" 룰 준수 |
+| V-10e | 그룹 병렬·내부 순차 동작 | 영등포 분석 중 서버 로그 확인 | BRIEF_DESIGN_GUIDE / MASSING / SUSTAIN / SPECIAL 4개 그룹이 동시 시작. 같은 그룹 내 페이지는 직렬 (앞 페이지 완료 후 다음 페이지 호출) |
 
-**확인 우선순위:** V-2 → V-3 → V-4 (지침서 분류 파이프라인 핵심) → V-10a/b/c (시퀀스 D 회귀 검증, 영등포 PDF 필수) → V-1 (토큰 절감 실측) → V-6/V-7 (rubric 버전) → V-9 (grade_justification)
+**확인 우선순위:** V-2 → V-3 → V-4 (지침서 분류 파이프라인 핵심) → V-10a/b/c/d/e (시퀀스 D-B 회귀 검증, 영등포 PDF 필수) → V-1 (토큰 절감 실측) → V-6/V-7 (rubric 버전) → V-9 (grade_justification)
 
 **주의:** V-8(스캔본 PDF)은 텍스트 없는 실제 스캔 PDF가 없으면 검증 불가. 향후 스캔본 지침서 확보 시 진행.

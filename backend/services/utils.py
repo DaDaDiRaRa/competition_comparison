@@ -15,6 +15,13 @@ from pathlib import Path
 #   2. 타일 분할 : 정보 밀도가 높은 페이지(면적표 등)를 4분할해서 각각 전송.
 #                  각 타일은 원본 대비 2배 실효 해상도로 Claude에게 보인다.
 
+def pdf_page_count(pdf_path: Path) -> int:
+    """rasterize 없이 PDF 페이지 수만 반환 (즉시)."""
+    import fitz
+    with fitz.open(str(pdf_path)) as doc:
+        return doc.page_count
+
+
 def rasterize_pdf(
     pdf_path: Path,
     dpi: int = 150,

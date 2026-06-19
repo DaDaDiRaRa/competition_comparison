@@ -30,7 +30,7 @@ from services.data_extractor import extract_pdf, extract_docx, merge_extracted_d
 from services.docx_loader import split_docx_to_blocks
 from services.brief_validator import validate_brief
 from services.brief_checklist_exporter import to_markdown, to_xlsx
-from services.utils import sse, user_error_msg as _user_error_msg
+from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -212,19 +212,29 @@ async def analyze_brief(
                 pdf_path = tmp_dir / "brief.pdf"
                 pdf_path.write_bytes(file_bytes)
 
+                # rasterize 없이 즉시 총 페이지 수 파악 → 진행 바에 total 표시
+                total_pages_hint = pdf_page_count(pdf_path)
                 yield sse({
                     "type": "progress", "step": "classify_brief",
-                    "page": 0, "total": 1, "_timestamp": ts,
+                    "page": 0, "total": total_pages_hint, "_timestamp": ts,
                 })
-                classifications = await classify_all_pages_brief(pdf_path)
-            total_pages = len(classifications)
 
-            for cls in classifications:
-                yield sse({
-                    "type": "progress", "step": "classify_brief",
-                    "page": cls["page"], "total": total_pages,
-                    "page_type": cls["primary_type"], "_timestamp": ts,
-                })
+                # 배치 완료마다 큐로 진행률 수신
+                progress_q: asyncio.Queue = asyncio.Queue()
+                classify_task = asyncio.ensure_future(
+                    classify_all_pages_brief(pdf_path, progress_q)
+                )
+                while True:
+                    done_count = await progress_q.get()
+                    if done_count is None:
+                        break
+                    yield sse({
+                        "type": "progress", "step": "classify_brief",
+                        "page": done_count, "total": total_pages_hint, "_timestamp": ts,
+                    })
+                classifications = await classify_task
+
+            total_pages = len(classifications)
             yield sse({
                 "type": "done", "step": "classify_brief",
                 "total_pages": total_pages, "_timestamp": ts,

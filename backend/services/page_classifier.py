@@ -420,28 +420,38 @@ def _fallback_brief_entry(page: int) -> dict:
     return {**_normalise_brief_result({}), "page": page}
 
 
-def _classify_brief_pdf_sync(pdf_path: Path) -> list[dict]:
+def _classify_brief_pdf_sync(pdf_path: Path, _loop=None, _q=None) -> list[dict]:
     """지침서 PDF를 배치 단위로 분류 (BRIEF_PAGE_TYPES 9개 taxonomy)."""
     pages = rasterize_pdf(pdf_path, dpi=settings.dpi_classify)
+    total = len(pages)
 
     all_results = []
-    for batch_start in range(0, len(pages), BATCH_SIZE):
-        batch = pages[batch_start:batch_start + BATCH_SIZE]
-        raw_results = _classify_brief_batch_with_validation(batch)
+    try:
+        for batch_start in range(0, total, BATCH_SIZE):
+            batch = pages[batch_start:batch_start + BATCH_SIZE]
+            raw_results = _classify_brief_batch_with_validation(batch)
 
-        for i, r in enumerate(raw_results):
-            actual_page = batch[i][1] if i < len(batch) else batch_start + i + 1
-            all_results.append({**_normalise_brief_result(r), "page": actual_page})
+            for i, r in enumerate(raw_results):
+                actual_page = batch[i][1] if i < len(batch) else batch_start + i + 1
+                all_results.append({**_normalise_brief_result(r), "page": actual_page})
+
+            if _loop and _q:
+                done_count = min(batch_start + BATCH_SIZE, total)
+                _loop.call_soon_threadsafe(_q.put_nowait, done_count)
+    finally:
+        if _loop and _q:
+            _loop.call_soon_threadsafe(_q.put_nowait, None)  # sentinel — 항상 전송
 
     # 결과 정렬 및 누락 페이지 폴백
     by_page = {r["page"]: r for r in all_results}
-    return [by_page.get(p, _fallback_brief_entry(p)) for p in range(1, len(pages) + 1)]
+    return [by_page.get(p, _fallback_brief_entry(p)) for p in range(1, total + 1)]
 
 
-async def classify_all_pages_brief(pdf_path: Path) -> list[dict]:
+async def classify_all_pages_brief(pdf_path: Path, _progress_q=None) -> list[dict]:
     """지침서 PDF 전체 페이지 분류 (BRIEF taxonomy)."""
     async with _SEMAPHORE:
-        return await asyncio.to_thread(_classify_brief_pdf_sync, pdf_path)
+        loop = asyncio.get_event_loop()
+        return await asyncio.to_thread(_classify_brief_pdf_sync, pdf_path, loop, _progress_q)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
