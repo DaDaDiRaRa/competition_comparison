@@ -376,3 +376,132 @@ def _as_list(data: dict, key: str) -> list:
     """dict 에서 키를 꺼내 항상 list 반환. None/falsy 면 []."""
     v = data.get(key) or []
     return v if isinstance(v, list) else ([v] if v else [])
+
+
+# ── design_guidelines_grouped 정규화 ──────────────────────────────────────────
+# BRIEF_DESIGN_* 추출에서 section_path 가 "A > B > C" 형태로 깊게 갈라지면서
+# exporter 가 각 path 를 별개 굵은 헤더로 그려서 자식이 부모처럼 보이는 문제.
+#
+# 룰:
+#   - 그룹 키 = (facility_scope, space_scope, section_path 첫 segment)
+#   - sub_path = 첫 segment 이후 잔여 segments (breadcrumb 보존, depth ≥ 3 도 손실 없음)
+#   - 동일 그룹 키 + 동일 sub_path → items concat (순서 보존, 동일 dict 만 dedup)
+#   - 그룹 안 sub_path 들은 입력 순서대로 정렬 (LLM 추출 순서 = PDF 순서)
+#
+# 출력 스키마 (입력 유지 + sub_path 추가):
+#   {
+#     "facility_scope": str, "space_scope": str, "category": str,
+#     "section_path": str,           # ← 그룹 헤더 = first segment
+#     "items_by_sub": [              # ← 새 필드
+#       {"sub_path": "" | "비품창고" | "비품창고 > 상세", "items": [...]}
+#     ]
+#   }
+# 기존 "items" 필드는 sub_path == "" 인 항목들로 채워 하위 호환 유지.
+
+def _normalize_section_path(sp: str) -> list[str]:
+    """section_path 를 segment list 로 분해. 공백·빈 segment 제거."""
+    if not sp:
+        return []
+    parts = [s.strip() for s in str(sp).split(">")]
+    return [p for p in parts if p]
+
+
+def _item_dedup_key(item: dict) -> tuple:
+    """동일 item 판정 키 — label + text 조합."""
+    label = (item.get("label") or "").strip()
+    text = (item.get("text") or "").strip()
+    return (label, text)
+
+
+def normalize_design_guidelines_grouped(grouped: list | None) -> list[dict]:
+    """design_guidelines_grouped 를 그룹 트리로 정규화.
+
+    Parameters
+    ----------
+    grouped : list[dict] | None
+        원본 flat list (각 entry 는 facility_scope/space_scope/section_path/items 보유).
+
+    Returns
+    -------
+    list[dict]
+        그룹별로 묶인 list. 각 element 는 기존 entry 형식에 `items_by_sub` 추가.
+        `section_path` 는 first segment 로 단순화, `items` 는 sub_path 빈 항목들로 유지.
+
+    그룹 키 결정 — `(facility_scope, first_seg)`:
+      space_scope 는 키에서 제외. LLM 이 같은 section 안의 sub-segment 를 별도
+      space_scope 로 잘못 추출하는 케이스가 많아 (예: "직무공간 (부서 사무실) > 비품창고"
+      의 space_scope 가 "비품창고" 로 빠지는 케이스), 같은 first_seg 면 한 그룹으로 통합.
+      그룹 메타의 space_scope 는 첫 entry 의 값 유지.
+    """
+    if not grouped:
+        return []
+
+    # 그룹 키 → 그룹 dict
+    # 그룹 dict: {meta, sub_order: [sub_path...], subs: {sub_path: [items...]}}
+    groups: dict[tuple[str, str], dict] = {}
+    group_order: list[tuple[str, str]] = []
+
+    for entry in grouped:
+        if not isinstance(entry, dict):
+            continue
+        fs = (entry.get("facility_scope") or "").strip()
+        ss = (entry.get("space_scope") or "").strip()
+        segments = _normalize_section_path(entry.get("section_path") or "")
+        first_seg = segments[0] if segments else ""
+        sub_path = " > ".join(segments[1:]) if len(segments) > 1 else ""
+
+        key = (fs, first_seg)
+        if key not in groups:
+            groups[key] = {
+                "facility_scope": fs,
+                "space_scope": ss,
+                "category": entry.get("category") or "",
+                "section_path": first_seg,
+                "sub_order": [],
+                "subs": {},
+            }
+            group_order.append(key)
+        grp = groups[key]
+        # category 는 첫 등장 값 유지하되, 비어있으면 새로 채움
+        if not grp["category"] and entry.get("category"):
+            grp["category"] = entry["category"]
+        # space_scope 도 첫 등장 비어있으면 새로 채움
+        if not grp["space_scope"] and ss:
+            grp["space_scope"] = ss
+
+        if sub_path not in grp["subs"]:
+            grp["subs"][sub_path] = []
+            grp["sub_order"].append(sub_path)
+
+        # items dedup (label+text 기준)
+        existing_keys = {_item_dedup_key(it) for it in grp["subs"][sub_path]}
+        for it in (entry.get("items") or []):
+            if not isinstance(it, dict):
+                continue
+            k = _item_dedup_key(it)
+            if k in existing_keys:
+                continue
+            existing_keys.add(k)
+            grp["subs"][sub_path].append(it)
+
+    out: list[dict] = []
+    for key in group_order:
+        grp = groups[key]
+        items_by_sub = [
+            {"sub_path": sp, "items": grp["subs"][sp]}
+            for sp in grp["sub_order"]
+            if grp["subs"][sp]  # 빈 sub 는 제외
+        ]
+        if not items_by_sub:
+            continue
+        # 하위 호환: items 는 sub_path == "" 인 항목들
+        flat_items = grp["subs"].get("", [])
+        out.append({
+            "facility_scope": grp["facility_scope"],
+            "space_scope": grp["space_scope"],
+            "category": grp["category"],
+            "section_path": grp["section_path"],
+            "items": flat_items,
+            "items_by_sub": items_by_sub,
+        })
+    return out

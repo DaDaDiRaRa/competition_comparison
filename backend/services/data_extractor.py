@@ -19,7 +19,15 @@ from pathlib import Path
 
 from config import settings, axes_keys_for
 from services.llm_client import call_messages
-from services.utils import get_page_text, ocr_page, parse_json_response, rasterize_pdf, rasterize_page_tiled, safe_encode_image
+from services.utils import (
+    get_page_text,
+    normalize_design_guidelines_grouped,
+    ocr_page,
+    parse_json_response,
+    rasterize_pdf,
+    rasterize_page_tiled,
+    safe_encode_image,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2090,7 +2098,10 @@ def merge_extracted_data(
     if grouped_all:
         # block 순서 보존: _source_page(=block_num) 오름차순 정렬 (타입 순서 의존 제거)
         grouped_all.sort(key=lambda g: (g.get("_source_page") or 0))
-        result["design_guidelines_grouped"] = grouped_all
+        # 정규화: (facility_scope, space_scope, first_seg) 그룹 키로 통합,
+        # sub_path breadcrumb 보존, 동일 item 텍스트 dedup.
+        # → exporter 가 한 굵은 헤더 + sub_path 별 '- 헤더' + items 로 렌더 가능.
+        result["design_guidelines_grouped"] = normalize_design_guidelines_grouped(grouped_all)
 
     # 정량 데이터: AREA_TABLE 우선, SITE_PLAN 보완
     # AREA_TABLE은 타일 추출로 가장 신뢰도 높음

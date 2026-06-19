@@ -686,6 +686,58 @@ PDF 지침서의 설계지침 섹션이 페이지 경계를 넘어갈 때 자식
 
 ---
 
+## 시퀀스 E — design_guidelines_grouped 계층 정규화 (2026-06-19)
+
+LLM 추출이 `section_path` 를 `"A > B > C"` 형태 깊은 경로로 나누고 `space_scope` 도 sub-segment 별로 다르게 매기는 케이스가 빈번 (영등포 110 entries 중 64% orphan, 36% depth ≥ 3). 결과적으로 exporter 가 형제 sub-section 을 별개 굵은 헤더로 그려서 자식이 부모처럼 보이는 문제.
+
+### 정규화 룰 (services/utils.py::normalize_design_guidelines_grouped)
+
+- **그룹 키 = `(facility_scope, section_path 의 첫 segment)`**  — space_scope 는 키에서 제외 (LLM 의 space_scope 추출 불안정성 보정)
+- **sub_path = 첫 segment 이후 잔여 segments** — depth ≥ 3 도 `"B > C"` breadcrumb 으로 보존
+- **R1 dedup**: 동일 그룹 키 + 동일 sub_path → items concat
+- **R5 item dedup**: 같은 sub_path 안에서 label+text 동일 → 1회만
+- **출력 스키마**: 기존 entry 형식 + `items_by_sub: [{sub_path, items}]` 추가. 하위 호환을 위해 기존 `items` 는 sub_path == "" 인 항목으로 채움
+- **호출 위치**: `merge_extracted_data()` 의 `grouped_all` 집계 직후. exporter 진입점 `_extract_sections()` 에서도 lazy fallback (`_ensure_normalized_grouped`) 로 옛 데이터 호환
+
+### Exporter 렌더 결과
+
+**Before (사용자 신고 케이스)** — 굵은 헤더 4개로 분리:
+
+```text
+**[직무공간] 직무공간 (부서 사무실)**
+  - 일반 항목
+**[직무공간] 직무공간 (부서 사무실)**      ← 35행 중복 헤더
+  - 대민업무상담실 자식
+**[비품창고] 직무공간 (부서 사무실) > 비품창고**   ← 형제가 부모로 둔갑
+**[직무공간] 직무공간 (부서 사무실) > 기타 부서별 요청사항**
+```
+
+**After** — 굵은 헤더 1회 + inline sub-header:
+
+```text
+**[직무공간] 직무공간 (부서 사무실)**
+  - 일반 항목 ×4
+  - 대민업무상담실
+    ① 업무 효율...
+    ② 6명 이용 가능한...
+  - 비품창고
+    ① 각 부서별...
+  - 기타 부서별 요청사항
+    ① 감사담당관 ... ⑧ 주택과
+```
+
+### 정규화 룰 재발 조건
+
+- `normalize_design_guidelines_grouped` 의 그룹 키에 `space_scope` 를 다시 포함하면 비품창고 케이스 재발 (LLM 이 sub-section 의 space_scope 를 부모와 다르게 매김)
+- exporter 가 `items_by_sub` 대신 `items` (flat) 만 사용하면 sub-header 인라인 처리 안 됨 → 다시 굵은 헤더로 분리
+- `merge_extracted_data` 에서 정규화 호출이 사라지면 새 분석은 깨진 형태로 저장됨. exporter 의 lazy fallback 이 받아주지만 비효율
+
+### 단위 테스트
+
+`backend/tests/test_normalize_design_grouped.py` — 13 케이스 (R1 dedup, R2 parent-child, R3 3-level breadcrumb, R4 orphan, R5 item dedup, 순서 보존, 시설 분리, 빈 path, 하위 호환, 잘못된 입력 가드).
+
+---
+
 ## 앱 실행 검증 체크리스트 (API 키 필요)
 
 아래 항목들은 코드 로직은 완성됐으나, 실제 Claude API 호출이 필요한 end-to-end 검증이 아직 이루어지지 않은 부분이다. 앱을 기동하고 소규모 실제 데이터로 한 번씩 확인한다.

@@ -29,7 +29,7 @@ import io
 from datetime import datetime
 from typing import Any
 
-from services.utils import _first, _as_list  # 공유 dict 헬퍼
+from services.utils import _first, _as_list, normalize_design_guidelines_grouped  # 공유 dict 헬퍼
 
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
@@ -315,9 +315,20 @@ def _extract_sections(brief_data: dict) -> dict:
             "unit_program": _as_list(bpi, "unit_program"),
         },
         # 계층 보존 설계지침 (merge_extracted_data 가 집계한 단일 리스트)
-        # facility_scope/space_scope/category/section_path 기준으로 정렬·그룹화는 렌더링 단계에서 수행
-        "guidelines_grouped": brief_data.get("design_guidelines_grouped") or [],
+        # facility_scope/space_scope/category/section_path 기준으로 정렬·그룹화는 렌더링 단계에서 수행.
+        # Lazy fallback: items_by_sub 가 없는 옛 형식이면 여기서 한 번 정규화 (호환).
+        "guidelines_grouped": _ensure_normalized_grouped(brief_data.get("design_guidelines_grouped")),
     }
+
+
+def _ensure_normalized_grouped(grouped: list | None) -> list:
+    """이미 정규화된 데이터(items_by_sub 있음) 면 그대로, 아니면 정규화 적용."""
+    if not grouped:
+        return []
+    if isinstance(grouped, list) and grouped and isinstance(grouped[0], dict) \
+            and "items_by_sub" in grouped[0]:
+        return grouped
+    return normalize_design_guidelines_grouped(grouped)
 
 
 # ── Markdown (구조화 데이터 덤프) ─────────────────────────────────────────────
@@ -637,9 +648,14 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
                     space    = (g.get("space_scope") or "전체").strip() or "전체"
                     cat      = (g.get("category") or "기타").strip() or "기타"
                     sec_path = (g.get("section_path") or "").strip()
-                    items    = g.get("items") or []
-                    if not items:
-                        continue
+                    # 정규화 후: items_by_sub 가 권위 데이터. 폴백으로 items 도 처리.
+                    subs = g.get("items_by_sub")
+                    if not subs:
+                        items = g.get("items") or []
+                        if not items:
+                            continue
+                        subs = [{"sub_path": "", "items": items}]
+                    # 그룹 헤더 (한 번만)
                     head_parts: list[str] = []
                     if space != "전체":
                         head_parts.append(f"[{space}]")
@@ -647,14 +663,39 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
                     if sec_path:
                         head_parts.append(f"— {sec_path}")
                     L.append(f"\n**{' '.join(head_parts)}**")
-                    for it in items:
-                        if not isinstance(it, dict):
+                    # sub_path 별로 inline sub-header + items
+                    for sub in subs:
+                        sub_path = (sub.get("sub_path") or "").strip()
+                        sub_items = sub.get("items") or []
+                        if not sub_items:
                             continue
-                        label = (it.get("label") or "").strip()
-                        text  = (it.get("text") or "").strip()
-                        if not text:
-                            continue
-                        L.append(f"- {label} {text}" if label else f"- {text}")
+                        if sub_path:
+                            # inline sub-header: "- 비품창고" 형태로 형제 레벨
+                            L.append(f"- {sub_path}")
+                            for it in sub_items:
+                                if not isinstance(it, dict):
+                                    continue
+                                label = (it.get("label") or "").strip()
+                                text  = (it.get("text") or "").strip()
+                                if not text:
+                                    continue
+                                # label="-" 면 MD bullet 과 중복 → 생략
+                                if not label or label == "-":
+                                    L.append(f"  - {text}")
+                                else:
+                                    L.append(f"  - {label} {text}")
+                        else:
+                            for it in sub_items:
+                                if not isinstance(it, dict):
+                                    continue
+                                label = (it.get("label") or "").strip()
+                                text  = (it.get("text") or "").strip()
+                                if not text:
+                                    continue
+                                if not label or label == "-":
+                                    L.append(f"- {text}")
+                                else:
+                                    L.append(f"- {label} {text}")
 
         _md_grouped_block(facility_specific, "시설별 지침")
         _md_grouped_block(common_grouped,   "설계 지침 및 요구사항")
@@ -1105,6 +1146,55 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                     groups.append([ev])
             return groups
 
+        def _share_runs(rows: list) -> list[tuple[int, int, float | int | None]]:
+            """배점 공유 (shared_with) 가 있는 연속 행 구간을 탐지.
+
+            반환: [(start_index, end_index_inclusive, shared_points), ...]
+            - PDF 의 병합 셀: A행 points=40, shared_with=["B"] / B행 points=null, shared_with=["A"]
+              → 연속 행이고 서로 mutual reference 면 한 구간으로 묶음.
+            - shared_with 가 빈 항목 or 비-dict 는 단일 행 구간.
+            - 한 구간 안에서 non-null points 1개 → 그게 그룹 배점.
+            """
+            runs: list[tuple[int, int, float | int | None]] = []
+            i = 0
+            n = len(rows)
+            while i < n:
+                ev = rows[i]
+                if not isinstance(ev, dict):
+                    runs.append((i, i, None))
+                    i += 1
+                    continue
+                cur_name = (ev.get("name") or "").strip()
+                cur_sw = [s.strip() for s in (ev.get("shared_with") or []) if s and isinstance(s, str)]
+                # 다음 행들 중 shared_with 사이클로 묶인 연속 구간 탐색
+                j = i
+                names_in_run = {cur_name}
+                sw_targets = set(cur_sw)
+                while j + 1 < n:
+                    nxt = rows[j + 1]
+                    if not isinstance(nxt, dict):
+                        break
+                    nxt_name = (nxt.get("name") or "").strip()
+                    nxt_sw = [s.strip() for s in (nxt.get("shared_with") or []) if s and isinstance(s, str)]
+                    # 다음 행이 현재 그룹 안 누군가를 참조하거나, 현재 그룹이 다음 행을 참조하면 같은 구간
+                    if (nxt_name and nxt_name in sw_targets) \
+                            or any(s in names_in_run for s in nxt_sw):
+                        names_in_run.add(nxt_name)
+                        sw_targets.update(nxt_sw)
+                        j += 1
+                    else:
+                        break
+                # 구간 (i..j) 의 points 결정: non-null 1개 picks; 여러 개면 첫째 사용
+                shared_pts = None
+                for k in range(i, j + 1):
+                    r_ev = rows[k]
+                    if isinstance(r_ev, dict) and r_ev.get("points") is not None:
+                        shared_pts = r_ev.get("points")
+                        break
+                runs.append((i, j, shared_pts))
+                i = j + 1
+            return runs
+
         def _fmt_bullets(subs: list, desc: str) -> str:
             """sub_items 리스트를 셀 내 멀티라인 불릿 텍스트로 변환.
             - 복수 항목: 각 항목 한 줄
@@ -1142,16 +1232,35 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
 
             return text if (text and text[0] in _BULLET_CHARS) else (f"• {text}" if text else "")
 
+        # ── 배점 공유 구간 사전 계산 ─────────────────────────────────────
+        # rows 의 절대 index → (run_start, run_end, shared_points) 매핑
+        # (주의: for-loop 변수가 enclosing 스코프로 누출되므로 `s`/`t` 같은
+        # 짧은 이름 피하기 — Sheet 3 의 `s = sections` 를 덮어쓰면 크래시)
+        share_runs = _share_runs(e["rows"])
+        share_lookup: dict[int, tuple[int, int, float | int | None]] = {}
+        for _rs, _re, _rpts in share_runs:
+            for _k in range(_rs, _re + 1):
+                share_lookup[_k] = (_rs, _re, _rpts)
+
+        # e["rows"] index → xlsx row 매핑 (사후 Col C 병합 위해)
+        abs_to_xlsx_row: dict[int, int] = {}
+        # 구간당 1회만 running_total 누적
+        counted_runs: set[int] = set()
+        row_index = 0  # e["rows"] 누적 index
+
         for name_group in _group_by_name(e["rows"]):
+            n_in_group = len(name_group)
             dicts = [ev for ev in name_group if isinstance(ev, dict)]
 
             # 비-dict 항목: 전 열 병합 단일 행
             if not dicts:
-                for ev in name_group:
+                for offset, ev in enumerate(name_group):
                     c = ws2.cell(row=row, column=1, value=_str_item(ev))
                     ws2.merge_cells(start_row=row, start_column=1,
                                     end_row=row, end_column=_S2_SPAN)
+                    abs_to_xlsx_row[row_index + offset] = row
                     row += 1
+                row_index += n_in_group
                 continue
 
             name   = dicts[0].get("name") or ""
@@ -1169,27 +1278,59 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
 
             for i, ev in enumerate(dicts):
                 cur  = row + i
-                pts  = ev.get("points")
                 subs = ev.get("sub_items") or []
                 desc = ev.get("description") or ""
 
-                # ── Col B (세부기준): 한 셀 멀티라인 불릿 ────────────
+                # name_group 안 ev 의 위치 (비-dict 가 섞여 있을 때 안전)
+                local_pos = next((k for k, x in enumerate(name_group) if x is ev), i)
+                abs_idx = row_index + local_pos
+                abs_to_xlsx_row[abs_idx] = cur
+
+                # ── Col B (세부기준) ──────────────────────────────────
                 c2 = ws2.cell(row=cur, column=2, value=_fmt_bullets(subs, desc))
                 c2.alignment = _wrap_top
                 c2.border = _border_thin
 
-                # ── Col C (배점): 항목별 독립 점수 (병합 안 함) ───────
+                # ── Col C (배점): share run 안 → 첫 행에만 값, 나머지 비움
+                run_info = share_lookup.get(abs_idx)
+                if run_info is not None:
+                    run_start, _, shared_pts = run_info
+                    pts = shared_pts if abs_idx == run_start else None
+                    # running_total: 첫 등장 시에만 누적
+                    if abs_idx == run_start and run_start not in counted_runs:
+                        counted_runs.add(run_start)
+                        if isinstance(shared_pts, (int, float)):
+                            running_total += shared_pts
+                else:
+                    pts = ev.get("points")
+                    if isinstance(pts, (int, float)):
+                        running_total += pts
+
                 c3 = ws2.cell(row=cur, column=3, value=pts)
                 if pts is not None:
                     c3.font = _bold
                     c3.fill = _grp_fill
                     if isinstance(pts, (int, float)):
                         c3.number_format = _NUM_FMT
-                        running_total += pts
                 c3.alignment = _center
                 c3.border = _border_thin
 
             row += n_rows
+            row_index += n_in_group
+
+        # ── Sheet 2 끝나기 전 post-pass: share run 구간 Col C 병합 ──────────
+        # 연속 xlsx 행이면서 같은 share_run 에 속하는 셀들을 한 번에 merge.
+        for run_start, run_end, _shared_pts in share_runs:
+            if run_end <= run_start:
+                continue
+            # 구간 안 모든 abs_idx 가 xlsx row 에 매핑되어 있고 연속인지 확인
+            xlsx_rows = [abs_to_xlsx_row.get(k) for k in range(run_start, run_end + 1)]
+            if any(r is None for r in xlsx_rows):
+                continue
+            # 연속성 체크
+            if all(xlsx_rows[i + 1] == xlsx_rows[i] + 1 for i in range(len(xlsx_rows) - 1)):
+                ws2.merge_cells(start_row=xlsx_rows[0], start_column=3,
+                                end_row=xlsx_rows[-1], end_column=3)
 
         # 합계 행 — points_sum_warning 시 주황색 경고 강조
         _sum_fill = _warn_fill if e["points_sum_warning"] else _grp_fill
@@ -1314,10 +1455,18 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                 space    = (g.get("space_scope") or "전체").strip() or "전체"
                 cat      = (g.get("category") or "기타").strip() or "기타"
                 sec_path = (g.get("section_path") or "").strip()
-                items    = g.get("items") or []
-                if not items:
-                    continue
-                # 라벨: "[공간] 카테고리 — section_path" 형태
+                # 정규화 후: items_by_sub 가 권위. 폴백으로 items 처리.
+                subs = g.get("items_by_sub")
+                if not subs:
+                    items = g.get("items") or []
+                    if not items:
+                        continue
+                    subs = [{"sub_path": "", "items": items}]
+                else:
+                    # 빈 sub 만 있으면 스킵
+                    if not any((sub.get("items") or []) for sub in subs):
+                        continue
+                # 그룹 헤더 (굵게, 한 번만) — "[공간] 카테고리 — section_path"
                 head_parts = []
                 if space != "전체":
                     head_parts.append(f"[{space}]")
@@ -1331,19 +1480,32 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
                 ws3.merge_cells(start_row=row, start_column=1,
                                 end_row=row, end_column=_S3_SPAN)
                 row += 1
-                for it in items:
-                    if not isinstance(it, dict):
+                # sub_path 별로 inline sub-header 줄 (굵지 않음) + items
+                for sub in subs:
+                    sub_path = (sub.get("sub_path") or "").strip()
+                    sub_items = sub.get("items") or []
+                    if not sub_items:
                         continue
-                    label = (it.get("label") or "").strip()
-                    text  = (it.get("text") or "").strip()
-                    if not text:
-                        continue
-                    line = f"{label} {text}" if label else f"• {text}"
-                    c = ws3.cell(row=row, column=2, value=line)
-                    c.alignment = _wrap_top
-                    ws3.merge_cells(start_row=row, start_column=2,
-                                    end_row=row, end_column=_S3_SPAN)
-                    row += 1
+                    if sub_path:
+                        # inline sub-header: "- 비품창고" — column 1, 굵지 않음
+                        c_sub = ws3.cell(row=row, column=1, value=f"- {sub_path}")
+                        c_sub.alignment = _wrap_top
+                        ws3.merge_cells(start_row=row, start_column=1,
+                                        end_row=row, end_column=_S3_SPAN)
+                        row += 1
+                    for it in sub_items:
+                        if not isinstance(it, dict):
+                            continue
+                        label = (it.get("label") or "").strip()
+                        text  = (it.get("text") or "").strip()
+                        if not text:
+                            continue
+                        line = f"{label} {text}" if label else f"• {text}"
+                        c = ws3.cell(row=row, column=2, value=line)
+                        c.alignment = _wrap_top
+                        ws3.merge_cells(start_row=row, start_column=2,
+                                        end_row=row, end_column=_S3_SPAN)
+                        row += 1
             row += 1
 
     if grouped_all:
