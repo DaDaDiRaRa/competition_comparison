@@ -898,8 +898,16 @@ class AppSettings:
 
     @staticmethod
     def _sanitize_api_key(key: str) -> str:
-        """셸 복붙 아티팩트 제거: echo -n "sk-ant-..." → sk-ant-..."""
-        key = (key or "").strip()
+        """셸 복붙 아티팩트 제거: echo -n "sk-ant-..." → sk-ant-...
+
+        UTF-8 BOM / zero-width 문자도 제거 — 메모장·일부 편집기로 키를 저장하면
+        선두에 BOM(\\ufeff)이 붙어 httpx 헤더 인코딩(ascii)에서 UnicodeEncodeError
+        발생. str.strip() 은 BOM 을 공백으로 보지 않으므로 명시적으로 제거.
+        """
+        key = key or ""
+        for _zw in ("﻿", "​", "‌", "‍", "⁠"):
+            key = key.replace(_zw, "")
+        key = key.strip()
         if key.startswith("-n "):
             key = key[3:].strip()
         key = key.strip('"').strip("'")

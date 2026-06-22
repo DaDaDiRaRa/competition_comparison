@@ -218,31 +218,29 @@ class TestExtractDigitalFallback:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 오류 처리 — LLM 실패 시 _source 태깅 유지
+# 오류 처리 — Tier 0 실패 시 None 반환 → 호출자가 vision 경로로 폴백
+# (기존 설계: error dict 반환했으나 vision 폴백을 차단해 None 반환으로 변경.
+#  data_extractor._extract_digital_text_only 의 except 블록 주석 참조.)
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestExtractDigitalErrorHandling:
 
-    def test_llm_error_returns_error_dict_not_none(self):
-        """LLM 호출 실패 시 None이 아닌 {"error": ...} 반환 (소스 태깅 유지)."""
+    def test_llm_error_returns_none_for_vision_fallback(self):
+        """LLM 호출 실패 시 None 반환 → extract_one 이 vision 경로로 폴백."""
         with (
             patch("services.data_extractor.get_page_text", return_value=_RICH_TEXT),
             patch("services.data_extractor.call_messages", side_effect=Exception("502 Bad Gateway")),
         ):
             result = _extract_digital_text_only(_DUMMY_PDF, 0, 1, "CONCEPT", _PROMPT_CFG)
 
-        assert result is not None
-        assert result["_source"] == "digital_haiku"
-        assert "error" in result["data"]
-        assert "502" in result["data"]["error"]
+        assert result is None
 
-    def test_invalid_json_response_has_error(self):
-        """LLM이 유효하지 않은 JSON 반환 → parse_json_response가 예외 → error 필드."""
+    def test_invalid_json_response_returns_none_for_vision_fallback(self):
+        """LLM이 유효하지 않은 JSON 반환 → parse_json_response 예외 → None (vision 폴백)."""
         with (
             patch("services.data_extractor.get_page_text", return_value=_RICH_TEXT),
             patch("services.data_extractor.call_messages", return_value="이것은 JSON이 아닙니다"),
         ):
             result = _extract_digital_text_only(_DUMMY_PDF, 0, 1, "CONCEPT", _PROMPT_CFG)
 
-        assert result is not None
-        assert "error" in result["data"]
+        assert result is None

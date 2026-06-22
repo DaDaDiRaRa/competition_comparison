@@ -116,12 +116,13 @@ class TestToMarkdown:
         assert isinstance(md, str)
         assert len(md) > 100
 
-    def test_four_sections(self):
+    def test_five_sections(self):
         md = to_markdown(self.bd, self.validation)
-        assert '## 1. 면적' in md
-        assert '## 2. 심사기준' in md
-        assert '## 3. 요구사항' in md
-        assert '## 4. 검증 경고' in md
+        assert '## 1. 사업 개요' in md
+        assert '## 2. 면적 프로그램' in md
+        assert '## 3. 심사기준' in md
+        assert '## 4. 요구사항·설계 지침' in md
+        assert '## 5. 검증 경고' in md
 
     def test_area_values_present(self):
         md = to_markdown(self.bd, self.validation)
@@ -134,7 +135,8 @@ class TestToMarkdown:
 
     def test_flag_summary_line(self):
         md = to_markdown(self.bd, self.validation)
-        assert '요약:' in md
+        # 검증 경고 섹션의 건수 요약 줄 (예: "높음: 1건 / 보통: 2건 / 낮음: 0건")
+        assert '높음:' in md and '보통:' in md and '낮음:' in md
 
     def test_room_program(self):
         md = to_markdown(self.bd, self.validation)

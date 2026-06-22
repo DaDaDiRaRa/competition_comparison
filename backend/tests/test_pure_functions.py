@@ -18,6 +18,7 @@ from services.data_extractor import merge_extracted_data
 from services.comparator import _compute_gap_analysis
 from services.grade_helpers import to_grade, LEGACY_GRADE_MAP
 from services.brief_validator import validate_brief
+from config import settings
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -932,3 +933,39 @@ class TestBriefValidatorLowConfidence:
         flag = _flags_of(validate_brief(bd, {}), "low_confidence")[0]
         assert "p.5" in flag["message"]
         assert "BRIEF_TECHNICAL" in flag["message"]
+
+
+class TestSanitizeApiKey:
+    """_sanitize_api_key 복붙 아티팩트 제거.
+
+    회귀: 키 파일을 메모장/PowerShell utf8 로 저장하면 선두 UTF-8 BOM(﻿)이
+    붙어 httpx 헤더 인코딩(ascii)에서 UnicodeEncodeError 발생. str.strip() 은 BOM 을
+    제거하지 못하므로 명시적 제거 필요.
+    """
+    _s = staticmethod(settings._sanitize_api_key)
+
+    def test_strips_utf8_bom(self):
+        out = self._s("﻿sk-ant-abc123")
+        assert out == "sk-ant-abc123"
+        out.encode("ascii")  # ascii 인코딩 가능해야 (httpx 헤더)
+
+    def test_strips_zero_width_chars(self):
+        assert self._s("sk-ant-​abc⁠") == "sk-ant-abc"
+
+    def test_strips_crlf_and_quotes(self):
+        assert self._s('"sk-ant-xyz"\r\n') == "sk-ant-xyz"
+
+    def test_strips_echo_n_prefix(self):
+        assert self._s("-n sk-ant-xyz") == "sk-ant-xyz"
+
+    def test_bom_plus_crlf_combo(self):
+        out = self._s("﻿sk-ant-key\r\n")
+        assert out == "sk-ant-key"
+        out.encode("ascii")
+
+    def test_clean_key_unchanged(self):
+        assert self._s("sk-ant-clean") == "sk-ant-clean"
+
+    def test_empty_and_none(self):
+        assert self._s("") == ""
+        assert self._s(None) == ""

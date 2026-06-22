@@ -194,6 +194,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 - **BRIEF_EVALUATION 환각 방어 (5중):** ① `BRIEF_CLASSIFY_PROMPT` NOT 조건 (g)~(j) ② `_NOT_EVAL_HEADER_PATTERNS` 후처리 강등 (`상품 및 내용` 패턴 포함) ③ `MODEL_ID_CLASSIFY` Sonnet 유지 (Haiku 헤더 환각) ④ `FACILITY_CONFLICT_KEYWORDS` + `brief_validator._check_facility_keyword_conflict()` ⑤ `data_extractor` BRIEF_EVALUATION 프롬프트 "환각 금지 (CRITICAL)" 블록. 어느 하나 제거하면 청사 → 연구원 환각 재발.
 - **BRIEF_EVALUATION null 점수 시맨틱:** `_check_points_mismatch` 는 `shared_with` 가 채워졌거나 numeric 합이 만점과 ±1 이내 일치 시 null 항목을 정성평가로 인정 (경고 X). 단순 `points is None → missing` 으로 되돌리면 영등포 (배치계획↔공간계획 병합, 설계의 적정성·창의성 정성평가) false positive 재발. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
 - **`_image_block()` JPEG 마법 바이트:** `img_bytes[:3] == b'\xff\xd8\xff'` 이면 `image/jpeg`, 아니면 `image/png`. 포맷 불일치는 400 원인.
+- **API 키 BOM/zero-width 제거:** `config.py::_sanitize_api_key` 는 `.strip()` 외에 UTF-8 BOM(`﻿`)·zero-width 문자도 명시 제거. 메모장·PowerShell `Set-Content -Encoding utf8` 로 키 저장 시 선두 BOM 이 붙어 httpx 헤더 ascii 인코딩에서 `UnicodeEncodeError` 발생 (str.strip() 은 BOM 을 공백으로 안 봄). 회귀: `tests/test_pure_functions.py::TestSanitizeApiKey` 7 케이스.
 - **BRIEF_DESIGN_* 그룹 처리:** `_process_design_group()` 그룹 내부는 **순차** 실행 (직전 페이지 컨텍스트 주입), 그룹간만 `asyncio.gather` 병렬. 그룹 내부 병렬화하면 컨텍스트 누적 깨짐.
 - **design_guidelines_grouped 정규화:** 그룹 키 = `(facility_scope, section_path 첫 segment)` — space_scope 제외 (LLM 추출 불안정). exporter 는 `items_by_sub` 사용. `space_scope` 를 키에 다시 포함하면 비품창고 케이스 재발.
 - **vMerge 감지:** `cell._tc` identity + tcPr `w:vMerge` element **두 시그널 조합**. 어느 한쪽만 쓰면 `merge_info` 가 빔.
@@ -217,10 +218,8 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 
 ## 다음 작업 (단기)
 
-- **V-10e 정확 검증:** 백엔드 시작 시 `uvicorn ... 2>stderr.log` 로 stderr 캡처 후 영등포 PDF 재분석. 로그에서 BRIEF_DESIGN_GUIDE/MASSING/SUSTAIN/SPECIAL 그룹 시작 시각이 동시 (병렬) 인지 확인. PDF 1회 재분석 비용으로 처리.
 - **🟡 BRIEF_EVALUATION 100점 초과 근본 해결:** Open Issue 🟡 연계. HWP→PDF 변환된 지침서 (병합셀 붕괴 케이스) 1건 확보 시 `data_extractor.py` BRIEF_EVALUATION 추출 프롬프트에 중복 집계 가드 추가. 현재는 `points_sum_warning` 후처리 플래그만 있음.
-- **API 검증 일괄 실행 (P0-3/P1-3/P2-3):** memory `project_api_validation_deferred.md` 의 P0-3 (BRIEF_PROJECT_INFO 병합), P1-3 (area_table 계층), P2-3 (BRIEF_DESIGN_* 5 타입 분산 분류). 영등포는 `_brief.json` 보유, 종로구청 PDF 만 추가 분석. 같이 돌려서 비용 절감.
-- **시퀀스 D 참조 정리:** "앱 실행 검증 체크리스트" 우선순위 라인 "시퀀스 D 회귀" 표현이 Sequences 섹션에 미정의. design_guidelines_grouped 정규화 작업이었을 것으로 추정 — 표현 수정 또는 D 정의 추가.
+- **P1-3-1 잔여 (단순형 area_table):** API 검증 P0-3/P2-3/KI/V-10e 는 2026-06-22 완료 (`tools/api_validation.py`, 10 PASS/2 N/A). P1-3-1 (단순형 area_table 계층 대조) 만 미완 — 종로구청 main 지침서엔 면적 프로그램표가 없고 (시설별 세부지침서에 있음), 세부지침서 PDF 확보 시 `tools/analyze_brief_cli.py` 로 분석 후 재검증.
 
 ## Sequences (Future Work, 보류)
 
@@ -246,9 +245,9 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | V-10b ✓ | 컨텍스트 주입 정상화 | p.46/47 면대실·비품창고 항목 | `facility_scope: "구청"` + `section_path: "직무공간 (부서 사무실) > ..."` |
 | V-10c ✓ | 엑셀 시트 3 라우팅 | xlsx 시트 3 `[직무공간] (부서 사무실)` 헤더 | 대민업무상담실·비품창고·기타 부서별 자식으로 묶임 |
 | V-10d ✓ | 컨텍스트 과적용 방지 | p.46 새 헤더 항목 | 새 헤더는 직전 컨텍스트 미계승 |
-| V-10e ⚪ | 그룹 병렬·내부 순차 | 영등포 분석 로그 | GUIDE/MASSING/SUSTAIN/SPECIAL 동시 시작, 그룹 내 직렬 — SSE 만으론 확인 불가, 백엔드 `2>stderr.log` 필요 |
+| V-10e ✓ | 그룹 병렬·내부 순차 | 종로구청 분석 stderr 로그 (2026-06-22) | PASS: 5개 design 그룹이 16ms 내 동시 시작(병렬), 다중 페이지 그룹 내부는 직렬(page N+1 은 page N HTTP 완료 후 시작). 코드 구조(`asyncio.gather` + 그룹 내 `for await`)로도 보장 |
 
-**우선순위:** V-2/V-3/V-4 (지침서 핵심) → V-10a~e (시퀀스 D 회귀, 영등포 PDF 필수) → V-1 → V-6/V-7 → V-9.
+**우선순위:** V-2/V-3/V-4 (지침서 핵심) → V-10a~e (`design_guidelines_grouped` 정규화 회귀, 영등포 PDF 필수) → V-1 → V-6/V-7 → V-9.
 
 **V-10 자동 회귀:** 2026-06-19 영등포 청사 PDF 로 V-10a~d PASS 확정 (V-10e SSE 한계로 SKIP). 코드 변경 시 무료 재검증:
 
