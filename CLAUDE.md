@@ -219,7 +219,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 ## 다음 작업 (단기)
 
 - **🟡 BRIEF_EVALUATION 100점 초과 근본 해결:** Open Issue 🟡 연계. HWP→PDF 변환된 지침서 (병합셀 붕괴 케이스) 1건 확보 시 `data_extractor.py` BRIEF_EVALUATION 추출 프롬프트에 중복 집계 가드 추가. 현재는 `points_sum_warning` 후처리 플래그만 있음.
-- **P1-3-1 잔여 (단순형 area_table):** API 검증 P0-3/P2-3/KI/V-10e 는 2026-06-22 완료 (`tools/api_validation.py`, 10 PASS/2 N/A). P1-3-1 (단순형 area_table 계층 대조) 만 미완 — 종로구청 main 지침서엔 면적 프로그램표가 없고 (시설별 세부지침서에 있음), 세부지침서 PDF 확보 시 `tools/analyze_brief_cli.py` 로 분석 후 재검증.
+- **진짜 단순형(1~2단) area_table 케이스 확보:** API 검증 P0-3/P1-3/P2-3/KI/V-10e 는 2026-06-22 완료 (`tools/api_validation.py`, 11 PASS/0 FAIL). 단, 당초 "종로구청=단순형" 전제가 틀림 — 종로구청 세부지침서도 통합청사라 5단 복잡 계층. 영등포·종로 둘 다 복잡형이므로 **단순형(1~2단) area_table 추출 검증은 미확보**. 소규모 단일시설 지침서 1건 확보 시 `tools/analyze_brief_cli.py` 분석 후 별도 검증.
 
 ## Sequences (Future Work, 보류)
 

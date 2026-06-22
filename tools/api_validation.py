@@ -38,6 +38,18 @@ def _load(pattern):
     return f, json.load(open(f, encoding="utf-8"))
 
 
+def _load_all(pattern):
+    """패턴 매칭 fixture 전부 로드 → [(path, data), ...] (이름 정렬)."""
+    out = []
+    for p in sorted(glob.glob(BRIEFS + r"\*.json")):
+        if pattern in Path(p).name:
+            try:
+                out.append((p, json.load(open(p, encoding="utf-8"))))
+            except Exception:
+                pass
+    return out
+
+
 def _area_stats(d):
     """brief_program[] 전체에서 area_rows 통계 집계."""
     rt = {}
@@ -60,19 +72,31 @@ def _area_stats(d):
 
 def main():
     f_yd, yd = _load("v10")           # 영등포 (복잡형)
-    f_jn, jn = _load("종로구청")        # 종로구청 (단순형)
 
-    print(f"영등포 fixture : {f_yd}")
-    print(f"종로구청 fixture: {f_jn}")
+    # 종로구청 fixture 들 (main 지침서 + 세부지침서). area_table 검증은 면적표 있는
+    # fixture (세부지침서), KI-1 은 배점표 있는 fixture (main 지침서) 를 각각 선택.
+    jn_all = _load_all("종로")
+    jn_prog = None   # 면적표 있는 fixture → P1-3
+    f_jn_prog = None
+    best_area = -1
+    for p, data in jn_all:
+        st = _area_stats(data)
+        if st["area_filled"] > best_area:
+            best_area, jn_prog, f_jn_prog = st["area_filled"], data, p
+
+    print(f"영등포 fixture     : {f_yd}")
+    print(f"종로 fixture (전체) : {[Path(p).stem for p, _ in jn_all]}")
+    print(f"종로 area fixture   : {Path(f_jn_prog).stem if f_jn_prog else None} (area_filled={best_area})")
     print("=" * 78)
 
     if not yd:
         print("FATAL: 영등포 fixture 없음")
         sys.exit(1)
-    if not jn:
-        print("FATAL: 종로구청 fixture 없음 — 분석 먼저 실행 필요")
+    if not jn_all:
+        print("FATAL: 종로 fixture 없음 — 분석 먼저 실행 필요")
         sys.exit(1)
 
+    jn = jn_prog  # P1-3 area 검증용 (면적표 있는 fixture)
     yd_area = _area_stats(yd)
     jn_area = _area_stats(jn)
 
@@ -90,27 +114,25 @@ def main():
           f"({[s.get('site_id') for s in sites]})")
 
     # ── P1-3: area_table 계층 ─────────────────────────────────────────────
-    # 종로구청 main 지침서에 면적 프로그램표가 있는지 (없으면 단순형 검증 N/A — 세부지침서 필요)
+    # NOTE: 당초 "종로구청=단순형" 전제는 틀림. 종로구청 세부지침서도 통합청사라
+    # 5단 계층(시설→구분→부서→과→실)으로 영등포와 동일하게 복잡. P1-3-1 을
+    # "두 번째 독립 문서의 다단 계층 정상 추출" 로 재정의. 진짜 단순형(1~2단) 케이스
+    # 는 여전히 미확보 — 소규모 단일시설 지침서 확보 시 별도 검증.
     jn_has_program = bool(jn.get("brief_program")) and jn_area["area_filled"] > 0
     # P1-3-2: 영등포 복잡형 — 계층 깊이 ≥ 3
     check("P1-3-2", len(yd_area["hier_levels"]) >= 3,
           f"영등포 hier_levels={yd_area['hier_levels']} ({len(yd_area['hier_levels'])}단)")
-    # P1-3-1: 종로구청 단순형 — 면적표가 있어야 검증 가능
+    # P1-3-1: 종로구청 세부지침서 — 다단 계층 정상 추출 (≥2단 + dept 채워짐)
     if jn_has_program:
         check("P1-3-1",
-              len(jn_area["hier_levels"]) <= 3 and len(jn_area["hier_levels"]) < len(yd_area["hier_levels"]),
-              f"종로구청 hier_levels={jn_area['hier_levels']} ({len(jn_area['hier_levels'])}단) "
-              f"vs 영등포 {len(yd_area['hier_levels'])}단")
+              len(jn_area["hier_levels"]) >= 2,
+              f"종로 세부지침서 hier_levels={jn_area['hier_levels']} ({len(jn_area['hier_levels'])}단). "
+              f"※ 단순형 가정 오류 — 종로도 복잡형(통합청사), 진짜 단순형 케이스 미확보")
     else:
-        na("P1-3-1", "종로구청 main 지침서에 BRIEF_PROGRAM/면적표 없음 — 시설별 세부지침서 필요")
-    # P1-3-3: 기준면적(A) 채워진 행 (영등포 확정, 종로는 면적표 있을 때만)
-    if jn_has_program:
-        check("P1-3-3", yd_area["area_filled"] > 0 and jn_area["area_filled"] > 0,
-              f"영등포 area_filled={yd_area['area_filled']}, 종로 area_filled={jn_area['area_filled']}")
-    else:
-        check("P1-3-3a(영등포)", yd_area["area_filled"] > 0,
-              f"영등포 area_filled={yd_area['area_filled']}")
-        na("P1-3-3b(종로)", "면적표 부재 — 세부지침서 필요")
+        na("P1-3-1", "종로 면적표 fixture 없음 — 세부지침서 분석 필요")
+    # P1-3-3: 기준면적(A) 채워진 행 양쪽 > 0
+    check("P1-3-3", yd_area["area_filled"] > 0 and jn_area["area_filled"] > 0,
+          f"영등포 area_filled={yd_area['area_filled']}, 종로 세부 area_filled={jn_area['area_filled']}")
     # P1-3-5: shared_areas 섹션 (영등포 존재 확인 — 종로는 정보용)
     check("P1-3-5", yd_area["shared"] > 0,
           f"영등포 shared={yd_area['shared']}, 종로 shared={jn_area['shared']} (종로는 정보용)")
@@ -130,7 +152,15 @@ def main():
           f"renewable_energy_min_pct={bs.get('renewable_energy_min_pct')}")
 
     # ── KI: 기존 Known Issues ─────────────────────────────────────────────
-    for label, d in (("영등포", yd), ("종로구청", jn)):
+    # 영등포 + 종로 배점표 있는 fixture (main 지침서). 세부지침서는 배점표 없어 N/A.
+    ki_targets = [("영등포", yd)]
+    for p, data in jn_all:
+        be = (data.get("brief_evaluation") or {})
+        if isinstance(be, list):
+            be = be[0] if be else {}
+        if be.get("total_points") is not None or be.get("evaluation_categories"):
+            ki_targets.append((f"종로:{Path(p).stem.split('_')[-2]}", data))
+    for label, d in ki_targets:
         be = d.get("brief_evaluation") or {}
         if isinstance(be, list):
             be = be[0] if be else {}
