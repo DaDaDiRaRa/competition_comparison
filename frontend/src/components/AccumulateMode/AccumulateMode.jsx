@@ -131,6 +131,13 @@ export default function AccumulateMode() {
     }
   }
 
+  // HTML 리포트: 웹은 새 탭에서 보기(인라인), 데스크톱은 파일 저장
+  const handleHtml = (filename) => {
+    const url = getBriefExportUrl(filename)
+    if (window.pywebview?.api?.save_file) handleDownload(url, filename)
+    else window.open(url, '_blank', 'noopener')
+  }
+
   const runPipeline = async () => {
     setRunning(true)
     setEvents([])
@@ -154,7 +161,7 @@ export default function AccumulateMode() {
       for await (const ev of runAccumulatePipeline(fd)) {
         setEvents(prev => [...prev, ev])
         if (ev.type === 'done' && ev.step === 'brief' && ev.md_filename) {
-          setBriefExports({ md_filename: ev.md_filename, xlsx_filename: ev.xlsx_filename })
+          setBriefExports({ md_filename: ev.md_filename, xlsx_filename: ev.xlsx_filename, html_filename: ev.html_filename })
         }
         if (ev.type === 'complete') setResult(ev)
         if (ev.type === 'error') break
@@ -284,8 +291,14 @@ export default function AccumulateMode() {
               display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
             }}>
               <span style={{ fontSize: 13, color: 'var(--color-text-muted)', marginRight: 4 }}>지침서 체크리스트</span>
+              {briefExports.html_filename && (
+                <button
+                  style={s.dlBtn}
+                  onClick={() => handleHtml(briefExports.html_filename)}
+                >📄 .html</button>
+              )}
               <button
-                style={s.dlBtn}
+                style={{ ...s.dlBtn, background: 'var(--color-bg-surface)', color: 'var(--color-text-body)', border: '1px solid var(--color-border)' }}
                 onClick={() => handleDownload(getBriefExportUrl(briefExports.xlsx_filename), briefExports.xlsx_filename)}
               >⬇ .xlsx</button>
               <button

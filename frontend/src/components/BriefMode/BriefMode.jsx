@@ -148,6 +148,16 @@ export default function BriefMode() {
     }
   }
 
+  // HTML 리포트: 웹은 새 탭에서 보기(인라인), 데스크톱은 파일 저장
+  const handleHtml = (filename) => {
+    const url = getBriefExportUrl(filename)
+    if (window.pywebview?.api?.save_file) {
+      handleDownload(url, filename)
+    } else {
+      window.open(url, '_blank', 'noopener')
+    }
+  }
+
   return (
     <div style={s.panel}>
       <div style={s.title}>지침서 분석</div>
@@ -223,8 +233,16 @@ export default function BriefMode() {
 
           <div style={s.sectionTitle}>체크리스트 내보내기</div>
           <div style={s.dlRow}>
+            {result.html_filename && (
+              <button
+                style={s.dlBtn(true)}
+                onClick={() => handleHtml(result.html_filename)}
+              >
+                📄 리포트 .html
+              </button>
+            )}
             <button
-              style={s.dlBtn(true)}
+              style={s.dlBtn(false)}
               onClick={() => handleDownload(getBriefExportUrl(result.xlsx_filename), result.xlsx_filename)}
             >
               ⬇ 체크리스트 .xlsx

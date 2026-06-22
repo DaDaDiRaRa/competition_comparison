@@ -14,7 +14,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 4. **`routers/settings.py`** — `app_settings.json` 관리. `GET /settings/meta` 가 프론트 `useMeta()` 단일 소스.
 5. **`routers/upload.py`** — 청크 업로드 (Cloud Run 32MB 한도 우회). 25MB 청크 / 600MB 상한 / `/tmp/cc_uploads/` 누적.
 6. **`routers/archive.py`** — FTS5 in-memory SQLite 자연어 검색.
-7. **`routers/brief.py`** — 지침서 단독 분석 (PDF + DOCX). 분류 → 추출 → 요구사항 → 검증 → JSON/MD/xlsx 저장.
+7. **`routers/brief.py`** — 지침서 단독 분석 (PDF + DOCX). 분류 → 추출 → 요구사항 → 검증 → JSON/MD/xlsx/HTML 저장. HTML 은 `/exports/{name}.html` 에서 인라인(text/html, 보기용), md/xlsx 는 attachment.
 
 **MyProject 심층 분석:** 별도 라우터 없음. `accumulate.py` 가 단일 등록 시 `myproject_analyzer.deep_analyze()` 호출 → `_deep.json` + `_deep.html`. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report` 로 서빙.
 
@@ -36,7 +36,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `myproject_report_generator.py` | `_deep.json` → HTML. LLM 호출 없음. |
 | `archive_search.py` | in-memory SQLite FTS5. `build_index()` 시작 시 1회, `rerun-compare` 후 `rebuild_index()`. `check_same_thread=False` 필수. |
 | `brief_validator.py` | 지침서 검증. LLM 호출 없음. `requirements` 가 dict 아니면 `{}` 교체 (LLM 배열 반환 방어). `_check_points_mismatch` 는 `shared_with` non-empty 또는 합계가 만점과 일치 시 null 항목을 정성평가로 인정 (영등포 false positive 차단). |
-| `brief_checklist_exporter.py` | 지침서 체크리스트 MD/xlsx. LLM 호출 금지. openpyxl lazy import. 4 시트: 면적·프로그램 / 심사기준 / 요구사항 / 검증경고. |
+| `brief_checklist_exporter.py` | 지침서 체크리스트 MD/xlsx/HTML. LLM 호출 금지. openpyxl lazy import. 4 시트: 면적·프로그램 / 심사기준 / 요구사항 / 검증경고. `to_html()` 은 `to_markdown` 과 동일한 `_extract_sections()` 데이터로 미니멀 자체완결 HTML (화이트 + 건원 RED, 5섹션). 데이터는 `html.escape` 처리. 회귀: `tests/test_brief_pipeline.py::TestToHtml`. |
 | `grade_helpers.py` | 등급 단일 소스. `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade()`. 모든 리포트 generator 가 공통 import. |
 | `utils.py` | PDF rasterizer (`rasterize_pdf` PyMuPDF), SSE helper, `parse_json_response()` 3단계 복구, 공유 dict 헬퍼 `_first()` / `_as_list()`, `user_error_msg()`, `normalize_design_guidelines_grouped()`. |
 
@@ -97,8 +97,8 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 4. `merge_extracted_data()` → `_merge_brief_project_info_pages()` 가 `sites[]` / `special_conditions[]` / `unit_program[]` 합침.
 5. `extract_brief_requirements()` → `validate_brief()` → flags + summary.
 6. `_brief_meta.source_format` (`"pdf"` | `"docx"`) 기록.
-7. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write_bytes(xlsx)`. 위치: `{db_path}/_briefs/{stamp}_{facility_type}_{slug}.{json|md|xlsx}` (≤120자).
-8. SSE `complete`: `{brief_id, md_filename, xlsx_filename, validation_summary, source_format}`.
+7. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write(html)` + `_sync_write_bytes(xlsx)`. 위치: `{db_path}/_briefs/{stamp}_{facility_type}_{slug}.{json|md|html|xlsx}` (≤120자).
+8. SSE `complete`: `{brief_id, md_filename, xlsx_filename, html_filename, validation_summary, source_format}`. accumulate 의 `done`/`brief` 이벤트도 `html_filename` 포함.
 
 ### Diagnose
 
@@ -124,7 +124,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 │       └── {slug}_{result}_deep.{json|html}   # MyProject only
 ├── _diagnosis_reports/{YYYYMMDD}_{HHMMSS}_{ft}_{name}.html
 ├── _cross_reports/*.html
-├── _briefs/{brief_id}.{json|md|xlsx}
+├── _briefs/{brief_id}.{json|md|html|xlsx}
 └── _myprojects/                                # auto_meta 머지 대상
 ```
 

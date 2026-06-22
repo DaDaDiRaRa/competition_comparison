@@ -29,7 +29,7 @@ from services.page_classifier import classify_all_pages_brief, classify_all_bloc
 from services.data_extractor import extract_pdf, extract_docx, merge_extracted_data, extract_brief_requirements
 from services.docx_loader import split_docx_to_blocks
 from services.brief_validator import validate_brief
-from services.brief_checklist_exporter import to_markdown, to_xlsx
+from services.brief_checklist_exporter import to_markdown, to_xlsx, to_html
 from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,7 @@ def list_briefs():
                 "total_pages":        meta.get("total_pages", 0),
                 "has_md":             (briefs_dir / f"{p.stem}.md").exists(),
                 "has_xlsx":           (briefs_dir / f"{p.stem}.xlsx").exists(),
+                "has_html":           (briefs_dir / f"{p.stem}.html").exists(),
                 "validation_summary": (meta.get("validation") or {}).get("summary", {}),
             })
         except Exception:
@@ -110,15 +111,18 @@ def list_briefs():
 
 @router.get("/exports/{filename}")
 def download_export(filename: str):
-    """저장된 md / xlsx 다운로드. path traversal 방지."""
+    """저장된 md / xlsx / html 다운로드. path traversal 방지.
+
+    html 은 브라우저 인라인 표시 (보기용), md/xlsx 는 attachment (다운로드).
+    """
     # Path().name 으로 디렉터리 구분자 제거 — 결과가 원본과 다르면 비정상 경로
     safe_name = Path(filename).name
     if safe_name != filename:
         raise HTTPException(400, "잘못된 파일명입니다.")
 
     ext = Path(safe_name).suffix.lower()
-    if ext not in (".md", ".xlsx"):
-        raise HTTPException(400, "md 또는 xlsx 파일만 다운로드 가능합니다.")
+    if ext not in (".md", ".xlsx", ".html"):
+        raise HTTPException(400, "md / xlsx / html 파일만 다운로드 가능합니다.")
 
     path = settings.db_path / "_briefs" / safe_name
     if not path.exists():
@@ -127,8 +131,14 @@ def download_export(filename: str):
     media_type = {
         ".md":   "text/markdown; charset=utf-8",
         ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".html": "text/html; charset=utf-8",
     }[ext]
-    resp = FileResponse(path, media_type=media_type, filename=safe_name)
+    if ext == ".html":
+        # 인라인 표시 — filename 지정 시 attachment 가 되므로 생략하고 헤더 직접 설정
+        resp = FileResponse(path, media_type=media_type)
+        resp.headers["Content-Disposition"] = f'inline; filename="{safe_name}"'
+    else:
+        resp = FileResponse(path, media_type=media_type, filename=safe_name)
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
@@ -314,6 +324,7 @@ async def analyze_brief(
             json_path  = briefs_dir / f"{brief_id}.json"
             md_path    = briefs_dir / f"{brief_id}.md"
             xlsx_path  = briefs_dir / f"{brief_id}.xlsx"
+            html_path  = briefs_dir / f"{brief_id}.html"
 
             try:
                 _atomic_write(json_path, brief_data)
@@ -326,6 +337,12 @@ async def analyze_brief(
             except Exception as me:
                 logger.error("brief save MD error: %s", traceback.format_exc())
                 raise RuntimeError(f"MD 저장 실패: {type(me).__name__}: {me}") from me
+
+            try:
+                _sync_write(html_path, to_html(brief_data, validation))
+            except Exception as he:
+                logger.error("brief save HTML error: %s", traceback.format_exc())
+                raise RuntimeError(f"HTML 저장 실패: {type(he).__name__}: {he}") from he
 
             try:
                 _sync_write_bytes(xlsx_path, to_xlsx(brief_data, validation))
@@ -343,6 +360,7 @@ async def analyze_brief(
                 "total_pages":        total_pages,
                 "md_filename":        f"{brief_id}.md",
                 "xlsx_filename":      f"{brief_id}.xlsx",
+                "html_filename":      f"{brief_id}.html",
                 "validation_summary": flag_summary,
                 "source_format":      source_format,
                 "_timestamp":         ts,

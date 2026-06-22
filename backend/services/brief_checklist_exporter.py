@@ -25,6 +25,7 @@ brief_checklist_exporter.py — 지침서 체크리스트 내보내기 (LLM 호�
 """
 from __future__ import annotations
 
+import html
 import io
 from datetime import datetime
 from typing import Any
@@ -737,6 +738,618 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
         L.append("경고없음")
 
     return "\n".join(L)
+
+
+# ── HTML (미니멀 스타일, 보기용) ──────────────────────────────────────────────
+# to_markdown 과 동일한 _extract_sections 데이터를 렌더 — 콘텐츠 정합성 보장.
+# LLM 호출 없음. 자체 완결 HTML (외부 CSS/JS 의존 없음). 미니멀 화이트 + 건원 RED 포인트.
+
+_HTML_CSS = """
+:root{
+  --ink:#1a1a1a; --text:#3a3a3a; --muted:#9a9a9a; --line:#ececec;
+  --soft:#f7f7f8; --accent:#e60012;
+  --high:#e60012; --med:#c47b00; --low:#9a9a9a;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:#fff;color:var(--text);
+  font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto;padding:52px 30px 110px}
+header.doc{margin-bottom:8px;padding-bottom:22px;border-bottom:2px solid var(--ink)}
+header.doc .eyebrow{font-size:12px;letter-spacing:.14em;color:var(--accent);font-weight:700;text-transform:uppercase}
+header.doc h1{margin:8px 0 0;font-size:25px;font-weight:700;color:var(--ink);letter-spacing:-.02em;line-height:1.3}
+header.doc .meta{margin-top:12px;color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 18px}
+section.sec{margin:44px 0 0}
+section.sec>h2{display:flex;align-items:center;gap:11px;margin:0 0 16px;
+  font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+section.sec>h2 .n{display:inline-flex;align-items:center;justify-content:center;
+  min-width:25px;height:25px;padding:0 7px;border-radius:7px;
+  background:var(--accent);color:#fff;font-size:13px;font-weight:700;flex:0 0 auto}
+h3.sub{margin:26px 0 9px;font-size:15px;font-weight:700;color:var(--ink);
+  padding-bottom:7px;border-bottom:1px solid var(--line)}
+h4.subsub{margin:18px 0 7px;font-size:13.5px;font-weight:600;color:var(--accent)}
+.note{margin:14px 0;color:var(--text)}
+dl.kv{display:grid;grid-template-columns:140px 1fr;gap:1px 18px;margin:6px 0}
+dl.kv dt{color:var(--muted);font-size:13px;padding:4px 0}
+dl.kv dd{margin:0;color:var(--ink);padding:4px 0;word-break:break-word}
+dl.kv dd.empty{color:#c4c4c4}
+table.t{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+table.t th,table.t td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top}
+table.t thead th{background:var(--soft);color:var(--muted);font-weight:600;font-size:11.5px;letter-spacing:.02em;
+  position:sticky;top:0}
+table.t td.num,table.t th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.t tr.sumrow td{font-weight:700;color:var(--ink);background:var(--soft);border-top:2px solid #ddd}
+ul.list{margin:6px 0;padding-left:19px}
+ul.list li{margin:3px 0}
+.muted{color:var(--muted)}
+.empty{color:#c4c4c4}
+.tree{margin:8px 0;border-top:1px solid var(--line)}
+.tree .row{display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid #f4f4f4}
+.tree .row .lv{flex:0 0 42px;font-size:10.5px;color:var(--muted);text-align:right;padding-top:2px;
+  letter-spacing:.04em}
+.tree .row .nm{flex:1 1 auto;color:var(--ink)}
+.tree .row .nm .meta{color:var(--muted);font-size:12px;margin-left:6px}
+.tree .row .ar{flex:0 0 auto;font-variant-numeric:tabular-nums;color:var(--text);white-space:nowrap}
+.tree .row.subtotal .nm,.tree .row.subtotal .ar{font-weight:700}
+.gblock{margin:12px 0 4px}
+.gblock .ghead{font-weight:700;color:var(--ink);margin-bottom:3px}
+.gblock .gsub{color:var(--muted);font-weight:600;margin:8px 0 2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.chip{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:3px 11px;font-size:12.5px;color:var(--ink)}
+.warn-sum{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+.warn-sum .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:20px;
+  padding:5px 13px;font-size:12.5px;color:var(--text)}
+.warn-sum .pill b{font-weight:700;color:var(--ink)}
+.warn-sum .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--low)}
+.warn-sum .pill.high .dot{background:var(--high)} .warn-sum .pill.med .dot{background:var(--med)}
+.warn-list .w{border-left:3px solid var(--low);background:var(--soft);
+  padding:11px 14px;margin:9px 0;border-radius:0 7px 7px 0}
+.warn-list .w.high{border-color:var(--high)} .warn-list .w.medium{border-color:var(--med)}
+.warn-list .w .wt{font-weight:700;color:var(--ink);font-size:12.5px}
+.warn-list .w .wt .sev{font-size:11px;color:var(--muted);font-weight:600;margin-left:7px}
+.warn-list .w .wm{margin-top:3px;color:var(--text)}
+.warn-list .w .wl{margin-top:4px;font-size:11.5px;color:var(--muted)}
+.ok{color:#2a8a3e;font-weight:600}
+html{scroll-behavior:smooth}
+section.sec{scroll-margin-top:62px}
+nav.top{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);
+  backdrop-filter:saturate(160%) blur(8px);-webkit-backdrop-filter:saturate(160%) blur(8px);
+  border-bottom:1px solid var(--line)}
+nav.top .inner{max-width:900px;margin:0 auto;padding:10px 30px;display:flex;align-items:center;gap:14px}
+nav.top .ttl{font-weight:700;color:var(--ink);font-size:13px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:36%}
+nav.top .links{display:flex;gap:2px;margin-left:auto;flex-wrap:nowrap;overflow-x:auto}
+nav.top .links a{font-size:12.5px;color:var(--muted);text-decoration:none;padding:5px 11px;border-radius:7px;white-space:nowrap}
+nav.top .links a:hover{background:var(--soft);color:var(--ink)}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px;margin:26px 0 6px}
+.summary .card{border:1px solid var(--line);border-radius:11px;padding:13px 15px;background:#fff}
+.summary .card .k{font-size:11.5px;color:var(--muted);margin-bottom:6px}
+.summary .card .v{font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.01em;font-variant-numeric:tabular-nums;line-height:1.15}
+.summary .card .v .u{font-size:12px;font-weight:500;color:var(--muted);margin-left:3px}
+.summary .card.warn .v{color:var(--accent)}
+.summary .card .sub{font-size:11px;color:var(--muted);margin-top:4px}
+.totalbar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  padding:9px 4px;margin:14px 0 2px;font-weight:700;color:var(--ink);border-bottom:2px solid #e0e0e0}
+.totalbar .ar{font-variant-numeric:tabular-nums;white-space:nowrap}
+details.fac{border:1px solid var(--line);border-radius:10px;margin:8px 0;overflow:hidden}
+details.fac>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:11px;
+  background:var(--soft);font-weight:600;color:var(--ink);user-select:none}
+details.fac>summary::-webkit-details-marker{display:none}
+details.fac>summary .caret{transition:transform .15s ease;color:var(--muted);flex:0 0 auto;font-size:10px}
+details.fac[open]>summary .caret{transform:rotate(90deg)}
+details.fac>summary .fname{flex:1 1 auto}
+details.fac>summary .fmeta{color:var(--muted);font-weight:500;font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+details.fac>summary:hover{background:#f0f0f1}
+details.fac .body{padding:2px 14px 8px}
+details.fac .body .tree{border-top:none}
+footer.doc{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);color:#c0c0c0;font-size:11.5px;text-align:center}
+@media print{.wrap{padding:0}body{font-size:12px}section.sec{break-inside:avoid}nav.top{display:none}details.fac>.body{display:block!important}details.fac>summary .caret{display:none}}
+@media(max-width:560px){dl.kv{grid-template-columns:1fr}dl.kv dt{padding-bottom:0}.wrap{padding:32px 18px 64px}
+  nav.top .ttl{display:none}nav.top .inner{padding:8px 18px}}
+"""
+
+
+def _esc(v: Any) -> str:
+    """HTML 이스케이프. None/빈값은 빈 문자열."""
+    if v is None:
+        return ""
+    return html.escape(str(v), quote=True)
+
+
+def to_html(brief_data: dict, validation: dict) -> str:
+    """지침서 추출 데이터를 미니멀 스타일 HTML 문서로 반환 (보기·인쇄용)."""
+    s  = _extract_sections(brief_data)
+    a, e, r = s["area"], s["eval"], s["reqs"]
+    pi = s["project_info"]
+    flags = sorted(
+        validation.get("flags") or [],
+        key=lambda f: _SEVERITY_ORDER.get(f.get("severity", "low"), 2),
+    )
+    summary = validation.get("summary") or {}
+    bm = brief_data.get("_brief_meta") or {}
+    # 제목: 문서 추출 공모명 우선 (사용자 라벨 brief_name 은 인코딩 깨짐 케이스가 있어 폴백).
+    title = pi["competition_name"] or bm.get("brief_name") or "지침서 분석"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    P: list[str] = []  # body HTML 조각
+
+    def kv(pairs: list[tuple[str, Any]], units: dict | None = None) -> None:
+        """key-value 정의 리스트. value 는 _v 로 포맷 ('(없음)' 처리)."""
+        units = units or {}
+        cells = []
+        for lbl, val in pairs:
+            txt = _v(val, units.get(lbl, ""))
+            empty = txt == "(없음)"
+            cells.append(f"<dt>{_esc(lbl)}</dt>"
+                         f'<dd class="{"empty" if empty else ""}">{_esc(txt)}</dd>')
+        P.append('<dl class="kv">' + "".join(cells) + "</dl>")
+
+    def ul(items: list, fmt=_str_item) -> None:
+        lis = [f"<li>{_esc(fmt(it))}</li>" for it in items if (fmt(it) or "").strip()]
+        if lis:
+            P.append('<ul class="list">' + "".join(lis) + "</ul>")
+
+    # ══ Header ════════════════════════════════════════════════════════════════
+    src = (bm.get("source_format") or "").upper()
+    meta_bits = [f"<span>생성 {now}</span>"]
+    if src:
+        meta_bits.append(f"<span>원본 {_esc(src)}</span>")
+    if brief_data.get("total_pages"):
+        unit = "블록" if src == "DOCX" else "페이지"
+        meta_bits.append(f"<span>{brief_data['total_pages']} {unit}</span>")
+    P.append(
+        '<header class="doc"><div class="eyebrow">설계공모 지침서 분석</div>'
+        f"<h1>{_esc(title)}</h1>"
+        f'<div class="meta">{"".join(meta_bits)}</div></header>'
+    )
+
+    # ══ 핵심 수치 요약 카드 ══════════════════════════════════════════════════════
+    def _num(v) -> str:
+        if isinstance(v, bool):
+            return str(v)
+        if isinstance(v, (int, float)):
+            return f"{int(v):,}" if float(v).is_integer() else f"{v:,.1f}"
+        return str(v)
+
+    high_n = summary.get("high", 0)
+    medium_n = summary.get("medium", 0)
+    low_n = summary.get("low", 0)
+    cards = []
+    for k, val, unit in [
+        ("연면적", a["total_fa"], "㎡"), ("대지면적", a["site_area"], "㎡"),
+        ("용적률", a["far"], "%"), ("건폐율", a["bcr"], "%"),
+        ("지상층수", a["floors_above"], "층"), ("지하층수", a["floors_below"], "층"),
+        ("주차", a["parking"], "대"), ("총배점", e["total_points"], "점"),
+    ]:
+        if val is None or val == "":
+            continue
+        cards.append(f'<div class="card"><div class="k">{_esc(k)}</div>'
+                     f'<div class="v">{_esc(_num(val))}<span class="u">{_esc(unit)}</span></div></div>')
+    warn_total = high_n + medium_n + low_n
+    cards.append(
+        f'<div class="card{" warn" if high_n else ""}"><div class="k">검증 경고</div>'
+        f'<div class="v">{warn_total}<span class="u">건</span></div>'
+        f'<div class="sub">높음 {high_n} · 보통 {medium_n} · 낮음 {low_n}</div></div>'
+    )
+    P.append('<div class="summary">' + "".join(cards) + "</div>")
+
+    nav_items: list[tuple[str, str]] = []  # (anchor, 짧은 라벨)
+
+    def sec(num: int, heading: str, short: str) -> None:
+        nav_items.append((f"s{num}", short))
+        P.append(f'<section id="s{num}" class="sec"><h2>'
+                 f'<span class="n">{num}</span>{_esc(heading)}</h2>')
+
+    def endsec() -> None:
+        P.append("</section>")
+
+    # ══ 1. 사업 개요 ════════════════════════════════════════════════════════════
+    sec(1, "사업 개요", "개요")
+    kv([
+        ("공모명", pi["competition_name"]),
+        ("발주처", pi["organizer"]),
+        ("공모유형", pi["competition_type"]),
+        ("예정공사비", pi["construction_cost_100m_won"]),
+        ("예정설계비", pi["design_cost_100m_won"]),
+        ("공사기간", pi["construction_period_months"]),
+    ], units={"예정공사비": " 억원", "예정설계비": " 억원", "공사기간": " 개월"})
+
+    if pi["budget_notes"]:
+        P.append('<h3 class="sub">예산 산정 기준</h3>')
+        ul(pi["budget_notes"])
+    if pi["special_conditions"]:
+        P.append('<h3 class="sub">특기사항</h3>')
+        ul(pi["special_conditions"])
+    if pi["unit_program"]:
+        P.append('<h3 class="sub">단위세대·시설별 분배</h3>')
+        rows = []
+        for u in pi["unit_program"]:
+            if not isinstance(u, dict):
+                rows.append(f"<li>{_esc(_str_item(u))}</li>")
+                continue
+            head = (u.get("block") or "") + (f"({u.get('tenure')})" if u.get("tenure") else "")
+            if u.get("type_label"):
+                head = (head + " · " if head else "") + u["type_label"]
+            parts = [x for x in (u.get("area_text"), u.get("ratio_text")) if x]
+            if u.get("note"):
+                parts.append(f"비고: {u['note']}")
+            body = " / ".join(parts) if parts else "(내용 없음)"
+            rows.append(f"<li>{_esc((head + ': ' if head else '') + body)}</li>")
+        if rows:
+            P.append('<ul class="list">' + "".join(rows) + "</ul>")
+
+    for i, st in enumerate([x for x in pi["sites"] if isinstance(x, dict)]):
+        sid = st.get("site_id") or f"부지{i+1}"
+        P.append(f'<h3 class="sub">부지개요 · {_esc(sid)}</h3>')
+        fac = st.get("facilities") or []
+        kv([
+            ("위치", st.get("address")), ("용도지역지구", st.get("zoning")),
+            ("공모범위", st.get("scope")),
+            ("도입시설", ", ".join(fac) if fac else None),
+            ("대지면적", st.get("site_area_sqm")), ("연면적", st.get("floor_area_sqm")),
+            ("건폐율", st.get("building_coverage_pct")), ("용적률", st.get("floor_area_ratio_pct")),
+            ("최고높이", st.get("max_height_m")), ("공개공지", st.get("open_space_sqm")),
+            ("공개공지조건", st.get("open_space_notes")),
+        ], units={"대지면적": " ㎡", "연면적": " ㎡", "건폐율": "%", "용적률": "%",
+                  "최고높이": " m", "공개공지": " ㎡"})
+
+    for i, st in enumerate([x for x in a["sites"] if isinstance(x, dict)]):
+        sid = st.get("site_id") or f"부지{i+1}"
+        zoning = st.get("zoning") or []
+        fac = st.get("facilities") or []
+        P.append(f'<h3 class="sub">건축개요 · {_esc(sid)}</h3>')
+        kv([
+            ("위치", st.get("address")),
+            ("지역지구", ", ".join(zoning) if isinstance(zoning, list) else zoning),
+            ("건축구분", st.get("construction_type")), ("건축용도", st.get("building_use")),
+            ("도입시설", ", ".join(fac) if fac else None),
+            ("대지면적", st.get("site_area_sqm")), ("연면적", st.get("floor_area_sqm")),
+            ("건폐율한도", st.get("building_coverage_limit_pct")),
+            ("용적률한도", st.get("floor_area_ratio_limit_pct")),
+            ("최고높이", st.get("max_height_m")),
+            ("공개공지", st.get("public_open_space_sqm")),
+            ("공개공지조건", st.get("public_open_space_notes")),
+        ], units={"대지면적": " ㎡", "연면적": " ㎡", "건폐율한도": "%", "용적률한도": "%",
+                  "최고높이": " m", "공개공지": " ㎡"})
+
+    P.append('<h3 class="sub">전체 규모 한도</h3>')
+    kv([
+        ("요구연면적", a["total_fa"]), ("대지면적", a["site_area"]),
+        ("건폐율한도", a["bcr"]), ("용적률한도", a["far"]), ("높이한도", a["height"]),
+        ("지상층수", a["floors_above"]), ("지하층수", a["floors_below"]),
+        ("주차대수", a["parking"]),
+        ("예정공사비", a["construction_cost"]), ("예정설계비", a["design_fee"]),
+        ("설계기간", a["design_period"]),
+    ], units={"요구연면적": " ㎡", "대지면적": " ㎡", "건폐율한도": "%", "용적률한도": "%",
+              "높이한도": " m", "지상층수": " 층", "지하층수": " 층", "주차대수": " 대"})
+    endsec()
+
+    # ══ 2. 면적 프로그램 ════════════════════════════════════════════════════════
+    sec(2, "면적 프로그램", "면적")
+    _LEVEL = {"site_total": (0, "부지"), "facility": (1, "시설"),
+              "bureau": (2, "영역"), "division": (3, "과"), "space": (4, "세부")}
+
+    if a["area_rows"]:
+        rows = [ar for ar in a["area_rows"] if isinstance(ar, dict)]
+
+        def _row_html(ar: dict) -> str:
+            lvl, lbl = _LEVEL.get(ar.get("row_type") or "space", (4, "세부"))
+            name = _esc(ar.get("name") or "")
+            area_raw = ar.get("area") if ar.get("area") is not None else ar.get("subtotal_area")
+            area_str = _v(area_raw, " ㎡") if area_raw is not None else ""
+            meta = []
+            if ar.get("notes"):
+                meta.append(_esc(ar["notes"]))
+            if ar.get("dept"):
+                meta.append("소관 " + _esc(ar["dept"]))
+            meta_html = f'<span class="meta">{" · ".join(meta)}</span>' if meta else ""
+            cls = "row subtotal" if ar.get("is_subtotal") else "row"
+            pad = max(0, (lvl - 2)) * 16   # 시설 그룹 내부 기준으로 들여쓰기 재정렬
+            return (f'<div class="{cls}"><span class="lv">{_esc(lbl)}</span>'
+                    f'<span class="nm" style="padding-left:{pad}px">{name}{meta_html}</span>'
+                    f'<span class="ar">{_esc(area_str)}</span></div>')
+
+        def _area_str(ar: dict) -> str:
+            raw = ar.get("subtotal_area") if ar.get("subtotal_area") is not None else ar.get("area")
+            return _v(raw, " ㎡") if raw is not None else ""
+
+        # 시설(facility) 단위로 접기 그룹화. site_total 은 독립 합계바. 1000행 벽 방지.
+        collapse = len(rows) > 40          # 큰 지침서면 기본 접힘
+        out: list[str] = []
+        buf: list[str] = []                # 현재 시설 그룹의 자식 행
+        head: dict | None = None           # 현재 시설 헤더 행
+        cnt = 0                            # 현재 그룹 세부(space) 수
+
+        def _flush():
+            nonlocal buf, head, cnt
+            if head is not None:
+                meta = _area_str(head)
+                if cnt:
+                    meta = (meta + " · " if meta else "") + f"{cnt}개 항목"
+                openattr = "" if collapse else " open"
+                out.append(
+                    f'<details class="fac"{openattr}><summary>'
+                    f'<span class="caret">▶</span>'
+                    f'<span class="fname">{_esc(head.get("name") or "")}</span>'
+                    f'<span class="fmeta">{_esc(meta)}</span></summary>'
+                    f'<div class="body"><div class="tree">{"".join(buf)}</div></div></details>'
+                )
+            elif buf:
+                out.append('<div class="tree">' + "".join(buf) + "</div>")
+            buf, head, cnt = [], None, 0
+
+        for ar in rows:
+            rt = ar.get("row_type") or "space"
+            if rt == "site_total":
+                _flush()
+                out.append(f'<div class="totalbar"><span>{_esc(ar.get("name") or "")}</span>'
+                           f'<span class="ar">{_esc(_area_str(ar))}</span></div>')
+            elif rt == "facility":
+                _flush()
+                head = ar
+            else:
+                buf.append(_row_html(ar))
+                if rt == "space":
+                    cnt += 1
+        _flush()
+
+        if collapse and out:
+            out.insert(0, '<div class="note muted">시설명을 눌러 펼치세요 · '
+                          f'총 {len(rows):,}개 행</div>')
+        P.append("".join(out))
+
+    elif a["area_table"]:
+        for grp in a["area_table"]:
+            if not isinstance(grp, dict):
+                continue
+            P.append(f'<h3 class="sub">{_esc(grp.get("group_name") or "(무제)")}</h3>')
+            kv([("부지", grp.get("site_id") or "-"),
+                ("합계면적", grp.get("total_area_sqm"))], units={"합계면적": " ㎡"})
+            trs = []
+            for it in (grp.get("items") or []):
+                if not isinstance(it, dict):
+                    continue
+                trs.append(f'<tr><td>{_esc(it.get("name") or "")}</td>'
+                           f'<td class="num">{_esc(_v(it.get("area_sqm"), " ㎡"))}</td>'
+                           f'<td class="muted">{_esc(it.get("notes") or "")}</td></tr>')
+                for sub in (it.get("sub_items") or []):
+                    if not isinstance(sub, dict):
+                        continue
+                    trs.append(f'<tr><td style="padding-left:26px" class="muted">└ {_esc(sub.get("name") or "")}</td>'
+                               f'<td class="num">{_esc(_v(sub.get("area_sqm"), " ㎡"))}</td>'
+                               f'<td class="muted">{_esc(sub.get("notes") or "")}</td></tr>')
+            if trs:
+                P.append('<table class="t"><thead><tr><th>항목</th><th class="num">면적</th>'
+                         '<th>비고</th></tr></thead><tbody>' + "".join(trs) + "</tbody></table>")
+        if a["shared_areas"]:
+            P.append('<h3 class="sub">공용·공동 면적</h3>')
+            trs = []
+            for sa in a["shared_areas"]:
+                if not isinstance(sa, dict):
+                    continue
+                trs.append(f'<tr><td>{_esc(sa.get("name") or "")}</td>'
+                           f'<td class="num">{_esc(_v(sa.get("area_sqm"), " ㎡"))}</td>'
+                           f'<td class="muted">{_esc(sa.get("notes") or "")}</td></tr>')
+            P.append('<table class="t"><thead><tr><th>항목</th><th class="num">면적</th>'
+                     '<th>비고</th></tr></thead><tbody>' + "".join(trs) + "</tbody></table>")
+
+    elif a["rooms"]:
+        P.append('<h3 class="sub">실별 면적 프로그램</h3>')
+        trs = []
+        for rm in a["rooms"]:
+            if not isinstance(rm, dict):
+                continue
+            area = rm.get("required_area_sqm") or rm.get("area_sqm")
+            cnt = rm.get("required_count") or rm.get("count") or 1
+            trs.append(f'<tr><td>{_esc(rm.get("name") or "")}</td>'
+                       f'<td class="num">{_esc(_v(area, " ㎡"))}</td>'
+                       f'<td class="num">{_esc(cnt)}</td>'
+                       f'<td class="muted">{_esc(rm.get("floor") or "")}</td></tr>')
+        P.append('<table class="t"><thead><tr><th>실명</th><th class="num">면적</th>'
+                 '<th class="num">수량</th><th>위치</th></tr></thead><tbody>'
+                 + "".join(trs) + "</tbody></table>")
+
+    if not a["area_table"] and a["zones"]:
+        P.append('<h3 class="sub">존 구성</h3>')
+        trs = [f'<tr><td>{_esc(z.get("name") or z.get("zone") or "")}</td>'
+               f'<td class="num">{_esc(_v(z.get("area_sqm"), " ㎡"))}</td></tr>'
+               for z in a["zones"] if isinstance(z, dict)]
+        P.append('<table class="t"><thead><tr><th>존</th><th class="num">면적</th>'
+                 '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>")
+    endsec()
+
+    # ══ 3. 심사기준 ════════════════════════════════════════════════════════════
+    sec(3, "심사기준", "심사")
+    kv([("총배점", e["total_points"]), ("평가방법", e["eval_method"]),
+        ("심사단구성", e["jury"])], units={"총배점": " 점"})
+
+    # 동일 이름 병합 (md 와 동일 로직)
+    _merged: list[dict] = []
+    _seen: dict[str, int] = {}
+    for ev in e["rows"]:
+        if not isinstance(ev, dict):
+            continue
+        name = ev.get("name") or "(항목명 없음)"
+        if name in _seen:
+            ex = _merged[_seen[name]]
+            ep, np_ = ex.get("points"), ev.get("points")
+            if isinstance(ep, (int, float)) and isinstance(np_, (int, float)):
+                ex["points"] = ep + np_
+            elif np_ is not None:
+                ex["points"] = np_
+            ex.setdefault("sub_items", []).extend(ev.get("sub_items") or [])
+            sw = ex.get("shared_with") or []
+            sw.extend(x for x in (ev.get("shared_with") or []) if x not in sw)
+            ex["shared_with"] = sw
+        else:
+            _seen[name] = len(_merged)
+            _merged.append(dict(ev))
+
+    running = 0.0
+    trs = []
+    for ev in _merged:
+        name = _esc(ev.get("name") or "(항목명 없음)")
+        pts = ev.get("points")
+        if isinstance(pts, (int, float)):
+            running += pts
+        shared = ev.get("shared_with") or []
+        subs = ev.get("sub_items") or []
+        detail = []
+        if shared:
+            detail.append('<span class="muted">공유배점: ' + _esc(", ".join(shared)) + "</span>")
+        if ev.get("description"):
+            detail.append(_esc(ev["description"]))
+        if subs:
+            detail.append('<ul class="list">'
+                          + "".join(f"<li>{_esc(_str_item(x))}</li>" for x in subs) + "</ul>")
+        detail_html = ("<div>" + "</div><div>".join(detail) + "</div>") if detail else ""
+        trs.append(f'<tr><td>{name}{detail_html}</td>'
+                   f'<td class="num">{_esc(_v(pts, " 점"))}</td></tr>')
+    if trs:
+        sum_txt = f"{running:g} 점" if running else "(없음)"
+        trs.append(f'<tr class="sumrow"><td>배점 합계</td>'
+                   f'<td class="num">{_esc(sum_txt)}</td></tr>')
+        warn = ('<div class="note muted">⚠ 배점 합계가 총배점과 크게 다릅니다 — '
+                '병합셀 중복 집계 가능성 (확인 필요).</div>' if e["points_sum_warning"] else "")
+        P.append('<table class="t"><thead><tr><th>평가항목</th><th class="num">배점</th>'
+                 '</tr></thead><tbody>' + "".join(trs) + "</tbody></table>" + warn)
+
+    if e["disqualify"]:
+        P.append('<h3 class="sub">실격 요건</h3>')
+        ul(e["disqualify"])
+    endsec()
+
+    # ══ 4. 요구사항·설계 지침 ═══════════════════════════════════════════════════
+    sec(4, "요구사항·설계 지침", "지침")
+    if r["requirements"]:
+        P.append('<h3 class="sub">평가축별 요구사항</h3>')
+        trs = []
+        for req in r["requirements"]:
+            if not isinstance(req, dict):
+                continue
+            trs.append(f'<tr><td>{_esc(req.get("axis") or "")}</td>'
+                       f'<td class="num">{_esc(_v(req.get("weight_pct"), "%"))}</td>'
+                       f'<td>{_esc(req.get("description") or "")}</td></tr>')
+        P.append('<table class="t"><thead><tr><th>평가축</th><th class="num">배점비중</th>'
+                 '<th>설명</th></tr></thead><tbody>' + "".join(trs) + "</tbody></table>")
+
+    if r["concept"]:
+        P.append(f'<div class="note"><b>설계방향</b> · {_esc(r["concept"])}</div>')
+
+    grouped_all = s.get("guidelines_grouped") or []
+    if grouped_all:
+        facility_specific = [g for g in grouped_all if (g.get("facility_scope") or "전체") != "전체"]
+        common_grouped = [g for g in grouped_all if (g.get("facility_scope") or "전체") == "전체"]
+
+        def _html_grouped(rows: list[dict], heading: str) -> None:
+            if not rows:
+                return
+            P.append(f'<h3 class="sub">{_esc(heading)}</h3>')
+            order: list[str] = []
+            by_fac: dict[str, list[dict]] = {}
+            for g in rows:
+                fs = (g.get("facility_scope") or "전체").strip() or "전체"
+                if fs not in by_fac:
+                    order.append(fs)
+                    by_fac[fs] = []
+                by_fac[fs].append(g)
+            for fs in order:
+                if fs != "전체":
+                    P.append(f'<h4 class="subsub">[{_esc(fs)}]</h4>')
+                for g in by_fac[fs]:
+                    space = (g.get("space_scope") or "전체").strip() or "전체"
+                    cat = (g.get("category") or "기타").strip() or "기타"
+                    sec_path = (g.get("section_path") or "").strip()
+                    subs = g.get("items_by_sub")
+                    if not subs:
+                        items = g.get("items") or []
+                        if not items:
+                            continue
+                        subs = [{"sub_path": "", "items": items}]
+                    head_parts = []
+                    if space != "전체":
+                        head_parts.append(f"[{space}]")
+                    head_parts.append(cat)
+                    if sec_path:
+                        head_parts.append(f"— {sec_path}")
+                    P.append('<div class="gblock"><div class="ghead">'
+                             + _esc(" ".join(head_parts)) + "</div>")
+                    for sub in subs:
+                        sub_path = (sub.get("sub_path") or "").strip()
+                        sub_items = [it for it in (sub.get("items") or [])
+                                     if isinstance(it, dict) and (it.get("text") or "").strip()]
+                        if not sub_items:
+                            continue
+                        if sub_path:
+                            P.append(f'<div class="gsub">{_esc(sub_path)}</div>')
+                        lis = []
+                        for it in sub_items:
+                            label = (it.get("label") or "").strip()
+                            text = (it.get("text") or "").strip()
+                            prefix = "" if (not label or label == "-") else _esc(label) + " "
+                            lis.append(f"<li>{prefix}{_esc(text)}</li>")
+                        P.append('<ul class="list">' + "".join(lis) + "</ul>")
+                    P.append("</div>")
+
+        _html_grouped(facility_specific, "시설별 지침")
+        _html_grouped(common_grouped, "설계 지침 및 요구사항")
+
+    if not grouped_all:
+        _misc = [
+            ("특수요구사항", r["special_reqs"]), ("기타설계지침", r["design_reqs"]),
+            ("후퇴선요건", r["setbacks"]), ("재료요건", r["materials"]),
+            ("친환경요건", r["sustainability"]), ("금지사항", r["prohibited"]),
+            ("특별지침", r["special_guide"]),
+        ]
+        if any(v for _, v in _misc):
+            P.append('<h3 class="sub">기타 설계 지침</h3>')
+            for lbl, lst in _misc:
+                if lst:
+                    P.append(f'<h4 class="subsub">{_esc(lbl)}</h4>')
+                    ul(lst)
+    endsec()
+
+    # ══ 5. 검증 경고 ════════════════════════════════════════════════════════════
+    sec(5, "검증 경고", "경고")
+    P.append(
+        '<div class="warn-sum">'
+        f'<span class="pill high"><span class="dot"></span>높음 <b>{high_n}</b></span>'
+        f'<span class="pill med"><span class="dot"></span>보통 <b>{medium_n}</b></span>'
+        f'<span class="pill"><span class="dot"></span>낮음 <b>{low_n}</b></span></div>'
+    )
+    if flags:
+        ws = []
+        for f in flags:
+            sv = f.get("severity", "")
+            sev = _SEVERITY_LABEL.get(sv, sv)
+            loc = f'<div class="wl">위치: {_esc(f.get("location"))}</div>' if f.get("location") else ""
+            ws.append(
+                f'<div class="w {_esc(sv)}"><div class="wt">{_esc(f.get("type") or "")}'
+                f'<span class="sev">{_esc(sev)}</span></div>'
+                f'<div class="wm">{_esc(f.get("message") or "")}</div>{loc}</div>'
+            )
+        P.append('<div class="warn-list">' + "".join(ws) + "</div>")
+    else:
+        P.append('<div class="note ok">경고 없음 — 검증 통과</div>')
+    endsec()
+
+    P.append('<footer class="doc">Competition Analyzer · 지침서 분석 리포트</footer>')
+
+    # 상단 고정 내비게이션 (섹션 점프) — body 본문 위에 배치
+    nav_links = "".join(f'<a href="#{anc}">{_esc(lbl)}</a>' for anc, lbl in nav_items)
+    nav_html = (
+        '<nav class="top"><div class="inner">'
+        f'<span class="ttl">{_esc(title)}</span>'
+        f'<span class="links">{nav_links}</span></div></nav>'
+    )
+
+    return (
+        "<!DOCTYPE html><html lang=\"ko\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        f"<title>{_esc(title)} · 지침서 분석</title><style>{_HTML_CSS}</style></head>"
+        f'<body>{nav_html}<div class="wrap">{"".join(P)}</div></body></html>'
+    )
 
 
 # ── Excel (openpyxl) ──────────────────────────────────────────────────────────

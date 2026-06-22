@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
 from services.brief_validator import validate_brief
-from services.brief_checklist_exporter import to_markdown, to_xlsx
+from services.brief_checklist_exporter import to_markdown, to_xlsx, to_html
 
 BRIEF_DATA = {
     '_quantitative': {
@@ -208,3 +208,45 @@ class TestToXlsx:
                         all_fills.add(c.fill.fgColor.rgb)
             non_default = all_fills - {'00000000', '000000', 'FFFFFFFF', None}
             assert len(non_default) > 0, f"severity 색상 미적용: fills={all_fills}"
+
+
+class TestToHtml:
+    def setup_method(self):
+        v_result = validate_brief(BRIEF_DATA, REQUIREMENTS)
+        self.bd = {**BRIEF_DATA, **v_result}
+        self.validation = v_result['validation']
+
+    def test_returns_wellformed_document(self):
+        h = to_html(self.bd, self.validation)
+        assert isinstance(h, str)
+        assert h.startswith('<!DOCTYPE html>')
+        assert h.rstrip().endswith('</html>')
+        # 태그 균형 (void 제외)
+        from html.parser import HTMLParser
+        class _B(HTMLParser):
+            VOID = {'meta', 'br', 'hr', 'img', 'input', 'link', 'col'}
+            def __init__(self): super().__init__(); self.stk = []; self.bad = 0
+            def handle_starttag(self, t, a):
+                if t not in self.VOID: self.stk.append(t)
+            def handle_endtag(self, t):
+                if t in self.VOID: return
+                if self.stk and self.stk[-1] == t: self.stk.pop()
+                else: self.bad += 1
+        b = _B(); b.feed(h)
+        assert b.stk == [] and b.bad == 0
+
+    def test_five_sections(self):
+        h = to_html(self.bd, self.validation)
+        for title in ('사업 개요', '면적 프로그램', '심사기준', '요구사항·설계 지침', '검증 경고'):
+            assert title in h
+
+    def test_content_present(self):
+        h = to_html(self.bd, self.validation)
+        assert '주민센터' in h          # 면적 프로그램
+        assert '30' in h                # 배점
+
+    def test_escapes_html_in_data(self):
+        bd = {**self.bd, '_brief_meta': {'brief_name': '<script>alert(1)</script>'}}
+        h = to_html(bd, self.validation)
+        assert '<script>alert(1)</script>' not in h
+        assert '&lt;script&gt;' in h
