@@ -4,6 +4,7 @@ brief_checklist_exporter.py — 지침서 체크리스트 내보내기 (LLM 호�
 공개 API:
   to_markdown(brief_data, validation) -> str   — Markdown 텍스트
   to_xlsx(brief_data, validation) -> bytes     — Excel 파일 (openpyxl)
+  to_html(brief_data, validation) -> str       — 미니멀 스타일 HTML (보기/인쇄용)
 
 인수:
   brief_data  : _brief.json dict
@@ -11,11 +12,13 @@ brief_checklist_exporter.py — 지침서 체크리스트 내보내기 (LLM 호�
   validation  : brief_data.get("validation", {})
                 {"flags": [...], "summary": {high,medium,low}, "checked_rules": [...]}
 
-4개 섹션/시트:
-  1) 면적·프로그램 요구 — room_program/zones + 면적·비율·층수 한도
-  2) 심사기준 — evaluation_categories 배점표
-  3) 요구사항·필수조건 — requirements 축별 + special_requirements + design_guide
-  4) 검증 경고 — validation.flags (severity 정렬 + xlsx 색 강조)
+섹션 (md/html 5섹션, 셋 다 _extract_sections 공유):
+  1) 사업 개요 — brief_project_info (공모명·발주처·부지별 개요·사업 규모)
+  2) 면적 프로그램 — area_rows/area_table + 면적·비율·층수 한도
+  3) 심사기준 — evaluation_categories 배점표
+  4) 요구사항·설계 지침 — requirements 축별 + design_guidelines_grouped
+  5) 검증 경고 — validation.flags (severity 정렬 + xlsx 색 강조)
+xlsx 는 1) 을 Sheet 1 서브섹션으로 접어 4시트(+ area_rows 시 5.면적표상세).
 
 데이터 경로:
   새 BRIEF taxonomy  : brief_program / brief_regulations / brief_evaluation / brief_design_guide
@@ -1416,7 +1419,11 @@ def to_html(brief_data: dict, validation: dict) -> str:
 # ── Excel (openpyxl) ──────────────────────────────────────────────────────────
 
 def to_xlsx(brief_data: dict, validation: dict) -> bytes:
-    """지침서 체크리스트를 Excel(.xlsx) bytes로 반환. 4개 시트."""
+    """지침서 체크리스트를 Excel(.xlsx) bytes로 반환.
+
+    시트: 1.면적·프로그램(사업개요 서브섹션 포함) / 2.심사기준 / 3.요구사항 /
+    4.검증경고 (+ area_rows 있으면 5.면적표상세).
+    """
     try:
         import openpyxl
         from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
