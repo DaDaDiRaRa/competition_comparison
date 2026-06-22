@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import html
 import io
+import re
 from datetime import datetime
 from typing import Any
 
@@ -99,6 +100,40 @@ def _fmt_num(val: Any, unit: str = "") -> str:
 
 _SEVERITY_LABEL = {"high": "높음", "medium": "보통", "low": "낮음"}
 _SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+
+# 본문 면적표 절 번호 — "3.", "3-3." 등으로 시작하면 양식 모드 해제
+_BODY_HDR_RE = re.compile(r"^\s*\d+\s*[.\-]")
+
+
+def _form_area_pages(brief_data: dict) -> set:
+    """'[서식 N] …면적표' 제출 양식으로 BRIEF_PROGRAM 에 오분류된 페이지 번호 집합.
+
+    분류기가 제출 양식(예: '[서식 13] 건축 세부 면적표')을 BRIEF_PROGRAM 으로 잡으면
+    본문 공간구성 면적표와 같은 실이 두 번 노출됨 (영등포 통합신청사 사례).
+    page_header_text 에 '서식' 이 나오면 양식 시작, 본문 절 번호(3., 3-3.)나
+    '공간구성' 이 나오면 본문 복귀. 연속(계속) 페이지는 직전 상태 유지.
+    page_map 없으면 빈 집합 (안전 — 제외 없음).
+    """
+    pm = {p.get("page"): (p.get("page_header_text") or "")
+          for p in (brief_data.get("page_map") or []) if isinstance(p, dict)}
+    if not pm:
+        return set()
+    prog = brief_data.get("brief_program") or []
+    if isinstance(prog, dict):
+        prog = [prog]
+    pages = sorted(p.get("_page") for p in prog
+                   if isinstance(p, dict) and p.get("_page") is not None)
+    excluded: set = set()
+    in_form = False
+    for pno in pages:
+        h = pm.get(pno, "")
+        if "서식" in h:
+            in_form = True
+        elif _BODY_HDR_RE.match(h) or "공간구성" in h:
+            in_form = False
+        if in_form:
+            excluded.add(pno)
+    return excluded
 
 
 # ── 섹션 데이터 추출 ──────────────────────────────────────────────────────────
@@ -196,15 +231,18 @@ def _extract_sections(brief_data: dict) -> dict:
         or quant.get("parking_count")
     )
 
-    # 계층 면적표 — ALL brief_program 페이지의 area_table / area_rows 합산
+    # 계층 면적표 — ALL brief_program 페이지의 area_table / area_rows 합산.
+    # 단, '[서식 N] 건축 세부 면적표' 같은 제출 양식이 BRIEF_PROGRAM 으로 오분류된
+    # 페이지는 본문 면적표와 같은 실을 중복 노출하므로 제외 (CLAUDE.md Known Issue).
     _bp_all = brief_data.get("brief_program") or []
     if isinstance(_bp_all, dict):
         _bp_all = [_bp_all]
+    _excl = _form_area_pages(brief_data)
     area_table: list = []
     area_rows: list = []   # 신규 flat 방식
     shared_areas: list = []
     for _bpp in _bp_all:
-        if isinstance(_bpp, dict):
+        if isinstance(_bpp, dict) and _bpp.get("_page") not in _excl:
             area_table.extend(_bpp.get("area_table") or [])
             area_rows.extend(_bpp.get("area_rows") or [])
             shared_areas.extend(_bpp.get("shared_areas") or [])
@@ -1054,28 +1092,49 @@ def to_html(brief_data: dict, validation: dict) -> str:
             raw = ar.get("subtotal_area") if ar.get("subtotal_area") is not None else ar.get("area")
             return _v(raw, " ㎡") if raw is not None else ""
 
-        # 시설(facility) 단위로 접기 그룹화. site_total 은 독립 합계바. 1000행 벽 방지.
-        collapse = len(rows) > 40          # 큰 지침서면 기본 접힘
+        def _facility_row(ar: dict) -> str:
+            """자식 없는 시설(요약 표) — 평범한 행으로 렌더 (빈 아코디언 방지)."""
+            return (f'<div class="row subtotal"><span class="lv">시설</span>'
+                    f'<span class="nm">{_esc(ar.get("name") or "")}</span>'
+                    f'<span class="ar">{_esc(_area_str(ar))}</span></div>')
+
+        # 시설(facility) 단위로 접기 그룹화. 자식 있는 시설만 아코디언, 자식 없는 요약
+        # 시설은 평범한 행. site_total 은 독립 합계바. 1000행 벽 방지.
+        has_detail = sum(1 for ar in rows
+                         if (ar.get("row_type") or "space") not in ("site_total", "facility"))
+        collapse = has_detail > 40          # 상세 행이 많으면 기본 접힘
         out: list[str] = []
         buf: list[str] = []                # 현재 시설 그룹의 자식 행
         head: dict | None = None           # 현재 시설 헤더 행
         cnt = 0                            # 현재 그룹 세부(space) 수
+        flat: list[str] = []               # 연속된 요약 시설/고아 행 누적
+
+        def _flush_flat():
+            nonlocal flat
+            if flat:
+                out.append('<div class="tree">' + "".join(flat) + "</div>")
+                flat = []
 
         def _flush():
             nonlocal buf, head, cnt
             if head is not None:
-                meta = _area_str(head)
-                if cnt:
-                    meta = (meta + " · " if meta else "") + f"{cnt}개 항목"
-                openattr = "" if collapse else " open"
-                out.append(
-                    f'<details class="fac"{openattr}><summary>'
-                    f'<span class="caret">▶</span>'
-                    f'<span class="fname">{_esc(head.get("name") or "")}</span>'
-                    f'<span class="fmeta">{_esc(meta)}</span></summary>'
-                    f'<div class="body"><div class="tree">{"".join(buf)}</div></div></details>'
-                )
-            elif buf:
+                if buf:                    # 자식 있음 → 아코디언
+                    _flush_flat()
+                    meta = _area_str(head)
+                    if cnt:
+                        meta = (meta + " · " if meta else "") + f"{cnt}개 항목"
+                    openattr = "" if collapse else " open"
+                    out.append(
+                        f'<details class="fac"{openattr}><summary>'
+                        f'<span class="caret">▶</span>'
+                        f'<span class="fname">{_esc(head.get("name") or "")}</span>'
+                        f'<span class="fmeta">{_esc(meta)}</span></summary>'
+                        f'<div class="body"><div class="tree">{"".join(buf)}</div></div></details>'
+                    )
+                else:                      # 자식 없음 → 요약 행
+                    flat.append(_facility_row(head))
+            elif buf:                      # 시설 헤더 없는 고아 행
+                _flush_flat()
                 out.append('<div class="tree">' + "".join(buf) + "</div>")
             buf, head, cnt = [], None, 0
 
@@ -1083,6 +1142,7 @@ def to_html(brief_data: dict, validation: dict) -> str:
             rt = ar.get("row_type") or "space"
             if rt == "site_total":
                 _flush()
+                _flush_flat()
                 out.append(f'<div class="totalbar"><span>{_esc(ar.get("name") or "")}</span>'
                            f'<span class="ar">{_esc(_area_str(ar))}</span></div>')
             elif rt == "facility":
@@ -1093,10 +1153,11 @@ def to_html(brief_data: dict, validation: dict) -> str:
                 if rt == "space":
                     cnt += 1
         _flush()
+        _flush_flat()
 
         if collapse and out:
             out.insert(0, '<div class="note muted">시설명을 눌러 펼치세요 · '
-                          f'총 {len(rows):,}개 행</div>')
+                          f'세부 {has_detail:,}행</div>')
         P.append("".join(out))
 
     elif a["area_table"]:

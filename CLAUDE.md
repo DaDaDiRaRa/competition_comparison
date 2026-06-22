@@ -36,7 +36,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `myproject_report_generator.py` | `_deep.json` → HTML. LLM 호출 없음. |
 | `archive_search.py` | in-memory SQLite FTS5. `build_index()` 시작 시 1회, `rerun-compare` 후 `rebuild_index()`. `check_same_thread=False` 필수. |
 | `brief_validator.py` | 지침서 검증. LLM 호출 없음. `requirements` 가 dict 아니면 `{}` 교체 (LLM 배열 반환 방어). `_check_points_mismatch` 는 `shared_with` non-empty 또는 합계가 만점과 일치 시 null 항목을 정성평가로 인정 (영등포 false positive 차단). |
-| `brief_checklist_exporter.py` | 지침서 체크리스트 MD/xlsx/HTML. LLM 호출 금지. openpyxl lazy import. 4 시트: 면적·프로그램 / 심사기준 / 요구사항 / 검증경고. `to_html()` 은 `to_markdown` 과 동일한 `_extract_sections()` 데이터로 미니멀 자체완결 HTML (화이트 + 건원 RED, 5섹션). 데이터는 `html.escape` 처리. 회귀: `tests/test_brief_pipeline.py::TestToHtml`. |
+| `brief_checklist_exporter.py` | 지침서 체크리스트 MD/xlsx/HTML. LLM 호출 금지. openpyxl lazy import. 4 시트: 면적·프로그램 / 심사기준 / 요구사항 / 검증경고. `to_html()` 은 `to_markdown` 과 동일한 `_extract_sections()` 데이터로 미니멀 자체완결 HTML (화이트 + 건원 RED, 5섹션, 상단 고정 nav + 핵심수치 카드 + 시설별 접기). 데이터는 `html.escape`. `_form_area_pages()` 가 '[서식 N] …면적표' 제출양식 오분류 페이지를 면적 집계에서 제외 (본문 면적표 중복 차단, 영등포 사례). 회귀: `tests/test_brief_pipeline.py::TestToHtml`. |
 | `grade_helpers.py` | 등급 단일 소스. `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade()`. 모든 리포트 generator 가 공통 import. |
 | `utils.py` | PDF rasterizer (`rasterize_pdf` PyMuPDF), SSE helper, `parse_json_response()` 3단계 복구, 공유 dict 헬퍼 `_first()` / `_as_list()`, `user_error_msg()`, `normalize_design_guidelines_grouped()`. |
 
@@ -215,6 +215,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 - **🟡 BRIEF_EVALUATION 100점 초과 추출 — 가드 4중 구현됨, 실재현 케이스 검증만 미완:** HWP→PDF 병합셀 붕괴로 중복 집계되는 케이스. 방어층: ① 프롬프트 `shared_with` 병합셀 메커니즘 (`points` 는 그룹 대표에만, 나머지 null — 중복 집계 소스 차단, `data_extractor.py` BRIEF_EVALUATION instruction) ② 프롬프트 자가검증 가드 ("합계가 total_points 를 크게 초과하면 병합셀 중복 집계이므로 반드시 수정", 둘 다 commit d4a3432 2026-06-16) ③ DOCX 결정적 표 파서 소계/합계 행 제외 (`_extract_docx_eval_from_table`) ④ `points_sum_warning` 후처리 안전망 (스태킹 95~105 + 개별 페이지 >110, `merge_extracted_data()` 끝 + 스택 경로). 층 ①②는 LLM 의존이라 **실제 병합셀 붕괴 PDF 1건으로 self-correct 작동 확인 미완** (영등포·종로는 합계 100 정상 케이스라 가드 경로 미진입). 결정적 자동 수정 (중복 행 탐지·정정) 은 어느 행이 중복인지 알 수 없어 불가 → `points_sum_warning` 경고가 최종 백스톱.
 - **🟢 BRIEF_EVALUATION null 항목 false positive (해소, commit 3db1100):** 정성평가 항목 (점수 미부여) 과 `shared_with` 병합셀에 medium 경고가 잘못 발생했었음. 영등포 통합신청사 케이스로 재현·수정. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
 - **🟢 BRIEF_SUBMISSION 오분류 페이지에 배점표** — 분류기 수정 없이는 해결 불가. 재분석 후 심사기준 비면 `page_map` 의 `has_scoring_table` 확인.
+- **🟢 제출 양식(서식 N) 면적표 → BRIEF_PROGRAM 오분류 (리포트 측 완화):** '[서식 13] 건축 세부 면적표' 같은 제출양식이 BRIEF_PROGRAM 으로 분류되면 본문 면적표와 같은 실이 두 번 노출 (영등포). 분류기 근본 수정 대신 `brief_checklist_exporter._form_area_pages()` 가 헤더 '서식' 신호로 해당 페이지를 면적 집계에서 제외 (md/xlsx/HTML 공통). 헤더 기반 휴리스틱 — 다른 지침서에서 본문 면적표 누락 시 신호 보강 필요.
 
 ## 다음 작업 (단기)
 
