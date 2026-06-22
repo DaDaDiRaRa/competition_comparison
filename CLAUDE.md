@@ -25,7 +25,8 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `db_manager.py` | JSON DB. `_atomic_write` / `_sync_write` 는 GCSFUSE 플러시 위해 `fsync` 후 rename — 신규 파일 저장 함수 추가 시 반드시 사용. |
 | `docx_loader.py` | DOCX 블록 분할 (PDF 와 완전 독립). `split_docx_to_blocks()` R1~R5 분할 + F1~F3 필터. vMerge 감지는 `_tc` identity + tcPr `w:vMerge` 두 시그널 조합 필수. |
 | `page_classifier.py` | 페이지/블록 분류. `classify_all_pages_brief()` (PDF) / `classify_all_blocks_brief()` (DOCX). `has_scoring_table=False` 면 BRIEF_EVALUATION → BRIEF_ADMIN 강등. |
-| `data_extractor.py` | 페이지/블록 추출. `merge_extracted_data()` 가 `_quantitative` 자동 집계. DOCX BRIEF_EVALUATION 표는 `_extract_docx_eval_from_table()` 로 LLM 없이 파싱 (환각 차단). |
+| `data_extractor.py` | 페이지/블록 추출. `merge_extracted_data()` 가 `_quantitative` 자동 집계. DOCX BRIEF_EVALUATION 표는 `_extract_docx_eval_from_table()` 로 LLM 없이 파싱 (환각 차단). brief 결과면 끝에서 `feasibility_export` 블록도 부착 (try/except, 실패해도 파이프라인 무중단). |
+| `feasibility_export.py` | `_brief.json` → `feasibility_export` 정규화 블록 (연동 앱 arch-law-diagnose 용). **새 추출 없음 · 기존 키 수정 없음 · 추가만.** 이미 추출된 sites/brief_site/sustain 값을 재배치·정규화: 부지 site_id 통일, brief_site "(부지N)" 주소 분해+접두 상속, 인증 코드화(green/zeb/renewable/bf), facilities 괄호 건축법 용도, 사업 규모 최상위 노출. 회귀: `tests/test_feasibility_export.py` (28). 무료 검증: `tools/feasibility_verify.py`. |
 | `llm_client.py` | Claude API 래퍼 `call_messages()`. `system` 은 `str \| list` 모두 지원. 캐시 토큰 로깅. |
 | `comparator.py` | **2-pass blind-reveal.** Pass 1: 익명화 채점, Pass 2: 리빌 후 차별화·gap 분석 (Pass 1 결과만 재전송, 80%+ 토큰 절감). `_compute_gap_analysis()` 결정적 로직으로 alignment 산출. Prompt caching ephemeral. `.replace()` 사용 (`.format()` 은 JSON 중괄호 충돌). |
 | `pattern_builder.py` | 당선 패턴 + `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords). |
@@ -131,6 +132,21 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 폴더명 = `{project_number}_{slugified_competition_name}`. 구 데이터 (`year` 만) 폴백.
 
 ## Schemas
+
+**`_brief.json` 의 `feasibility_export` (연동 블록, schema_version 1):**
+
+```text
+feasibility_export: {
+  schema_version: 1,
+  sites: [{ site_id: "부지N", address, building_law_uses: [...],
+            site_area_sqm, floor_area_ratio_pct, building_coverage_pct, max_height_m }],
+  certifications: { green_building: "최우수"|"우수"|null, zeb_grade: 1~5|null,
+                    renewable_pct: int|null, bf_grade: "최우수"|"우수"|null },
+  construction_cost_100m_won, design_cost_100m_won, construction_period_months
+}
+```
+
+기존 추출값 재배치만 (새 추출·기존 키 수정 없음). `merge_extracted_data()` 가 brief 결과에 부착.
 
 **`comparison.json`:**
 

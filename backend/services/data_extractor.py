@@ -2193,4 +2193,14 @@ def merge_extracted_data(
             be["points_sum_warning"] = True
 
     result["_quantitative"] = quant
+
+    # feasibility_export — 지침서(brief)일 때만, 이미 추출된 값 재배치/정규화 (새 추출 없음).
+    # 별도 앱(arch-law-diagnose) 연동용. 실패해도 파이프라인은 절대 막지 않음.
+    if any(isinstance(k, str) and k.startswith("brief_") for k in result):
+        try:
+            from services.feasibility_export import build_feasibility_export
+            result["feasibility_export"] = build_feasibility_export(result)
+        except Exception:
+            logger.warning("feasibility_export 생성 실패 (무시)", exc_info=True)
+
     return result
