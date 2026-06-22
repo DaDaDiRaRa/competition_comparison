@@ -19,4 +19,6 @@ COPY backend/ ./backend/
 WORKDIR /app/backend
 
 ENV PYTHONUNBUFFERED=1
+# rhwp-python(Rust 바이너리) freetype 링킹 경로 명시
+ENV LD_PRELOAD=/lib/x86_64-linux-gnu/libfreetype.so.6
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

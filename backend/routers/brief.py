@@ -26,8 +26,9 @@ from config import settings, FACILITY_TYPES
 from routers.upload import resolve_file_ref
 from services.db_manager import _atomic_write, _sync_write, _sync_write_bytes, _slugify
 from services.page_classifier import classify_all_pages_brief, classify_all_blocks_brief
-from services.data_extractor import extract_pdf, extract_docx, merge_extracted_data, extract_brief_requirements
+from services.data_extractor import extract_pdf, extract_docx, extract_hwpx, merge_extracted_data, extract_brief_requirements
 from services.docx_loader import split_docx_to_blocks
+from services.hwpx_loader import split_hwpx_to_blocks
 from services.brief_validator import validate_brief
 from services.brief_checklist_exporter import to_markdown, to_xlsx, to_html
 from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count
@@ -36,15 +37,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _MAX_PDF_BYTES  = 200 * 1024 * 1024  # 200 MB
-_MAX_DOCX_BYTES = 50 * 1024 * 1024   # 50 MB
+_MAX_DOCX_BYTES = 50 * 1024 * 1024   # 50 MB (DOCX / HWP / HWPX 공통)
 _PDF_MAGIC      = b"%PDF"
-_DOCX_MAGIC     = b"PK\x03\x04"      # ZIP/OOXML header
+_DOCX_MAGIC     = b"PK\x03\x04"          # ZIP/OOXML header
+_HWPX_MAGIC     = b"PK\x03\x04"          # HWPX = ZIP 컨테이너 (DOCX 와 동일 시그니처)
+_HWP_MAGIC      = b"\xd0\xcf\x11\xe0"    # HWP 5.x = OLE2 compound 컨테이너
 
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 
 def _validate_brief_file(data: bytes, filename: str, name: str = "파일") -> str:
-    """확장자별 검증 후 형식 반환 ("pdf" | "docx")."""
+    """확장자별 검증 후 형식 반환 ("pdf" | "docx" | "hwp" | "hwpx")."""
     ext = Path(filename or "").suffix.lower()
     if ext == ".pdf":
         if len(data) > _MAX_PDF_BYTES:
@@ -66,7 +69,27 @@ def _validate_brief_file(data: bytes, filename: str, name: str = "파일") -> st
         if not data.startswith(_DOCX_MAGIC):
             raise HTTPException(400, f"{name}: DOCX(ZIP) 형식이 아닙니다.")
         return "docx"
-    raise HTTPException(400, "PDF 또는 DOCX 파일만 지원합니다.")
+    if ext == ".hwpx":
+        if len(data) > _MAX_DOCX_BYTES:
+            raise HTTPException(
+                400,
+                f"{name}: 파일 크기가 {_MAX_DOCX_BYTES // 1024 // 1024}MB를 초과합니다 "
+                f"({len(data) // 1024 // 1024}MB).",
+            )
+        if not data.startswith(_HWPX_MAGIC):
+            raise HTTPException(400, f"{name}: HWPX(ZIP) 형식이 아닙니다.")
+        return "hwpx"
+    if ext == ".hwp":
+        if len(data) > _MAX_DOCX_BYTES:
+            raise HTTPException(
+                400,
+                f"{name}: 파일 크기가 {_MAX_DOCX_BYTES // 1024 // 1024}MB를 초과합니다 "
+                f"({len(data) // 1024 // 1024}MB).",
+            )
+        if not data.startswith(_HWP_MAGIC):
+            raise HTTPException(400, f"{name}: HWP(OLE2) 형식이 아닙니다.")
+        return "hwp"
+    raise HTTPException(400, "PDF, DOCX, HWP, HWPX 파일만 지원합니다.")
 
 
 def _briefs_dir() -> Path:
@@ -198,7 +221,7 @@ async def analyze_brief(
             brief_id = brief_id[:120]   # Windows 경로 길이 여유 확보
 
             # ── 1. 분류 ─────────────────────────────────────────────────────
-            classify_msg = "지침서 블록 분류 중" if source_format == "docx" else "지침서 페이지 분류 중"
+            classify_msg = "지침서 블록 분류 중" if source_format in ("docx", "hwp", "hwpx") else "지침서 페이지 분류 중"
             yield sse({
                 "type": "stage", "stage": "classify_brief",
                 "msg": classify_msg, "_timestamp": ts,
@@ -217,6 +240,20 @@ async def analyze_brief(
                 except Exception as e:
                     logger.error("DOCX 파싱 실패: %s", traceback.format_exc())
                     raise RuntimeError(f"DOCX 파싱 오류. PDF로 변환 후 재시도 권장: {type(e).__name__}: {e}") from e
+                classifications = await classify_all_blocks_brief(blocks)
+            elif source_format in ("hwp", "hwpx"):
+                hwpx_path = tmp_dir / f"brief.{source_format}"
+                hwpx_path.write_bytes(file_bytes)
+
+                yield sse({
+                    "type": "progress", "step": "classify_brief",
+                    "page": 0, "total": 1, "_timestamp": ts,
+                })
+                try:
+                    blocks = await asyncio.to_thread(split_hwpx_to_blocks, str(hwpx_path))
+                except Exception as e:
+                    logger.error("HWP/HWPX 파싱 실패: %s", traceback.format_exc())
+                    raise RuntimeError(f"HWP/HWPX 파싱 오류. PDF로 변환 후 재시도 권장: {type(e).__name__}: {e}") from e
                 classifications = await classify_all_blocks_brief(blocks)
             else:
                 pdf_path = tmp_dir / "brief.pdf"
@@ -262,6 +299,10 @@ async def analyze_brief(
             if source_format == "docx":
                 extractions = await extract_docx(
                     str(docx_path), page_map=classifications, is_brief=True,
+                )
+            elif source_format in ("hwp", "hwpx"):
+                extractions = await extract_hwpx(
+                    str(hwpx_path), page_map=classifications, is_brief=True,
                 )
             else:
                 extractions = await extract_pdf(

@@ -89,11 +89,19 @@ export default function BriefMode() {
   const defaultFt = facilityTypes[0]?.key ?? ''
   const ft = facilityType || defaultFt
 
-  // 파일 확장자로 docx 여부 판단
-  const isDocx = !!briefFile && /\.docx$/i.test(briefFile.name || '')
+  // 파일 확장자로 포맷 판단 (텍스트 기반: docx / hwp / hwpx)
+  const fileExt = (briefFile?.name || '').toLowerCase()
+  const isDocx = /\.docx$/.test(fileExt)
+  const isHwp  = /\.(hwp|hwpx)$/.test(fileExt)
+  const fileFormat = isDocx ? 'docx'
+    : /\.hwpx$/.test(fileExt) ? 'hwpx'
+    : /\.hwp$/.test(fileExt) ? 'hwp'
+    : 'pdf'
 
   // complete 이벤트가 알려주는 source_format 우선, 없으면 업로드 파일 확장자 기반
-  const sourceFormat = result?.source_format ?? (isDocx ? 'docx' : 'pdf')
+  const sourceFormat = result?.source_format ?? fileFormat
+  // 블록 기반 포맷(docx/hwp/hwpx)은 flag location 을 "블록 N" 으로 표시
+  const isBlockFormat = sourceFormat === 'docx' || sourceFormat === 'hwp' || sourceFormat === 'hwpx'
 
   const canRun = !!briefFile && !running && !!ft
 
@@ -191,10 +199,10 @@ export default function BriefMode() {
       </div>
 
       <div style={s.group}>
-        <label style={s.label}>지침서 파일 (PDF 또는 DOCX)</label>
+        <label style={s.label}>지침서 파일 (PDF, DOCX, HWP, HWPX)</label>
         <DropZone
-          label="지침서 PDF/DOCX 드래그 또는 클릭"
-          accept=".pdf,.docx"
+          label="지침서 PDF/DOCX/HWP/HWPX 드래그 또는 클릭"
+          accept=".pdf,.docx,.hwp,.hwpx"
           onFiles={setBriefFile}
         />
         {isDocx && (
@@ -208,6 +216,19 @@ export default function BriefMode() {
             padding: '8px 12px',
           }}>
             DOCX 파일: 텍스트와 표만 분석됩니다. 도면이 포함된 지침서는 PDF로 업로드해주세요.
+          </div>
+        )}
+        {isHwp && (
+          <div style={{
+            marginTop: 8,
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+            background: 'var(--color-info-bg)',
+            border: '1px solid var(--color-info)',
+            borderRadius: 6,
+            padding: '8px 12px',
+          }}>
+            HWP/HWPX 파일: 텍스트와 표만 분석됩니다. 도면이 포함된 지침서는 PDF로 업로드해주세요.
           </div>
         )}
       </div>
@@ -280,7 +301,7 @@ export default function BriefMode() {
                   <div style={s.flagMsg}>{flag.message}</div>
                   {flag.location && (
                     <div style={s.flagEvidence}>
-                      {sourceFormat === 'docx'
+                      {isBlockFormat
                         ? flag.location.replace(/p\.(\d+)/g, '블록 $1')
                         : flag.location}
                     </div>
