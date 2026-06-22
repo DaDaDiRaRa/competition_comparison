@@ -48,7 +48,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 - `config.py` — `FACILITY_TYPES`, `PAGE_TYPES_META` (27개), `COMPARISON_AXES_BY_GROUP` (redev/general 8축씩), `RUBRIC_VERSION="v1"`, `MODEL_ID`, `MODEL_ID_CLASSIFY`.
 - `FACILITY_TYPES = {key: {"label_ko": str, "group": "redev"|"general"}}` — 단순 `{key: str}` 아님. `facility_label()` / `axes_for()` 헬퍼 사용.
 - `settings.db_path` — `app_settings.json` 우선, 없으면 `DB_PATH` env (Cloud Run `/data`) 또는 `~/CompetitionAnalyzerDB`.
-- `settings.api_key` — 메모리 우선, 없으면 `ANTHROPIC_API_KEY` env. `_sanitize_api_key()` 가 `echo -n` 아티팩트 (`-n` 접두사·`\r\n`·따옴표) 자동 제거.
+- `settings.api_key` — 메모리 우선, 없으면 `ANTHROPIC_API_KEY` env. `_sanitize_api_key()` 가 `echo -n` 아티팩트 (`-n` 접두사·`\r\n`·따옴표) + UTF-8 BOM·zero-width 문자 자동 제거 (Critical Rules 참조).
 - `app_settings.json` 추적 대상 (DB 경로·DPI·모델 ID). `anthropic_api_key` 는 메모리에만.
 
 ### Frontend Tabs (`App.jsx::TABS`)
@@ -95,7 +95,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 1. PDF 또는 DOCX 업로드. `_validate_brief_file()` 확장자 + magic byte 검증 (`%PDF` / `PK\x03\x04`). PDF ≤200MB, DOCX ≤50MB.
 2. **분류**: PDF → `classify_all_pages_brief()` (vision) / DOCX → `split_docx_to_blocks()` + `classify_all_blocks_brief()` (텍스트, 이미지 토큰 0). `page_map` 스키마 동일 (`page` 필드는 DOCX 에서 `block_num`).
 3. **추출**: PDF → `extract_pdf(is_brief=True)` (vision/tiled/OCR/digital text 다단) / DOCX → `extract_docx(is_brief=True)`. BRIEF_EVALUATION 표는 LLM 없이 직접 파싱.
-4. `merge_extracted_data()` → `_merge_brief_project_info_pages()` 가 `sites[]` / `special_conditions[]` / `unit_program[]` 합침.
+4. `merge_extracted_data()` → `_merge_brief_project_info_pages()` 가 `sites[]` / `special_conditions[]` / `unit_program[]` 합침. brief 결과면 `feasibility_export` 블록도 부착 (Schemas 참조).
 5. `extract_brief_requirements()` → `validate_brief()` → flags + summary.
 6. `_brief_meta.source_format` (`"pdf"` | `"docx"`) 기록.
 7. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write(html)` + `_sync_write_bytes(xlsx)`. 위치: `{db_path}/_briefs/{stamp}_{facility_type}_{slug}.{json|md|html|xlsx}` (≤120자).
@@ -267,9 +267,9 @@ feasibility_export: {
 | V-10d ✓ | 컨텍스트 과적용 방지 | p.46 새 헤더 항목 | 새 헤더는 직전 컨텍스트 미계승 |
 | V-10e ✓ | 그룹 병렬·내부 순차 | 종로구청 분석 stderr 로그 (2026-06-22) | PASS: 5개 design 그룹이 16ms 내 동시 시작(병렬), 다중 페이지 그룹 내부는 직렬(page N+1 은 page N HTTP 완료 후 시작). 코드 구조(`asyncio.gather` + 그룹 내 `for await`)로도 보장 |
 
-**우선순위:** V-2/V-3/V-4 (지침서 핵심) → V-10a~e (`design_guidelines_grouped` 정규화 회귀, 영등포 PDF 필수) → V-1 → V-6/V-7 → V-9.
+**우선순위 (잔여):** V-2/V-3/V-4 (지침서 핵심) → V-1 → V-6/V-7 → V-9. V-10a~e 는 2026-06-22 전부 PASS (`design_guidelines_grouped` 정규화 회귀, 영등포 PDF).
 
-**V-10 자동 회귀:** 2026-06-19 영등포 청사 PDF 로 V-10a~d PASS 확정 (V-10e SSE 한계로 SKIP). 코드 변경 시 무료 재검증:
+**V-10 자동 회귀:** V-10a~d 는 2026-06-19 영등포 PDF 로 PASS 확정. V-10e (그룹 병렬·내부 순차) 는 2026-06-22 종로구청 분석 stderr 로그로 PASS 확정 — 단, 아래 무료 회귀 도구는 fixture 기반이라 V-10a~d 만 재검증 (V-10e 는 stderr 필요로 SKIP). 코드 변경 시:
 
 ```powershell
 backend\venv\Scripts\python.exe tools\v10_validate.py
@@ -296,7 +296,7 @@ npm run dev
 
 **PaddleOCR (선택):** `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision 으로 동작하므로 불필요.
 
-**테스트:** `backend/venv/Scripts/python.exe -m pytest tests/ -v`. DOCX 관련 코드 추가 시 `tests/test_docx_extractor.py` 회귀 보호 필수 (10개 케이스). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일.
+**테스트:** `backend/venv/Scripts/python.exe -m pytest tests/ -v` (현재 266 passed). DOCX 관련 코드 추가 시 `tests/test_docx_extractor.py` 회귀 보호 필수 (10개 케이스). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일. `feasibility_export.py` 수정 시 `tests/test_feasibility_export.py` 46 케이스 + 무료 검증 `tools/feasibility_verify.py`.
 
 ## Deployment
 
