@@ -1833,6 +1833,80 @@ async def extract_docx(
     return sorted(results, key=lambda r: r.get("page", 0))
 
 
+async def extract_hwpx(
+    hwpx_path: str,
+    page_map: list[dict],
+    is_brief: bool = True,
+) -> list[dict]:
+    """HWP/HWPX 블록별 데이터 추출. rasterize 없음, 이미지 토큰 0.
+
+    extract_docx 와 동일한 로직이지만, extract_docx 가 내부에서
+    split_docx_to_blocks(path)(python-docx)를 호출해 HWPX 파일에 그대로 쓸 수 없어
+    별도 함수로 분리 (extract_pdf/extract_docx 와 동일한 병렬 함수 패턴).
+    HWPX 블록 스키마가 DOCX 와 동일하므로 BRIEF_* 추출 헬퍼
+    (_extract_docx_eval_from_table / _extract_docx_block_with_llm /
+    _extract_docx_unit_program_from_table / _merge_unit_program_rows)를 그대로 재사용한다.
+
+    page_map: classify_all_blocks_brief() 반환값. page = block_num.
+    Returns: [{page, type, data, ...}, ...] — extract_pdf 와 동일 스키마.
+    """
+    from services.hwpx_loader import split_hwpx_to_blocks
+    blocks = split_hwpx_to_blocks(hwpx_path)
+    block_by_num = {b["block_num"]: b for b in blocks}
+
+    type_by_block: dict[int, str] = {}
+    for entry in page_map:
+        type_by_block[entry.get("page", 0)] = entry.get("primary_type", "BRIEF_DESIGN_GUIDE")
+
+    sem = asyncio.Semaphore(4)
+
+    async def _extract_one(block: dict) -> dict:
+        bn        = block["block_num"]
+        page_type = type_by_block.get(bn, "BRIEF_DESIGN_GUIDE")
+
+        # 1. BRIEF_ADMIN 스킵
+        if page_type == "BRIEF_ADMIN":
+            return {"page": bn, "type": page_type, "data": {}, "_skipped": True}
+
+        # 프롬프트 선택 (BRIEF_* 우선)
+        prompt_cfg = EXTRACTION_PROMPTS_BRIEF.get(page_type)
+        if prompt_cfg is None:
+            prompt_cfg = EXTRACTION_PROMPTS.get(page_type, FALLBACK_PROMPT)
+
+        # priority=3 페이지는 호출 생략 (토큰 절감, PDF/DOCX 정책 동일)
+        if prompt_cfg.get("priority", 3) >= SKIP_PRIORITY_THRESHOLD:
+            return {"page": bn, "type": page_type, "data": {}, "_skipped": True}
+
+        # 2. BRIEF_EVALUATION + 표 있는 블록: 표 구조 직접 파싱 (환각 차단)
+        if page_type == "BRIEF_EVALUATION" and block.get("table_markdown"):
+            data = await asyncio.to_thread(_extract_docx_eval_from_table, block)
+            if data.get("evaluation_categories"):
+                return {"page": bn, "type": page_type, "data": data, "_source": "hwpx_table"}
+
+        # 3. 그 외: 텍스트 + 표 마크다운을 LLM에 전달
+        async with sem:
+            data = await asyncio.to_thread(
+                _extract_docx_block_with_llm, block, page_type, prompt_cfg
+            )
+
+        # 4. BRIEF_PROJECT_INFO 보강 (DOCX 정책 동일): 표 unit_program 행 머지
+        if (
+            page_type == "BRIEF_PROJECT_INFO"
+            and block.get("table_markdown")
+            and isinstance(data, dict)
+        ):
+            table_unit_rows = _extract_docx_unit_program_from_table(block)
+            if table_unit_rows:
+                llm_unit_rows = data.get("unit_program") or []
+                data["unit_program"] = _merge_unit_program_rows(llm_unit_rows, table_unit_rows)
+
+        return {"page": bn, "type": page_type, "data": data, "_source": "hwpx_llm"}
+
+    target_blocks = [block_by_num[entry["page"]] for entry in page_map if entry["page"] in block_by_num]
+    results = await asyncio.gather(*[_extract_one(b) for b in target_blocks])
+    return sorted(results, key=lambda r: r.get("page", 0))
+
+
 # ── 유틸리티 ──────────────────────────────────────────────────────────────────
 def _extract_brief_reqs_sync(brief_trimmed: dict, axes_str: str) -> dict:
     prompt = (_BRIEF_REQ_PROMPT_TEMPLATE
