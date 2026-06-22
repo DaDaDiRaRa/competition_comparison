@@ -26,7 +26,26 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# 표준 용도지역명 (국토계획법 시행령 별표) — 매칭은 substring 후 최장 우선
+_ZONE_USES = [
+    "제1종전용주거지역", "제2종전용주거지역",
+    "제1종일반주거지역", "제2종일반주거지역", "제3종일반주거지역", "준주거지역",
+    "중심상업지역", "일반상업지역", "근린상업지역", "유통상업지역",
+    "전용공업지역", "일반공업지역", "준공업지역",
+    "보전녹지지역", "생산녹지지역", "자연녹지지역",
+]
+
+# 주차 — 요구 문장의 "N대" 추출 + 요구/운영 구분 키워드
+_PARK_COUNT_RE = re.compile(r"([\d,]{1,7})\s*대")
+_BUJI_RE = re.compile(r"부지\s*(\d+)")
+_PARK_REQ_KW = ("확보", "이상", "계획", "설치", "조성")          # 요구 문장 신호
+_PARK_OPER_KW = ("운영", "기존", "현 ", "개방", "공유", "인근",  # 현황/운영 문장 (요구 아님)
+                 "광장", "유수지", "마트")
+# 심의 결정 — 한도가 법정이 아니라 심의로 정해지는 신호
+_SIMUI_KW = ("심의",)
+_LIMIT_KW = ("건폐율", "용적률", "높이")
 
 # "<주소>(부지N…" 직전 주소 텍스트 + 부지 번호 (쉼표/괄호 전까지가 주소 청크)
 _SITE_MARKER_RE = re.compile(r"([^,(]+?)\s*\(\s*부지\s*(\d+)")
@@ -146,6 +165,84 @@ def _code_certifications(sustain: dict) -> dict:
     }
 
 
+# ── C: 주차대수 구조화 ────────────────────────────────────────────────────────
+
+def _text_of(x: Any) -> str:
+    if isinstance(x, str):
+        return x
+    if isinstance(x, dict):
+        return x.get("text") or x.get("description") or x.get("requirement") or ""
+    return ""
+
+
+def _collect_parking_statements(brief_data: dict) -> list[str]:
+    """주차 요구가 서술된 필드들을 모음 (이미 추출된 brief_design_massing 등)."""
+    out: list[str] = []
+    for m in _as_dict_list(brief_data.get("brief_design_massing")):
+        for key in ("parking_requirements", "massing_guidelines"):
+            for x in m.get(key) or []:
+                s = _text_of(x).strip()
+                if s:
+                    out.append(s)
+    return out
+
+
+def _parse_parking(statements: list[str]) -> tuple[dict[str, tuple[int, str]], str | None]:
+    """요구 문장에서 per-site 주차대수 + 프로젝트 전체 요구 문장(generic) 추출.
+
+    - 요구 문장: "N대" + 요구키워드(확보/이상/계획…) 포함, 운영/현황 문장 제외.
+    - per-site: 'N대' 직전 가장 가까운 "부지N" 마커에 귀속 (예: "'부지1…' 부설주차장으로 430대").
+    - 부지 마커 없는 "총 N대" 문장은 generic 으로 1건만 보관.
+    """
+    per_site: dict[str, tuple[int, str]] = {}
+    generic: str | None = None
+    for s in statements:
+        if any(op in s for op in _PARK_OPER_KW):
+            continue
+        m = _PARK_COUNT_RE.search(s)
+        if not m or not any(kw in s for kw in _PARK_REQ_KW):
+            continue
+        count = int(m.group(1).replace(",", ""))
+        sid = None
+        for bm in _BUJI_RE.finditer(s[:m.start()]):   # count 직전 마지막 부지N
+            sid = f"부지{bm.group(1)}"
+        if sid:
+            per_site.setdefault(sid, (count, s))
+        elif generic is None and "총" in s:
+            generic = s
+    return per_site, generic
+
+
+# ── D: 용도지역 정규화 ────────────────────────────────────────────────────────
+
+def _normalize_zone_use(zoning: Any) -> tuple[str | None, str | None]:
+    """zoning 서술에서 표준 용도지역명 추출. 불확실하면 (None, 원문).
+
+    Returns (zone_use, zone_use_raw). 매칭 성공 시 raw=None, 실패 시 zone_use=None.
+    """
+    if isinstance(zoning, list):
+        text = ", ".join(str(z) for z in zoning if z)
+    else:
+        text = str(zoning or "")
+    if not text.strip():
+        return None, None
+    matches = [z for z in _ZONE_USES if z in text]
+    if matches:
+        return max(matches, key=len), None   # 최장 매칭 (제2종일반주거지역 > 일반주거지역)
+    return None, text
+
+
+# ── E: 심의 결정 플래그 ───────────────────────────────────────────────────────
+
+def _limits_determined_by(special_conditions: list) -> str:
+    """건폐율·용적률·높이가 도시계획위원회 '심의'로 결정되면 '심의', 아니면 '법정'."""
+    for x in special_conditions or []:
+        s = _text_of(x)
+        if any(k in s for k in _SIMUI_KW) and any(k in s for k in _LIMIT_KW):
+            return "심의"
+    return "법정"
+
+
 def build_feasibility_export(brief_data: dict) -> dict:
     """이미 추출된 brief_data 에서 feasibility_export 정규화 블록을 생성.
 
@@ -161,16 +258,34 @@ def build_feasibility_export(brief_data: dict) -> dict:
     if not canonical and parsed_addr:
         canonical = [{"site_id": sid} for sid in sorted(parsed_addr)]
 
+    # 2차 — 서술 파싱 (프로젝트 단위로 1회): 주차 / 심의 플래그
+    park_per_site, park_generic = _parse_parking(_collect_parking_statements(brief_data))
+    limits_by = _limits_determined_by(bpi.get("special_conditions") or [])
+
     sites_out: list[dict] = []
     for i, st in enumerate(canonical):
         sid = st.get("site_id") or f"부지{i + 1}"
         # B: 주소 — 기존 sites[].address 우선, 없으면 brief_site "(부지N)" 분해값
         address = (st.get("address") or "").strip() or parsed_addr.get(sid) or None
+        # 2차 C: 주차 — site-specific 우선, 없으면 count=null + 전체 요구 문구를 note 로
+        pc, pnote = park_per_site.get(sid, (None, None))
+        if pc is None and pnote is None:
+            pnote = park_generic
+        # 2차 D: 용도지역 정규화
+        zone_use, zone_use_raw = _normalize_zone_use(st.get("zoning"))
         sites_out.append({
             "site_id": sid,
             "address": address,
-            # D: 건축법 용도 (괄호표기)
+            # 1차 D: 건축법 용도 (괄호표기)
             "building_law_uses": _building_law_uses(st.get("facilities")),
+            # 2차 C: 주차대수 구조화
+            "required_parking_count": pc,
+            "parking_note": pnote,
+            # 2차 D: 용도지역
+            "zone_use": zone_use,
+            "zone_use_raw": zone_use_raw,
+            # 2차 E: 한도 결정 주체 (소비 앱이 60%/460% 를 법정으로 오인 방지)
+            "limits_determined_by": limits_by,
             # 사업성 검토 핵심 수치 재배치 (이미 추출된 값)
             "site_area_sqm": st.get("site_area_sqm"),
             "floor_area_ratio_pct": st.get("floor_area_ratio_pct"),

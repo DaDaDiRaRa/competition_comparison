@@ -26,22 +26,24 @@ def chk(cid, ok, detail=""):
 
 
 def main():
-    hits = [p for p in glob.glob(BRIEFS + r"\*.json") if "v10" in Path(p).name]
+    # 서술 필드(주차 등)가 풍부한 feas fixture 우선, 없으면 v10
+    hits = [p for p in glob.glob(BRIEFS + r"\*.json") if "feas" in Path(p).name] \
+        or [p for p in glob.glob(BRIEFS + r"\*.json") if "v10" in Path(p).name]
     if not hits:
-        print("FATAL: v10 fixture 없음")
+        print("FATAL: feas/v10 fixture 없음")
         sys.exit(1)
     f = sorted(hits)[-1]
     d = json.load(open(f, encoding="utf-8"))
     print(f"fixture: {f}")
 
-    keys_before = set(d.keys())
+    import copy
+    snap = copy.deepcopy(d)
     fe = build_feasibility_export(d)
 
-    # 무결성: 빌드는 읽기 전용 (기존 키 불변)
-    chk("READONLY", set(d.keys()) == keys_before and "feasibility_export" not in d,
-        "build 가 brief_data 를 변형하지 않음")
+    # 무결성: 빌드는 읽기 전용 (brief_data 전체 불변 — 이미 저장된 feasibility_export 포함)
+    chk("READONLY", d == snap, "build 가 brief_data 를 변형하지 않음")
 
-    chk("SCHEMA", fe.get("schema_version") == 1, f"schema_version={fe.get('schema_version')}")
+    chk("SCHEMA", fe.get("schema_version") == 2, f"schema_version={fe.get('schema_version')}")
 
     sites = fe.get("sites") or []
     # A: site_id 통일
@@ -67,6 +69,18 @@ def main():
         f"cost={fe.get('construction_cost_100m_won')} "
         f"design={fe.get('design_cost_100m_won')} "
         f"period={fe.get('construction_period_months')}")
+
+    # 2차 — 키 존재 (값은 null 일 수 있음)
+    keys2 = ("required_parking_count", "parking_note", "zone_use", "zone_use_raw",
+             "limits_determined_by")
+    chk("2_keys", all(all(k in s for k in keys2) for s in sites),
+        "sites 에 2차 필드(parking/zone/limits) 키 존재")
+    chk("2_limits", all(s.get("limits_determined_by") in ("심의", "법정") for s in sites),
+        " | ".join(f"{s['site_id']}={s.get('limits_determined_by')}" for s in sites))
+    park = " | ".join(f"{s['site_id']}={s.get('required_parking_count')}" for s in sites)
+    zone = " | ".join(f"{s['site_id']}={s.get('zone_use') or '(raw)'}" for s in sites)
+    chk("2_parking", True, park)
+    chk("2_zone", True, zone)
 
     print("=" * 74)
     for cid, ok, detail in _results:
