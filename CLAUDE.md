@@ -212,13 +212,13 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 
 ## Open Issues
 
-- **🟡 BRIEF_EVALUATION 100점 초과 추출 — 안전망만 적용:** HWP→PDF 병합셀 붕괴로 중복 집계. `merge_extracted_data()` 끝에서 `points_sum > 110` 또는 `total_points > 110` 이면 `points_sum_warning=True` 후처리 flag (사용자 인지용). 근본 해결 (추출 프롬프트 가드) 은 재현 케이스 확보 후.
+- **🟡 BRIEF_EVALUATION 100점 초과 추출 — 가드 4중 구현됨, 실재현 케이스 검증만 미완:** HWP→PDF 병합셀 붕괴로 중복 집계되는 케이스. 방어층: ① 프롬프트 `shared_with` 병합셀 메커니즘 (`points` 는 그룹 대표에만, 나머지 null — 중복 집계 소스 차단, `data_extractor.py` BRIEF_EVALUATION instruction) ② 프롬프트 자가검증 가드 ("합계가 total_points 를 크게 초과하면 병합셀 중복 집계이므로 반드시 수정", 둘 다 commit d4a3432 2026-06-16) ③ DOCX 결정적 표 파서 소계/합계 행 제외 (`_extract_docx_eval_from_table`) ④ `points_sum_warning` 후처리 안전망 (스태킹 95~105 + 개별 페이지 >110, `merge_extracted_data()` 끝 + 스택 경로). 층 ①②는 LLM 의존이라 **실제 병합셀 붕괴 PDF 1건으로 self-correct 작동 확인 미완** (영등포·종로는 합계 100 정상 케이스라 가드 경로 미진입). 결정적 자동 수정 (중복 행 탐지·정정) 은 어느 행이 중복인지 알 수 없어 불가 → `points_sum_warning` 경고가 최종 백스톱.
 - **🟢 BRIEF_EVALUATION null 항목 false positive (해소, commit 3db1100):** 정성평가 항목 (점수 미부여) 과 `shared_with` 병합셀에 medium 경고가 잘못 발생했었음. 영등포 통합신청사 케이스로 재현·수정. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
 - **🟢 BRIEF_SUBMISSION 오분류 페이지에 배점표** — 분류기 수정 없이는 해결 불가. 재분석 후 심사기준 비면 `page_map` 의 `has_scoring_table` 확인.
 
 ## 다음 작업 (단기)
 
-- **🟡 BRIEF_EVALUATION 100점 초과 근본 해결:** Open Issue 🟡 연계. HWP→PDF 변환된 지침서 (병합셀 붕괴 케이스) 1건 확보 시 `data_extractor.py` BRIEF_EVALUATION 추출 프롬프트에 중복 집계 가드 추가. 현재는 `points_sum_warning` 후처리 플래그만 있음.
+- **🟡 BRIEF_EVALUATION 100점 초과 — 검증만 잔여:** 프롬프트 가드·안전망 4중은 이미 구현됨 (Open Issue 🟡 참조). 남은 건 코드가 아니라 **검증** — HWP→PDF 병합셀 붕괴 PDF 1건 확보 시 `tools/analyze_brief_cli.py` 로 분석해 ① 합계가 100 근처로 self-correct 되는지 ② 안 되면 `points_sum_warning` 이 켜지는지 확인. 케이스 없으면 보류.
 - **진짜 단순형(1~2단) area_table 케이스 확보:** API 검증 P0-3/P1-3/P2-3/KI/V-10e 는 2026-06-22 완료 (`tools/api_validation.py`, 11 PASS/0 FAIL). 단, 당초 "종로구청=단순형" 전제가 틀림 — 종로구청 세부지침서도 통합청사라 5단 복잡 계층. 영등포·종로 둘 다 복잡형이므로 **단순형(1~2단) area_table 추출 검증은 미확보**. 소규모 단일시설 지침서 1건 확보 시 `tools/analyze_brief_cli.py` 분석 후 별도 검증.
 
 ## Sequences (Future Work, 보류)
