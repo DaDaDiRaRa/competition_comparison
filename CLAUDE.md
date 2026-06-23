@@ -26,11 +26,12 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `docx_loader.py` | DOCX 블록 분할 (PDF 와 완전 독립). `split_docx_to_blocks()` R1~R5 분할 + F1~F3 필터. vMerge 감지는 `_tc` identity + tcPr `w:vMerge` 두 시그널 조합 필수. |
 | `hwpx_loader.py` | HWP/HWPX 블록 분할 (rhwp-python, PDF/DOCX 와 독립). `split_hwpx_to_blocks()` 반환 스키마가 docx_loader 와 **동일** → `classify_all_blocks_brief` / `extract_hwpx` / BRIEF_* 추출 헬퍼 그대로 재사용. `ir.iter_blocks(recurse=False)` 필수 (Critical Rules 참조). 표 HTML → 마크다운 + merge_info 는 docx 호환 `{row,col,merged_rows,value}`. `get_hwpx_source_text()` 는 docx 구현 위임. 회귀: `tests/test_hwpx_loader.py` (22, rhwp monkeypatch). |
 | `page_classifier.py` | 페이지/블록 분류. `classify_all_pages_brief()` (PDF) / `classify_all_blocks_brief()` (DOCX/HWP/HWPX). `has_scoring_table=False` 면 BRIEF_EVALUATION → BRIEF_ADMIN 강등. |
-| `data_extractor.py` | 페이지/블록 추출. `merge_extracted_data()` 가 `_quantitative` 자동 집계. DOCX BRIEF_EVALUATION 표는 `_extract_docx_eval_from_table()` 로 LLM 없이 파싱 (환각 차단). brief 결과면 끝에서 `feasibility_export` 블록도 부착 (try/except, 실패해도 파이프라인 무중단). HWP/HWPX 는 `extract_hwpx()` (split_hwpx_to_blocks 로 파싱, extract_docx 가 python-docx 재파싱이라 hwpx 불가 → 병렬 함수. BRIEF_* 추출 헬퍼·merge_info 스키마 재사용). |
+| `data_extractor.py` | 페이지/블록 추출. `merge_extracted_data()` 가 `_quantitative` 자동 집계. DOCX BRIEF_EVALUATION 표는 `_extract_docx_eval_from_table()` 로 LLM 없이 파싱 (환각 차단). 제안서(브리프 제외) 결과엔 `quant_validator.validate_quantitative()` 로 `_quantitative_flags` 부착 (모순 시에만, 숫자 수정 안 함). brief 결과면 끝에서 `feasibility_export` 블록도 부착 (try/except, 실패해도 파이프라인 무중단). HWP/HWPX 는 `extract_hwpx()` (split_hwpx_to_blocks 로 파싱, extract_docx 가 python-docx 재파싱이라 hwpx 불가 → 병렬 함수. BRIEF_* 추출 헬퍼·merge_info 스키마 재사용). |
+| `quant_validator.py` | `_quantitative` 내부 정합성 결정론 검증 (LLM 0 · 숫자 수정 0). 건폐율=건축/대지, 총연면적≥용적률×대지 등 항등식으로 추출 오류(필드 오결합·환각)를 flag 로만 표시 (`severity: error\|warn`). **단일 소스** — `merge_extracted_data`(추출 직후 `_quantitative_flags` 부착, 제안서만) · `pattern_builder`(error flag 필드 집계 제외) · `tools/data_health.py`(무료 감사) 가 공유. 관대(false positive 회피 — 영등포 교훈). 회귀: `tests/test_quant_validator.py`. |
 | `feasibility_export.py` | `_brief.json` → `feasibility_export` 정규화 블록 (연동 앱 arch-law-diagnose 용, schema_version 2). **새 vision 추출 없음 · 기존 키 수정 없음 · 추가만.** 이미 추출된 값을 재배치·파싱: site_id 통일, brief_site "(부지N)" 주소 분해+접두 상속, 인증 코드화, facilities 괄호 건축법 용도, 사업 규모 노출(1차); 주차 서술→required_parking_count(부지N 마커 귀속), zoning→표준 용도지역명(불확실 시 raw), special_conditions 심의 문구→limits_determined_by(2차). 모두 후처리 파싱이라 BRIEF_* 추출 회귀 없음. 회귀: `tests/test_feasibility_export.py` (46). 무료 검증: `tools/feasibility_verify.py`. |
 | `llm_client.py` | Claude API 래퍼 `call_messages()`. `system` 은 `str \| list` 모두 지원. 캐시 토큰 로깅. |
 | `comparator.py` | **2-pass blind-reveal.** Pass 1: 익명화 채점, Pass 2: 리빌 후 차별화·gap 분석 (Pass 1 결과만 재전송, 80%+ 토큰 절감). `_compute_gap_analysis()` 결정적 로직으로 alignment 산출. Prompt caching ephemeral. `.replace()` 사용 (`.format()` 은 JSON 중괄호 충돌). |
-| `pattern_builder.py` | 당선 패턴 + `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords). |
+| `pattern_builder.py` | 당선 패턴 + `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords). `_build_quant_stats()` 는 `quant_validator` 가 error 로 지목한 필드를 **제출물별** 집계에서 제외 (환각 수치 패턴 유입 차단; warn 은 유지). 저장 `_quantitative_flags` 우선, 없으면(플래그 훅 이전 추출된 구 레코드) 집계 시점 `validate_quantitative()` 재검증. 회귀: `tests/test_quant_validator.py::TestPatternBuilderExcludesFlagged`. |
 | `report_generator.py` | 비교 HTML 리포트 (LLM 호출 없음). `axes_for(facility_type)` 로 시설별 평가축. `gap_section` 블록이 ranking 과 diff 사이 삽입. |
 | `submission_report_generator.py` | 개별 제출물 리포트. LLM 호출 없음. |
 | `diagnosis_report_generator.py` | 진단 리포트. LLM 호출 없음. 종합점수 링 → 페이지바 → 패턴편차 → 충족도 → 요구사항 매핑 → 평가축 상세. |
@@ -199,6 +200,18 @@ _insight: {
 
 **`_quantitative` 키:** `site_area_sqm`, `building_area_sqm`, `total_floor_area_sqm`, `area_above_ground_sqm`, `area_below_ground_sqm`, `floor_area_ratio_pct`, `building_coverage_ratio_pct`, `floors_above`, `floors_below`, `parking_count`.
 
+**`_quantitative_flags` (제안서 추출 시 모순 있을 때만 부착, `quant_validator.validate_quantitative` 결과):**
+
+```text
+[{ rule: "coverage_mismatch"|"floor_area_below_far_implied"|"building_gt_site"
+        |"far_above_ground_mismatch"|"out_of_bounds"|"coverage_gt_far",
+   severity: "error"|"warn",
+   fields: [<_quantitative 키...>],
+   detail: "<한국어 사유>" }]
+```
+
+`error` = 항등식 위반(건폐율≠100×건축/대지, 총연면적<용적률×대지 등) → `pattern_builder._build_quant_stats` 가 해당 `fields` 를 그 제출물 집계에서 제외. `warn` = 소프트 신호(유지). **숫자는 절대 수정 안 함 (플래그만)**. brief 결과엔 미부착. 무료 감사: `tools/data_health.py` (LLM 0, `_quantitative` 정합 + 결측 + 비교 드리프트 + 패턴 N 점검, HARD 결함 수를 exit code 로).
+
 ## Conventions
 
 - **Grading (5-level A/B/C/D/E):** 점수 숫자 아닌 문자열. 임원 검토 시 정밀도 논쟁 차단 + 환각 검증 부담 감소. 구 `score`(0-10) 자동 변환: ≥8.5=A / ≥7=B / ≥5=C / ≥3=D / else=E. 백엔드 `grade_helpers.py`, 프론트 `constants/index.js::GRADE_COLOR/GRADE_BG/toGrade()`.
@@ -233,6 +246,7 @@ _insight: {
 - **BRIEF_EVALUATION 비연속 스태킹:** non-null points 합계 0 이면 `precomputed_eval = None` 폴백. `brief_checklist_exporter._extract_sections()` 는 `max(key=_eval_pts)` 로 페이지 선택 — `_first()` 로 되돌리면 비연속 케이스 누락.
 - **BRIEF_EVALUATION 환각 방어 (5중):** ① `BRIEF_CLASSIFY_PROMPT` NOT 조건 (g)~(j) ② `_NOT_EVAL_HEADER_PATTERNS` 후처리 강등 (`상품 및 내용` 패턴 포함) ③ `MODEL_ID_CLASSIFY` Sonnet 유지 (Haiku 헤더 환각) ④ `FACILITY_CONFLICT_KEYWORDS` + `brief_validator._check_facility_keyword_conflict()` ⑤ `data_extractor` BRIEF_EVALUATION 프롬프트 "환각 금지 (CRITICAL)" 블록. 어느 하나 제거하면 청사 → 연구원 환각 재발.
 - **BRIEF_EVALUATION null 점수 시맨틱:** `_check_points_mismatch` 는 `shared_with` 가 채워졌거나 numeric 합이 만점과 ±1 이내 일치 시 null 항목을 정성평가로 인정 (경고 X). 단순 `points is None → missing` 으로 되돌리면 영등포 (배치계획↔공간계획 병합, 설계의 적정성·창의성 정성평가) false positive 재발. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
+- **환각 수치 패턴 유입 차단 (2단):** `quant_validator.validate_quantitative` 단일 소스로 ① `merge_extracted_data` 가 추출 직후 `_quantitative_flags`(제안서만, 숫자 수정 X) 부착 ② `pattern_builder._build_quant_stats` 가 **error** flag 필드를 패턴 집계에서 제외 (저장 플래그 없으면 재검증 폴백 — 구 레코드도 정화). ②(소비 측)를 빼면 하안주공·public-a 같은 오추출 수치(건폐율 27.46% vs 81.6% 등)가 시설 패턴을 다시 오염시킴. 효과는 패턴 재구축(rerun-compare) 시 반영. 회귀: `tests/test_quant_validator.py` (`TestPatternBuilderExcludesFlagged` 포함). 무료 감사: `tools/data_health.py`.
 - **`_image_block()` JPEG 마법 바이트:** `img_bytes[:3] == b'\xff\xd8\xff'` 이면 `image/jpeg`, 아니면 `image/png`. 포맷 불일치는 400 원인.
 - **API 키 BOM/zero-width 제거:** `config.py::_sanitize_api_key` 는 `.strip()` 외에 UTF-8 BOM(`﻿`)·zero-width 문자도 명시 제거. 메모장·PowerShell `Set-Content -Encoding utf8` 로 키 저장 시 선두 BOM 이 붙어 httpx 헤더 ascii 인코딩에서 `UnicodeEncodeError` 발생 (str.strip() 은 BOM 을 공백으로 안 봄). 회귀: `tests/test_pure_functions.py::TestSanitizeApiKey` 7 케이스.
 - **BRIEF_DESIGN_* 그룹 처리:** `_process_design_group()` 그룹 내부는 **순차** 실행 (직전 페이지 컨텍스트 주입), 그룹간만 `asyncio.gather` 병렬. 그룹 내부 병렬화하면 컨텍스트 누적 깨짐.
@@ -277,7 +291,7 @@ npm run dev
 
 **PaddleOCR (선택):** `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision 으로 동작하므로 불필요.
 
-**테스트:** `cd backend && venv/Scripts/python.exe -m pytest tests/ -v` (현재 288 passed, suite = `backend/tests/`). HWP/HWPX 코드 추가 시 `tests/test_hwpx_loader.py` 회귀 보호 필수 (22 케이스, rhwp monkeypatch — rhwp 미설치 환경도 통과). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일. `feasibility_export.py` 수정 시 `tests/test_feasibility_export.py` 46 케이스 + 무료 검증 `tools/feasibility_verify.py`. ⚠️ DOCX 회귀 `test_docx_extractor.py` (10 케이스) 는 repo-root `tests/` 에 있어 backend 기준 suite(288)에 **미포함** — DOCX 수정 시 별도 실행 (repo-root cwd): `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`.
+**테스트:** `cd backend && venv/Scripts/python.exe -m pytest tests/ -v` (현재 336 passed, suite = `backend/tests/`). HWP/HWPX 코드 추가 시 `tests/test_hwpx_loader.py` 회귀 보호 필수 (22 케이스, rhwp monkeypatch — rhwp 미설치 환경도 통과). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일. `quant_validator.py` / `pattern_builder._build_quant_stats` / `merge_extracted_data` 의 `_quantitative_flags` 훅 수정 시 `tests/test_quant_validator.py` 19 케이스. `feasibility_export.py` 수정 시 `tests/test_feasibility_export.py` 46 케이스 + 무료 검증 `tools/feasibility_verify.py`. ⚠️ DOCX 회귀 `test_docx_extractor.py` (10 케이스) 는 repo-root `tests/` 에 있어 backend 기준 suite(336)에 **미포함** — DOCX 수정 시 별도 실행 (repo-root cwd): `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`. repo-root `tests/` 엔 conftest 없음 — 테스트 파일이 직접 `services.utils` 등을 sys.modules 스텁(`types.ModuleType`)하므로, `data_extractor` 가 `services.utils` 에서 새 심볼을 import 하면 **스텁 함수 목록도 갱신 필수** (안 하면 collection 단계 `cannot import name ... (unknown location)`). 현재 상태: 9 pass / 1 사전실패 `test_force_cut_31_paragraphs` (docx_loader F3 force-cut 미발동, **미해결·brief 전용**).
 
 ## Deployment
 
