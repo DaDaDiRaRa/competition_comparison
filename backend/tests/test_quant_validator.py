@@ -13,6 +13,7 @@ import pytest
 
 from services.quant_validator import validate_quantitative, has_errors
 from services.data_extractor import merge_extracted_data
+from services.pattern_builder import _build_quant_stats
 
 
 def _rules(flags):
@@ -153,3 +154,55 @@ class TestMergeHook:
         }}]
         result = merge_extracted_data(cls, ext)
         assert "_quantitative_flags" not in result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# pattern_builder — error 플래그 필드를 패턴 집계에서 제외
+
+class TestPatternBuilderExcludesFlagged:
+
+    def _sub(self, quant, flags=None):
+        ed = {"_quantitative": quant}
+        if flags is not None:
+            ed["_quantitative_flags"] = flags
+        return {"extracted_data": ed}
+
+    def test_error_flagged_fields_excluded(self):
+        good = self._sub({"building_coverage_ratio_pct": 50.0, "site_area_sqm": 1000.0})
+        bad = self._sub(
+            {"building_coverage_ratio_pct": 20.0, "building_area_sqm": 500.0, "site_area_sqm": 1000.0},
+            [{"rule": "coverage_mismatch", "severity": "error",
+              "fields": ["building_coverage_ratio_pct", "building_area_sqm", "site_area_sqm"]}],
+        )
+        stats = _build_quant_stats([good, bad])
+        # 결함의 건폐율(20)·대지(1000)는 제외 → 정상값만 집계
+        assert stats["building_coverage_ratio_pct"]["n"] == 1
+        assert stats["building_coverage_ratio_pct"]["mean"] == 50.0
+        assert stats["site_area_sqm"]["n"] == 1  # bad 의 site 도 flag fields → 제외
+        assert "building_area_sqm" not in stats  # bad 만 갖고 있었고 제외됨 → 통계 없음
+
+    def test_warn_flag_not_excluded(self):
+        sub = self._sub({"floors_above": 30},
+                        [{"rule": "coverage_gt_far", "severity": "warn", "fields": ["floors_above"]}])
+        assert _build_quant_stats([sub])["floors_above"]["n"] == 1  # warn 은 유지
+
+    def test_no_flags_unchanged(self):
+        sub = self._sub({"parking_count": 100})
+        assert _build_quant_stats([sub])["parking_count"]["n"] == 1
+
+    def test_legacy_record_without_flags_revalidated(self):
+        # 플래그 훅 도입 이전 추출된 구 레코드(_quantitative_flags 키 없음)도
+        # 집계 시점 재검증으로 정화 — 하안주공 실값(건폐율 모순 + 총연면적<용적률함의)
+        bad_legacy = self._sub({
+            "total_floor_area_sqm": 29341.01, "site_area_sqm": 130924.5,
+            "building_area_sqm": 106850.0, "building_coverage_ratio_pct": 27.46,
+            "floor_area_ratio_pct": 327.89, "floors_above": 45, "parking_count": 6895,
+        })  # flags 인자 없음 → 저장 플래그 부재
+        stats = _build_quant_stats([bad_legacy])
+        # 모순 연루 필드는 재검증으로 제외
+        for f in ("building_coverage_ratio_pct", "building_area_sqm",
+                  "site_area_sqm", "total_floor_area_sqm", "floor_area_ratio_pct"):
+            assert f not in stats, f"{f} 재검증 제외 실패(구 레코드 유입)"
+        # 모순과 무관한 필드는 유지
+        assert stats["floors_above"]["mean"] == 45
+        assert stats["parking_count"]["mean"] == 6895

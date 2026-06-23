@@ -5,6 +5,7 @@ from collections import Counter
 from config import settings
 from services.db_manager import get_winning_submissions, get_losing_submissions, save_pattern, list_projects, load_comparison
 from services.llm_client import call_messages
+from services.quant_validator import validate_quantitative
 from services.utils import parse_json_response
 
 
@@ -44,8 +45,23 @@ def _build_quant_stats(submissions: list[dict]) -> dict:
     ]
     collected: dict[str, list[float]] = {f: [] for f in fields}
     for sub in submissions:
-        quant = sub.get("extracted_data", {}).get("_quantitative", {})
+        ed = sub.get("extracted_data", {})
+        quant = ed.get("_quantitative", {})
+        # 추출 정합성 검증(quant_validator)이 error 로 지목한 필드는 이 제출물 집계에서 제외 —
+        # 잘못 추출된 수치(필드 오결합·환각)가 당선/낙선 패턴 통계를 오염시키는 것 차단.
+        # warn 심각도는 유지(소프트 신호). _quantitative_flags 없으면 종전과 동일.
+        # 저장 플래그 우선; 없으면(플래그 훅 도입 이전 추출된 구 레코드) 집계 시점에 재검증
+        # — 하안주공·public-a 등 기존 오염 수치도 무료·결정론으로 정화.
+        qflags = ed.get("_quantitative_flags")
+        if qflags is None:
+            qflags = validate_quantitative(quant)
+        bad_fields: set = set()
+        for fl in qflags or []:
+            if isinstance(fl, dict) and fl.get("severity") == "error":
+                bad_fields.update(fl.get("fields", []) or [])
         for f in fields:
+            if f in bad_fields:
+                continue
             val = quant.get(f)
             if val is not None:
                 try:
