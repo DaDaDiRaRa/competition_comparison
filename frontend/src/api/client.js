@@ -1,7 +1,7 @@
 const BASE = '/api'
 
 // ── 청크 업로드 헬퍼 ──────────────────────────────────────────────────────────
-import { uploadIfLarge, cleanupUpload } from './chunkUpload.js'
+import { uploadIfLarge, cleanupUpload, chunkUpload } from './chunkUpload.js'
 
 // ── 사용자별 API 키 (per-browser, localStorage) ───────────────────────────────
 // 키는 이 브라우저에만 저장되고, 모든 LLM 호출(streamSSE)에 X-Anthropic-Api-Key
@@ -150,7 +150,6 @@ export async function* addSubmission(facilityType, competitionId, formData) {
  *   brief_pdf (File), submissions_json (string), submission_pdfs (File[])
  */
 export async function* runAccumulatePipeline(formData) {
-  const { chunkUpload } = await import('./chunkUpload.js')
   const THRESHOLD = 25 * 1024 * 1024
   const refs = []
 

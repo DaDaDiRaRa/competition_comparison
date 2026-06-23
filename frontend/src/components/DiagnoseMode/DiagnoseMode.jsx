@@ -199,7 +199,7 @@ export default function DiagnoseMode() {
                 <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', padding: '6px 8px', fontWeight: 'var(--font-weight-semibold)' }}>
                   {p.competition_name || p.competition_id}
                   <span style={{ marginLeft: 6, fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', fontWeight: 'var(--font-weight-regular)' }}>
-                    {p.year}
+                    {p.project_number || (p.year ? `${p.year}년` : '')}
                   </span>
                 </div>
                 {(p.submissions || []).map(sub => {

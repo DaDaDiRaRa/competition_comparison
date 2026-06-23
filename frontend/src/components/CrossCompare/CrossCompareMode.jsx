@@ -123,7 +123,12 @@ function ProjectCard({ project, selected, onToggle }) {
       <div style={s.cardHeader} onClick={() => setOpen(v => !v)}>
         <span style={s.badge}>{facilityLabel(project.facility_type)}</span>
         <span style={s.cardName}>{project.competition_name || project.competition_id}</span>
-        <span style={s.projectMeta}>{project.year}년 · 제안서 {subs.length}개</span>
+        <span style={s.projectMeta}>
+          {project.project_number
+            ? `${project.project_number} · `
+            : (project.year ? `${project.year}년 · ` : '')}
+          제안서 {subs.length}개
+        </span>
         <span style={s.chevron(open)}>▼</span>
       </div>
       {open && (

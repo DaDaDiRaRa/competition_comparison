@@ -81,8 +81,9 @@ if "services.llm_client" not in sys.modules:
 
 if "services.utils" not in sys.modules:
     _utils = types.ModuleType("services.utils")
-    for _n in ("get_page_text", "ocr_page", "parse_json_response",
-               "rasterize_pdf", "rasterize_page_tiled", "safe_encode_image"):
+    for _n in ("get_page_text", "normalize_design_guidelines_grouped", "ocr_page",
+               "parse_json_response", "rasterize_pdf", "rasterize_page_tiled",
+               "safe_encode_image"):
         setattr(_utils, _n, lambda *a, **k: None)
 
     def _first(data, key):

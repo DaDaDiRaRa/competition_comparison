@@ -23,6 +23,16 @@ _TMP = Path("/tmp/cc_uploads")
 _MAX_CHUNK = 25 * 1024 * 1024   # 25MB (Cloud Run 32MB 한도 이내)
 _MAX_TOTAL = 600 * 1024 * 1024  # 총 600MB 상한 (제출물 여러 개 합산)
 
+# 허용 문서 컨테이너 시그니처. 청크 업로드는 제안서(PDF)뿐 아니라 지침서
+# (DOCX/HWPX=ZIP, HWP=OLE2) 도 경유하므로 PDF 전용으로 막으면 25MB 초과
+# 비-PDF 지침서 업로드가 깨진다. 정밀 타입 검증은 각 파이프라인(brief/_validate_brief_file 등)
+# 에서 다시 수행하므로 여기서는 알려진 컨테이너인지만 coarse 하게 게이트한다.
+_ALLOWED_MAGIC = (
+    b"%PDF",          # PDF
+    b"PK\x03\x04",    # ZIP/OOXML (DOCX·HWPX)
+    b"\xd0\xcf\x11\xe0",  # OLE2 compound (HWP 5.x)
+)
+
 
 @router.post("/start")
 async def start_upload():
@@ -69,12 +79,12 @@ async def finish_upload(upload_id: str, total_chunks: int = Form(...), filename:
             f.write(chunk_path.read_bytes())
             chunk_path.unlink()
 
-    # PDF 매직 바이트 검사
+    # 문서 컨테이너 매직 바이트 검사 (PDF / DOCX·HWPX=ZIP / HWP=OLE2)
     with out.open("rb") as f:
         magic = f.read(4)
-    if magic != b"%PDF":
+    if not any(magic.startswith(sig) for sig in _ALLOWED_MAGIC):
         out.unlink()
-        raise HTTPException(400, f"{filename}: PDF 형식이 아닙니다.")
+        raise HTTPException(400, f"{filename}: 지원하지 않는 파일 형식입니다 (PDF/DOCX/HWP/HWPX).")
 
     file_ref = f"{upload_id}/{filename}"
     total_size = out.stat().st_size

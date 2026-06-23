@@ -27,7 +27,7 @@ const PALETTE = [
   'var(--color-purple)', '#db2777', '#0284c7',
 ]
 
-function useCompanyColors(companies) {
+function buildCompanyColors(companies) {
   const map = {}
   companies.forEach((c, i) => { map[c] = PALETTE[i % PALETTE.length] })
   return map
@@ -221,7 +221,7 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
     () => comparison?.submissions ? Object.keys(comparison.submissions) : [],
     [comparison?.submissions]
   )
-  const colors = useMemo(() => useCompanyColors(companies), [companies])
+  const colors = useMemo(() => buildCompanyColors(companies), [companies])
   const axes = useMemo(
     () => Object.keys(AXIS_LABEL).filter(ax => companies.some(c => comparison.submissions[c]?.[ax])),
     [companies, comparison?.submissions]

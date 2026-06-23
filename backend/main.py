@@ -2,6 +2,15 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+# Windows 콘솔/파이프(cp949)에서 유니코드 print(em-dash·한글 외 기호)가 startup 을
+# 죽이지 않도록 표준 스트림을 UTF-8 로 강제. lifespan 의 경고 print 가
+# UnicodeEncodeError 로 graceful degradation 을 무력화하고 앱 기동을 막던 회귀 방지.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
