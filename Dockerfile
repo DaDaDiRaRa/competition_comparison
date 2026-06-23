@@ -16,6 +16,8 @@ COPY backend/requirements-server.txt ./
 RUN pip install --no-cache-dir -r requirements-server.txt
 
 COPY backend/ ./backend/
+# 사용자 매뉴얼: /api/readme 가 런타임에 HTML로 렌더링하는 단일 소스
+COPY README.md ./backend/README.md
 WORKDIR /app/backend
 
 ENV PYTHONUNBUFFERED=1

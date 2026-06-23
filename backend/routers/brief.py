@@ -30,6 +30,7 @@ from services.docx_loader import split_docx_to_blocks
 from services.hwpx_loader import split_hwpx_to_blocks
 from services.brief_validator import validate_brief
 from services.brief_checklist_exporter import to_markdown, to_xlsx, to_html
+from services.brief_advisor import interpret_brief
 from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,7 @@ def list_briefs():
                 "has_md":             (briefs_dir / f"{p.stem}.md").exists(),
                 "has_xlsx":           (briefs_dir / f"{p.stem}.xlsx").exists(),
                 "has_html":           (briefs_dir / f"{p.stem}.html").exists(),
+                "has_insight":        bool(meta.get("_insight")),
                 "validation_summary": (meta.get("validation") or {}).get("summary", {}),
             })
         except Exception:
@@ -173,6 +175,7 @@ async def analyze_brief(
     brief_name: str = Form(""),
     brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
+    include_insight: bool = Form(True),
 ):
     """
     지침서 PDF 단독 분석 + 체크리스트 내보내기.
@@ -354,6 +357,29 @@ async def analyze_brief(
                 "_timestamp": ts,
             })
 
+            # ── 4.5 AI 종합 해설 (옵션, LLM 1콜) ─────────────────────────────
+            # 한 방 통합: 추출 직후 같은 run 에서 해설까지. 실패해도 추출 결과는 살림.
+            brief_data["_insight"] = None
+            if include_insight and settings.has_api_key():
+                yield sse({
+                    "type": "stage", "stage": "insight",
+                    "msg": "AI 종합 해설 생성 중", "_timestamp": ts,
+                })
+                try:
+                    brief_data["_insight"] = await interpret_brief(brief_data, facility_type)
+                    yield sse({
+                        "type": "done", "step": "insight",
+                        "data_confidence": (brief_data["_insight"] or {}).get("data_confidence"),
+                        "_timestamp": ts,
+                    })
+                except Exception as ie:
+                    logger.error("brief insight error: %s", traceback.format_exc())
+                    # 해설 실패는 비치명적 — 경고만 보내고 추출 산출물은 그대로 저장
+                    yield sse({
+                        "type": "insight_error",
+                        "message": _user_error_msg(ie), "_timestamp": ts,
+                    })
+
             # ── 5. 저장 — JSON · MD · xlsx ──────────────────────────────────
             yield sse({
                 "type": "stage", "stage": "save",
@@ -403,6 +429,7 @@ async def analyze_brief(
                 "html_filename":      f"{brief_id}.html",
                 "validation_summary": flag_summary,
                 "source_format":      source_format,
+                "has_insight":        bool(brief_data.get("_insight")),
                 "_timestamp":         ts,
             })
 
@@ -414,3 +441,53 @@ async def analyze_brief(
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ── AI 종합 해설 재생성 (옵션, 추출 재처리 없음) ──────────────────────────────
+
+@router.post("/{brief_id}/interpret")
+async def reinterpret_brief(brief_id: str):
+    """저장된 지침서의 AI 종합 해설만 재생성 (LLM 1콜, PDF 재처리 없음).
+
+    용도: 분석 시 해설을 껐다가 나중에 켜기 / 프롬프트 개선 후 기존 분석에 재적용.
+    _brief.json 의 `_insight` 갱신 + HTML 재렌더 (md/xlsx 는 손대지 않음).
+    """
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 입력해주세요.")
+
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+
+    briefs_dir = settings.db_path / "_briefs"
+    json_path  = briefs_dir / f"{safe_id}.json"
+    if not json_path.exists():
+        raise HTTPException(404, "지침서 분석을 찾을 수 없습니다.")
+
+    try:
+        brief_data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"지침서 JSON 로드 실패: {type(e).__name__}")
+
+    facility_type = (brief_data.get("_brief_meta") or {}).get("facility_type", "")
+    try:
+        brief_data["_insight"] = await interpret_brief(brief_data, facility_type)
+    except Exception as e:
+        logger.error("reinterpret error: %s", traceback.format_exc())
+        raise HTTPException(500, f"종합 해설 생성 실패: {_user_error_msg(e)}")
+
+    validation = brief_data.get("validation") or {}
+    try:
+        _atomic_write(json_path, brief_data)
+        _sync_write(briefs_dir / f"{safe_id}.html", to_html(brief_data, validation))
+    except Exception as e:
+        logger.error("reinterpret save error: %s", traceback.format_exc())
+        raise HTTPException(500, f"저장 실패: {type(e).__name__}")
+
+    ins = brief_data.get("_insight") or {}
+    return {
+        "brief_id":        safe_id,
+        "has_insight":     bool(brief_data.get("_insight")),
+        "data_confidence": ins.get("data_confidence"),
+        "html_filename":   f"{safe_id}.html",
+    }

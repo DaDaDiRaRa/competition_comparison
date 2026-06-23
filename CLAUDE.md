@@ -14,7 +14,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 4. **`routers/settings.py`** — `app_settings.json` 관리. `GET /settings/meta` 가 프론트 `useMeta()` 단일 소스.
 5. **`routers/upload.py`** — 청크 업로드 (Cloud Run 32MB 한도 우회). 25MB 청크 / 600MB 상한 / `/tmp/cc_uploads/` 누적.
 6. **`routers/archive.py`** — FTS5 in-memory SQLite 자연어 검색.
-7. **`routers/brief.py`** — 지침서 단독 분석 (PDF + DOCX + HWP/HWPX). 분류 → 추출 → 요구사항 → 검증 → JSON/MD/xlsx/HTML 저장. HTML 은 `/exports/{name}.html` 에서 인라인(text/html, 보기용), md/xlsx 는 attachment.
+7. **`routers/brief.py`** — 지침서 단독 분석 (PDF + DOCX + HWP/HWPX). 분류 → 추출 → 요구사항 → 검증 → (옵션) AI 종합 해설 → JSON/MD/xlsx/HTML 저장. HTML 은 `/exports/{name}.html` 에서 인라인(text/html, 보기용), md/xlsx 는 attachment. `analyze` 폼 `include_insight`(기본 ON) 가 같은 run 에서 종합 해설까지 한 방. `POST /{brief_id}/interpret` 는 해설만 재생성(추출 재처리 0, 분석 시 껐거나 프롬프트 개선 후 재적용용).
 
 **MyProject 심층 분석:** 별도 라우터 없음. `accumulate.py` 가 단일 등록 시 `myproject_analyzer.deep_analyze()` 호출 → `_deep.json` + `_deep.html`. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report` 로 서빙.
 
@@ -39,8 +39,10 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `archive_search.py` | in-memory SQLite FTS5. `build_index()` 시작 시 1회, `rerun-compare` 후 `rebuild_index()`. `check_same_thread=False` 필수. |
 | `brief_validator.py` | 지침서 검증. LLM 호출 없음. `requirements` 가 dict 아니면 `{}` 교체 (LLM 배열 반환 방어). `_check_points_mismatch` 는 `shared_with` non-empty 또는 합계가 만점과 일치 시 null 항목을 정성평가로 인정 (영등포 false positive 차단). |
 | `brief_checklist_exporter.py` | 지침서 체크리스트 MD/xlsx/HTML. LLM 호출 금지. openpyxl lazy import. xlsx 시트: 1.면적·프로그램(사업개요 서브섹션 포함) / 2.심사기준 / 3.요구사항 / 4.검증경고 (+ area_rows 있으면 5.면적표상세). `to_html()` 은 `to_markdown` 과 동일한 `_extract_sections()` 데이터로 미니멀 자체완결 HTML (화이트 + 건원 RED, 5섹션, 상단 고정 nav + 핵심수치 카드 + 시설별 접기). 데이터는 `html.escape`. `_form_area_pages()` 가 '[서식 N] …면적표' 제출양식 오분류 페이지를 면적 집계에서 제외 (본문 면적표 중복 차단, 영등포 사례). 회귀: `tests/test_brief_pipeline.py::TestToHtml`. |
+| `brief_advisor.py` | 지침서 "AI 종합 해설" (안전한 ②: 종합·번역 + 강조점 탐지, **외부 당락 예측 없음**). 결정론 백본 `compute_scoring_focus()`(배점 랭킹, null/shared_with 시맨틱=`brief_validator._check_points_mismatch` 와 동일) + `extract_emphasis_signals()`(강조어휘 문장 + category_weights, 강조문장 dedup) → 이 신호 위에서 `interpret_brief()`(LLM 1콜, comparator 패턴) 가 종합. 가드 4: 근거한정·인용필수(페이지 추측 금지)·예측금지·중립탐지. LLM 의 scoring_focus 환각은 결정론 값으로 덮어씀. 연료=`brief_evaluation`+`design_guidelines_grouped`. 회귀: `tests/test_brief_advisor.py`. |
 | `grade_helpers.py` | 등급 단일 소스. `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade()`. 모든 리포트 generator 가 공통 import. |
 | `utils.py` | PDF rasterizer (`rasterize_pdf` PyMuPDF), SSE helper, `parse_json_response()` 3단계 복구, 공유 dict 헬퍼 `_first()` / `_as_list()`, `user_error_msg()`, `normalize_design_guidelines_grouped()`. |
+| `readme_renderer.py` | 도움말(`/api/readme`) 단일 소스. `README.md` 원문 → 화이트+건원RED 자체완결 HTML. LLM 호출 없음. `markdown`(tables/fenced_code/sane_lists/toc + `slugify_unicode` 로 한글 목차 앵커 동작) 사용, 렌더 실패 시 `<pre>` 폴백. 외부 링크는 새 탭, 로컬 문서 링크(DEVELOPER.md 등 미서빙)는 클라이언트 스크립트가 비활성화. 별도 `README.html` 미유지 → 드리프트 없음. |
 
 **Report Generation Rule:** `report_generator.py`, `submission_report_generator.py`, `diagnosis_report_generator.py`, `myproject_report_generator.py` 는 모두 Claude API 호출 금지. 기존 데이터를 HTML 로 렌더링만.
 
@@ -60,7 +62,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 4. **DiagnoseMode** — 신규 제출물 진단. `pattern` prop 으로 정량 비교 바.
 5. **SettingsPanel** — 설정 + `PatternViewer` (시설유형 탭 + 당선/낙선 통계).
 6. **ArchiveMode** — 자연어 검색 + 카드 그리드 + 슬라이드오버 (`AxisAccordion` 펼침).
-7. **BriefMode** — 지침서 단독 분석. `accept=".pdf,.docx,.hwp,.hwpx"`. docx / hwp·hwpx 선택 시 "도면 포함 지침서는 PDF로" 안내. 블록 기반 포맷(docx/hwp/hwpx)일 때 flag location `p.N` → `블록 N` 치환 (`isBlockFormat`).
+7. **BriefMode** — 지침서 단독 분석. `accept=".pdf,.docx,.hwp,.hwpx"`. docx / hwp·hwpx 선택 시 "도면 포함 지침서는 PDF로" 안내. 블록 기반 포맷(docx/hwp/hwpx)일 때 flag location `p.N` → `블록 N` 치환 (`isBlockFormat`). "AI 종합 해설 포함" 체크박스(기본 ON)로 `include_insight` 토글, 결과에 포함 배지 / 미포함 시 재생성 버튼(`reinterpretBrief`).
 
 **Key components:** `useMeta()` 훅이 시설유형·페이지타입·평가축 한국어 레이블 단일 소스 (`/settings/meta` 1회 fetch). 하드코딩 금지. `useMeta.jsx` JSX 포함하므로 `.jsx` 확장자 필수.
 
@@ -98,9 +100,10 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 3. **추출**: PDF → `extract_pdf(is_brief=True)` (vision/tiled/OCR/digital text 다단) / DOCX → `extract_docx(is_brief=True)` / HWP·HWPX → `extract_hwpx(is_brief=True)`. BRIEF_EVALUATION 표는 LLM 없이 직접 파싱.
 4. `merge_extracted_data()` → `_merge_brief_project_info_pages()` 가 `sites[]` / `special_conditions[]` / `unit_program[]` 합침. brief 결과면 `feasibility_export` 블록도 부착 (Schemas 참조).
 5. `extract_brief_requirements()` → `validate_brief()` → flags + summary.
-6. `_brief_meta.source_format` (`"pdf"` | `"docx"` | `"hwp"` | `"hwpx"`) 기록.
-7. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write(html)` + `_sync_write_bytes(xlsx)`. 위치: `{db_path}/_briefs/{stamp}_{facility_type}_{slug}.{json|md|html|xlsx}` (≤120자).
-8. SSE `complete`: `{brief_id, md_filename, xlsx_filename, html_filename, validation_summary, source_format}`. accumulate 의 `done`/`brief` 이벤트도 `html_filename` 포함.
+6. **AI 종합 해설 (옵션, `include_insight` 기본 ON)**: `brief_advisor.interpret_brief()` LLM 1콜 → `brief_data["_insight"]` 임베드 (별도 파일 아님). 한 방 통합(diagnose 패턴), 실패해도 비치명적(추출 산출물 유지). `to_html` 가 `_insight` 폴백으로 "AI 종합 해설" 섹션을 핵심수치 카드 직후 렌더(LLM 0).
+7. `_brief_meta.source_format` (`"pdf"` | `"docx"` | `"hwp"` | `"hwpx"`) 기록.
+8. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write(html)` + `_sync_write_bytes(xlsx)`. 위치: `{db_path}/_briefs/{stamp}_{facility_type}_{slug}.{json|md|html|xlsx}` (≤120자).
+9. SSE `complete`: `{brief_id, md_filename, xlsx_filename, html_filename, validation_summary, source_format, has_insight}`. accumulate 의 `done`/`brief` 이벤트도 `html_filename` 포함.
 
 ### Diagnose
 
@@ -177,6 +180,23 @@ feasibility_export: {
 
 `grade` 는 `"A"|"B"|"C"|"D"|"E"|null`.
 
+**`_brief.json` 의 `_insight` (AI 종합 해설, `brief_advisor.interpret_brief()` 결과, schema_version 1):**
+
+```text
+_insight: {
+  schema_version: 1, brief_id, facility_type, generated_at, model_id,
+  synthesis_summary: str,                                   # ① 평어 압축
+  key_emphases: [{topic, signal_strength: "strong|medium|weak",
+                  signals: [...], basis: [...], note}],     # 안전한 ②
+  scoring_focus: [{category, points, weight_pct, shared_with, rank}],  # 결정론 (LLM 환각 차단용 덮어씀)
+  must_not_miss: [{item, basis}],
+  hidden_constraints: [{issue, basis, note}],
+  reading_guide: [str], data_confidence: "high|medium|low", caveats: [str]
+}
+```
+
+`basis`/인용은 데이터에 실재하는 위치만 (`(p.N)` 또는 카테고리명) — 페이지 추측 금지. 외부 당락 예측 없음.
+
 **`_quantitative` 키:** `site_area_sqm`, `building_area_sqm`, `total_floor_area_sqm`, `area_above_ground_sqm`, `area_below_ground_sqm`, `floor_area_ratio_pct`, `building_coverage_ratio_pct`, `floors_above`, `floors_below`, `parking_count`.
 
 ## Conventions
@@ -235,14 +255,9 @@ feasibility_export: {
 ## Open Issues
 
 - **🔴 배포 앱 완전 공개 + 멀티테넌시 미비 (보안):** Cloud Run `roles/run.invoker = allUsers` + `ingress = all` + 앱 자체 로그인 없음 ⇒ **URL 아는 누구나 접근**. 구조적 위험: ① `settings.api_key` 가 서버 메모리 전역 1개 → 한 사용자가 입력한 키를 같은 인스턴스의 다른 방문자가 그대로 사용 가능 (키 소유자 과금) ② DB 공유 — 모두 같은 데이터 열람/수정 ③ URL 이 유일한 비밀(공유·인덱싱 가능). 잠그는 옵션: **A) IAP** (구글 로그인 지정 계정만 — 사내팀 정석) · **B) FastAPI 앱 비밀번호/로그인 게이트** (공개 URL 유지) · **C) Cloud Run IAM `allUsers` 제거** (+브라우저는 IAP 병행) · **D) ingress 내부망 한정**. 최소한 API 키 사용자별 분리 또는 접근 게이트가 비용 사고 방지에 필요. 현황 확인: `gcloud run services get-iam-policy competition-analyzer --region asia-northeast3` (allUsers 여부) + `--format="value(metadata.annotations['run.googleapis.com/ingress'])"`.
-- **🟡 BRIEF_EVALUATION 100점 초과 추출 — 가드 4중 구현됨, 실재현 케이스 검증만 미완:** HWP→PDF 병합셀 붕괴로 중복 집계되는 케이스. 방어층: ① 프롬프트 `shared_with` 병합셀 메커니즘 (`points` 는 그룹 대표에만, 나머지 null — 중복 집계 소스 차단, `data_extractor.py` BRIEF_EVALUATION instruction) ② 프롬프트 자가검증 가드 ("합계가 total_points 를 크게 초과하면 병합셀 중복 집계이므로 반드시 수정", 둘 다 commit d4a3432 2026-06-16) ③ DOCX 결정적 표 파서 소계/합계 행 제외 (`_extract_docx_eval_from_table`) ④ `points_sum_warning` 후처리 안전망 (스태킹 95~105 + 개별 페이지 >110, `merge_extracted_data()` 끝 + 스택 경로). 층 ①②는 LLM 의존이라 **실제 병합셀 붕괴 PDF 1건으로 self-correct 작동 확인 미완** (영등포·종로는 합계 100 정상 케이스라 가드 경로 미진입). 결정적 자동 수정 (중복 행 탐지·정정) 은 어느 행이 중복인지 알 수 없어 불가 → `points_sum_warning` 경고가 최종 백스톱.
-- **🟢 BRIEF_EVALUATION null 항목 false positive (해소, commit 3db1100):** 정성평가 항목 (점수 미부여) 과 `shared_with` 병합셀에 medium 경고가 잘못 발생했었음. 영등포 통합신청사 케이스로 재현·수정. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
-- **🟢 BRIEF_SUBMISSION 오분류 페이지에 배점표** — 분류기 수정 없이는 해결 불가. 재분석 후 심사기준 비면 `page_map` 의 `has_scoring_table` 확인.
-- **🟢 제출 양식(서식 N) 면적표 → BRIEF_PROGRAM 오분류 (리포트 측 완화):** '[서식 13] 건축 세부 면적표' 같은 제출양식이 BRIEF_PROGRAM 으로 분류되면 본문 면적표와 같은 실이 두 번 노출 (영등포). 분류기 근본 수정 대신 `brief_checklist_exporter._form_area_pages()` 가 헤더 '서식' 신호로 해당 페이지를 면적 집계에서 제외 (md/xlsx/HTML 공통). 헤더 기반 휴리스틱 — 다른 지침서에서 본문 면적표 누락 시 신호 보강 필요.
 
 ## 다음 작업 (단기)
 
-- **🟡 BRIEF_EVALUATION 100점 초과 — 검증만 잔여:** 프롬프트 가드·안전망 4중은 이미 구현됨 (Open Issue 🟡 참조). 남은 건 코드가 아니라 **검증** — HWP→PDF 병합셀 붕괴 PDF 1건 확보 시 `tools/analyze_brief_cli.py` 로 분석해 ① 합계가 100 근처로 self-correct 되는지 ② 안 되면 `points_sum_warning` 이 켜지는지 확인. 케이스 없으면 보류.
 - **진짜 단순형(1~2단) area_table 케이스 확보:** API 검증 P0-3/P1-3/P2-3/KI/V-10e 는 2026-06-22 완료 (`tools/api_validation.py`, 11 PASS/0 FAIL). 단, 당초 "종로구청=단순형" 전제가 틀림 — 종로구청 세부지침서도 통합청사라 5단 복잡 계층. 영등포·종로 둘 다 복잡형이므로 **단순형(1~2단) area_table 추출 검증은 미확보**. 소규모 단일시설 지침서 1건 확보 시 `tools/analyze_brief_cli.py` 분석 후 별도 검증.
 
 ## Sequences (Future Work, 보류)
@@ -266,21 +281,8 @@ feasibility_export: {
 | V-7 | `rubric_version` MyProject | MyProject 등록 → `_deep.json` | `"rubric_version": "v1"` |
 | V-8 | 스캔본 PDF → Vision fallback | 스캔 PDF 파이프라인 | Tier 0 None → Vision 자연 전환, `_source: "vision"` |
 | V-9 | `grade_justification` 출력 | 비교/MyProject JSON·HTML | 각 axis 에 `"신호 X/Y개 충족 → <등급> 기준 행과 일치"` |
-| V-10a ✓ | BRIEF_DESIGN_* 페이지별 추출 | 영등포 청사 PDF → `_brief.json` | 각 페이지 자체 `design_guidelines_grouped`. `_merged: true` 없음 |
-| V-10b ✓ | 컨텍스트 주입 정상화 | p.46/47 면대실·비품창고 항목 | `facility_scope: "구청"` + `section_path: "직무공간 (부서 사무실) > ..."` |
-| V-10c ✓ | 엑셀 시트 3 라우팅 | xlsx 시트 3 `[직무공간] (부서 사무실)` 헤더 | 대민업무상담실·비품창고·기타 부서별 자식으로 묶임 |
-| V-10d ✓ | 컨텍스트 과적용 방지 | p.46 새 헤더 항목 | 새 헤더는 직전 컨텍스트 미계승 |
-| V-10e ✓ | 그룹 병렬·내부 순차 | 종로구청 분석 stderr 로그 (2026-06-22) | PASS: 5개 design 그룹이 16ms 내 동시 시작(병렬), 다중 페이지 그룹 내부는 직렬(page N+1 은 page N HTTP 완료 후 시작). 코드 구조(`asyncio.gather` + 그룹 내 `for await`)로도 보장 |
 
-**우선순위 (잔여):** V-2/V-3/V-4 (지침서 핵심) → V-1 → V-6/V-7 → V-9. V-10a~e 는 2026-06-22 전부 PASS (`design_guidelines_grouped` 정규화 회귀, 영등포 PDF).
-
-**V-10 자동 회귀:** V-10a~d 는 2026-06-19 영등포 PDF 로 PASS 확정. V-10e (그룹 병렬·내부 순차) 는 2026-06-22 종로구청 분석 stderr 로그로 PASS 확정 — 단, 아래 무료 회귀 도구는 fixture 기반이라 V-10a~d 만 재검증 (V-10e 는 stderr 필요로 SKIP). 코드 변경 시:
-
-```powershell
-backend\venv\Scripts\python.exe tools\v10_validate.py
-```
-
-스크립트가 `C:\Temp\CompTestDB\_briefs\20260619_161407_public_*.{json,xlsx}` fixture 기준 4 PASS 확인. PDF 재분석으로 brief_id 바뀌면 `PATTERN` 상수 갱신.
+**우선순위 (잔여):** V-2/V-3/V-4 (지침서 핵심) → V-1 → V-6/V-7 → V-9.
 
 ## Local Dev
 

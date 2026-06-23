@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import set_request_api_key
@@ -67,18 +67,25 @@ def health():
 
 @app.get("/api/readme")
 def readme():
+    """사용자 매뉴얼: README.md(단일 소스)를 HTML로 런타임 렌더링해 서빙.
+
+    별도 README.html 을 유지하지 않으므로 콘텐츠 드리프트가 없다. 경로는
+    PyInstaller 번들 → Docker 이미지(/app/backend) → 로컬 dev(리포 루트) 순.
+    """
+    from services.readme_renderer import render_readme_html
+
     bundle = getattr(sys, "_MEIPASS", None)
     candidates = []
     if bundle:
-        candidates.append(Path(bundle) / "README.html")
+        candidates.append(Path(bundle) / "README.md")
     candidates.extend([
-        Path(__file__).parent.parent.parent / "README.html",
-        Path(__file__).parent.parent.parent / "docs" / "README.html",
+        Path(__file__).parent / "README.md",        # Docker 이미지: /app/backend/README.md
+        Path(__file__).parent.parent / "README.md",  # 로컬 dev: 리포 루트
     ])
-    for p in candidates:
-        if p.exists():
-            return FileResponse(p, media_type="text/html")
-    raise HTTPException(404, "README.html not found")
+    md_path = next((p for p in candidates if p.exists()), None)
+    if md_path is None:
+        raise HTTPException(404, "README.md not found")
+    return HTMLResponse(render_readme_html(md_path.read_text(encoding="utf-8")))
 
 
 @app.get("/api/version")

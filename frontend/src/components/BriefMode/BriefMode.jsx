@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -85,6 +85,9 @@ export default function BriefMode() {
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)   // complete 이벤트 payload
   const [flags, setFlags] = useState([])        // validate done의 flag_list
+  const [includeInsight, setIncludeInsight] = useState(true)  // AI 종합 해설 포함 여부
+  const [regening, setRegening] = useState(false)             // 해설 재생성 진행 중
+  const [regenErr, setRegenErr] = useState('')
 
   const defaultFt = facilityTypes[0]?.key ?? ''
   const ft = facilityType || defaultFt
@@ -111,10 +114,13 @@ export default function BriefMode() {
     setResult(null)
     setFlags([])
 
+    setRegenErr('')
+
     const fd = new FormData()
     fd.append('facility_type', ft)
     fd.append('brief_name', briefName.trim())
     fd.append('brief_pdf', briefFile)
+    fd.append('include_insight', includeInsight ? 'true' : 'false')
 
     try {
       for await (const ev of runBriefAnalyze(fd)) {
@@ -164,6 +170,20 @@ export default function BriefMode() {
     } else {
       window.open(url, '_blank', 'noopener')
     }
+  }
+
+  // AI 종합 해설만 재생성 (분석 시 껐거나 실패한 경우). 추출 재처리 없음.
+  const handleRegenInsight = async () => {
+    if (!result?.brief_id || regening) return
+    setRegening(true)
+    setRegenErr('')
+    try {
+      const res = await reinterpretBrief(result.brief_id)
+      setResult(prev => ({ ...prev, has_insight: res.has_insight }))
+    } catch (e) {
+      setRegenErr(e.message || 'AI 종합 해설 생성 실패')
+    }
+    setRegening(false)
   }
 
   return (
@@ -233,8 +253,26 @@ export default function BriefMode() {
         )}
       </div>
 
+      <label style={{
+        display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 16, cursor: 'pointer',
+        fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)',
+      }}>
+        <input
+          type="checkbox"
+          checked={includeInsight}
+          onChange={e => setIncludeInsight(e.target.checked)}
+          style={{ marginTop: 2, cursor: 'pointer' }}
+        />
+        <span>
+          AI 종합 해설 포함
+          <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', marginLeft: 6 }}>
+            지침서가 강조하는 것·놓치면 안 되는 것을 근거와 함께 정리합니다 (API 토큰 소량 사용)
+          </span>
+        </span>
+      </label>
+
       <button
-        style={{ ...s.btn, ...(canRun ? {} : s.btnDisabled) }}
+        style={{ ...s.btn, marginTop: 12, ...(canRun ? {} : s.btnDisabled) }}
         onClick={canRun ? run : undefined}
         disabled={!canRun}
       >
@@ -274,6 +312,33 @@ export default function BriefMode() {
             >
               ⬇ 체크리스트 .md
             </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            {result.has_insight ? (
+              <span style={{
+                fontSize: 'var(--font-size-sm)', color: 'var(--color-accent)',
+                fontWeight: 'var(--font-weight-semibold)',
+              }}>
+                🔍 AI 종합 해설이 리포트(.html) 상단에 포함되었습니다
+              </span>
+            ) : (
+              <>
+                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                  AI 종합 해설 미포함
+                </span>
+                <button
+                  style={{ ...s.dlBtn(false), ...(regening ? s.btnDisabled : {}) }}
+                  onClick={handleRegenInsight}
+                  disabled={regening}
+                >
+                  {regening ? '생성 중...' : '🔍 AI 종합 해설 생성'}
+                </button>
+              </>
+            )}
+            {regenErr && (
+              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{regenErr}</span>
+            )}
           </div>
 
           <div style={s.sectionTitle}>검증 결과</div>

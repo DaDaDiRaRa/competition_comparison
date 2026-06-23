@@ -250,3 +250,78 @@ class TestToHtml:
         h = to_html(bd, self.validation)
         assert '<script>alert(1)</script>' not in h
         assert '&lt;script&gt;' in h
+
+    # ── AI 종합 해설 섹션 (insight 파라미터, Unit 4) ───────────────────────────
+    _INSIGHT = {
+        "synthesis_summary": "이 지침서는 기능·동선 해결에 무게를 둔다.",
+        "key_emphases": [
+            {"topic": "동선 분리", "signal_strength": "strong",
+             "signals": ["배치계획 배점 1순위", "동선계획 14항목"],
+             "basis": ["p.20", "배치계획"], "note": "감염·보안 동선 분리 반복 요구"},
+        ],
+        "must_not_miss": [{"item": "재직증명서 미제출 시 실격", "basis": "p.18"}],
+        "hidden_constraints": [{"issue": "용적률은 심의로 결정", "basis": "p.5", "note": "법정 한계 아님"}],
+        "reading_guide": ["배점이 정성평가 비중 큼"],
+        "data_confidence": "high",
+        "caveats": ["배점표 일부 추출 불완전"],
+    }
+
+    @staticmethod
+    def _tag_balance(h: str) -> tuple[list, int]:
+        from html.parser import HTMLParser
+
+        class _B(HTMLParser):
+            VOID = {'meta', 'br', 'hr', 'img', 'input', 'link', 'col'}
+
+            def __init__(self):
+                super().__init__(); self.stk = []; self.bad = 0
+
+            def handle_starttag(self, t, a):
+                if t not in self.VOID:
+                    self.stk.append(t)
+
+            def handle_endtag(self, t):
+                if t in self.VOID:
+                    return
+                if self.stk and self.stk[-1] == t:
+                    self.stk.pop()
+                else:
+                    self.bad += 1
+
+        b = _B(); b.feed(h)
+        return b.stk, b.bad
+
+    def test_no_insight_section_by_default(self):
+        h = to_html(self.bd, self.validation)
+        assert '지침서 종합 해설' not in h
+        assert 'id="insight"' not in h
+
+    def test_insight_section_renders(self):
+        h = to_html(self.bd, self.validation, insight=self._INSIGHT)
+        assert 'id="insight"' in h
+        assert '지침서 종합 해설' in h
+        assert '이 지침서는 기능·동선 해결에 무게를 둔다.' in h   # synthesis
+        assert '동선 분리' in h                                   # key_emphasis topic
+        assert '재직증명서 미제출 시 실격' in h                    # must_not_miss
+        assert 'p.20' in h                                       # basis 인용
+        assert '당락 예측이 아닙니다' in h                         # disclaimer
+        assert 'AI해설' in h                                      # nav 항목
+
+    def test_insight_section_wellformed(self):
+        h = to_html(self.bd, self.validation, insight=self._INSIGHT)
+        stk, bad = self._tag_balance(h)
+        assert stk == [] and bad == 0
+
+    def test_insight_escapes_html(self):
+        evil = {**self._INSIGHT, "synthesis_summary": "<script>alert(1)</script>"}
+        h = to_html(self.bd, self.validation, insight=evil)
+        assert '<script>alert(1)</script>' not in h
+        assert '&lt;script&gt;' in h
+
+    def test_insight_minimal_is_wellformed(self):
+        """배지만 있고 하위 블록이 비어도 섹션은 깨지지 않는다 (graceful)."""
+        h = to_html(self.bd, self.validation, insight={"data_confidence": "low"})
+        assert 'id="insight"' in h
+        assert '근거 낮음' in h
+        stk, bad = self._tag_balance(h)
+        assert stk == [] and bad == 0

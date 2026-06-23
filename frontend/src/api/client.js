@@ -326,6 +326,19 @@ export function getBriefExportUrl(filename) {
   return `${BASE}/brief/exports/${encodeURIComponent(filename)}`
 }
 
+// AI 종합 해설만 재생성 (추출 재처리 없음, LLM 1콜). 사용자별 키 헤더 필요.
+export async function reinterpretBrief(briefId) {
+  const headers = {}
+  const apiKey = getStoredApiKey()
+  if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/interpret`, { method: 'POST', headers })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `AI 종합 해설 생성 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
 async function* streamSSE(url, formData) {
   const headers = {}
   const apiKey = getStoredApiKey()

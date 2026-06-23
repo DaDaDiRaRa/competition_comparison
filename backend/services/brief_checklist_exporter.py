@@ -870,6 +870,25 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
 .summary .card .v .u{font-size:12px;font-weight:500;color:var(--muted);margin-left:3px}
 .summary .card.warn .v{color:var(--accent)}
 .summary .card .sub{font-size:11px;color:var(--muted);margin-top:4px}
+section.sec.ai>h2{flex-wrap:wrap}
+section.sec.ai>h2 .aibadge{display:inline-flex;align-items:center;justify-content:center;height:25px;padding:0 9px;border-radius:7px;background:var(--ink);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;flex:0 0 auto}
+section.sec.ai .conf{margin-left:auto;font-size:11.5px;font-weight:600;border:1px solid var(--line);border-radius:20px;padding:3px 11px;color:var(--muted)}
+section.sec.ai .conf.high{color:#2a8a3e;border-color:#bfe3c6}
+section.sec.ai .conf.low{color:var(--accent);border-color:#f3c2c6}
+.ai-disclaimer{font-size:12px;color:var(--muted);background:var(--soft);border-radius:8px;padding:9px 13px;margin:0 0 14px}
+.synth{font-size:15px;line-height:1.7;color:var(--ink);border-left:3px solid var(--accent);padding:2px 0 2px 14px;margin:10px 0 4px}
+.emph-list{margin:8px 0}
+.emph{border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin:9px 0;border-left:3px solid var(--line)}
+.emph.strong{border-left-color:var(--accent)} .emph.medium{border-left-color:var(--med)}
+.emph .eh{display:flex;align-items:baseline;gap:9px}
+.emph .topic{font-weight:700;color:var(--ink)}
+.emph .str{font-size:11px;font-weight:600;color:var(--muted);margin-left:auto;white-space:nowrap}
+.emph .str.strong{color:var(--accent)} .emph .str.medium{color:var(--med)}
+.emph .esig{margin-top:5px;font-size:12.5px;color:var(--text)}
+.emph .enote{margin-top:4px;color:var(--text)}
+.emph .ebasis{margin-top:5px}
+.cite{font-size:11px;color:var(--muted);background:var(--soft);border-radius:4px;padding:1px 6px;margin-left:4px;white-space:nowrap}
+.caveat{margin:16px 0 0;font-size:12px}
 .totalbar{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
   padding:9px 4px;margin:14px 0 2px;font-weight:700;color:var(--ink);border-bottom:2px solid #e0e0e0}
 .totalbar .ar{font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -898,8 +917,105 @@ def _esc(v: Any) -> str:
     return html.escape(str(v), quote=True)
 
 
-def to_html(brief_data: dict, validation: dict) -> str:
-    """지침서 추출 데이터를 미니멀 스타일 HTML 문서로 반환 (보기·인쇄용)."""
+_STRENGTH_LABEL = {"strong": "강한 신호", "medium": "중간 신호", "weak": "약한 신호"}
+_CONF_LABEL = {"high": "높음", "medium": "보통", "low": "낮음 (근거 부족)"}
+
+
+def _insight_section_html(insight: dict) -> str:
+    """AI 종합 해설(_brief_insight) → HTML 섹션 문자열. LLM 호출 없음, 렌더만.
+
+    핵심수치 카드 직후·본문 섹션 앞에 삽입. 근거 인용(fact)과 AI 해석을 시각 분리하고
+    'AI 해석 · 당락 예측 아님' 을 명시한다. 내용 없는 하위 블록은 생략(graceful).
+    """
+    if not isinstance(insight, dict):
+        return ""
+
+    def _basis(b) -> str:
+        items = b if isinstance(b, list) else ([b] if b else [])
+        items = [str(x).strip() for x in items if str(x).strip()]
+        return f'<span class="cite">근거 {_esc(" · ".join(items))}</span>' if items else ""
+
+    parts: list[str] = []
+    conf = (insight.get("data_confidence") or "").lower()
+    conf_cls = conf if conf in _CONF_LABEL else ""
+    conf_lbl = _CONF_LABEL.get(conf, "")
+    conf_html = f'<span class="conf {conf_cls}">근거 {_esc(conf_lbl)}</span>' if conf_lbl else ""
+    parts.append(
+        '<section id="insight" class="sec ai">'
+        f'<h2><span class="aibadge">AI</span>지침서 종합 해설{conf_html}</h2>'
+        '<div class="ai-disclaimer">AI가 추출된 데이터를 종합·해석한 결과입니다. '
+        '모든 항목은 지침서 근거를 인용하며, 판단·결정은 사용자 몫입니다. 당락 예측이 아닙니다.</div>'
+    )
+
+    summary = (insight.get("synthesis_summary") or "").strip()
+    if summary:
+        parts.append(f'<div class="synth">{_esc(summary)}</div>')
+
+    emphases = [e for e in (insight.get("key_emphases") or []) if isinstance(e, dict)]
+    if emphases:
+        parts.append('<h3 class="sub">지침서가 강조하는 것</h3><div class="emph-list">')
+        for e in emphases:
+            strength = (e.get("signal_strength") or "").lower()
+            scls = strength if strength in _STRENGTH_LABEL else ""
+            slbl = _STRENGTH_LABEL.get(strength, "")
+            topic = _esc((e.get("topic") or "").strip())
+            str_html = f'<span class="str {scls}">{_esc(slbl)}</span>' if slbl else ""
+            sigs = [str(x).strip() for x in (e.get("signals") or []) if str(x).strip()]
+            sig_html = f'<div class="esig">{_esc(" · ".join(sigs))}</div>' if sigs else ""
+            note = (e.get("note") or "").strip()
+            note_html = f'<div class="enote">{_esc(note)}</div>' if note else ""
+            basis_html = _basis(e.get("basis"))
+            basis_div = f'<div class="ebasis">{basis_html}</div>' if basis_html else ""
+            parts.append(
+                f'<div class="emph {scls}"><div class="eh"><span class="topic">{topic}</span>'
+                f'{str_html}</div>{sig_html}{note_html}{basis_div}</div>'
+            )
+        parts.append('</div>')
+
+    must = [m for m in (insight.get("must_not_miss") or []) if isinstance(m, dict)]
+    must_lis = [f'<li>{_esc((m.get("item") or "").strip())}{_basis(m.get("basis"))}</li>'
+                for m in must if (m.get("item") or "").strip()]
+    if must_lis:
+        parts.append('<h3 class="sub">놓치면 안 되는 것</h3><ul class="list">'
+                     + "".join(must_lis) + "</ul>")
+
+    constraints = [c for c in (insight.get("hidden_constraints") or []) if isinstance(c, dict)]
+    cons_html = []
+    for c in constraints:
+        issue = _esc((c.get("issue") or "").strip())
+        if not issue:
+            continue
+        note = (c.get("note") or "").strip()
+        note_html = f' {_esc(note)}' if note else ""
+        cons_html.append(f'<div class="note"><b>{issue}</b>{note_html} {_basis(c.get("basis"))}</div>')
+    if cons_html:
+        parts.append('<h3 class="sub">숨은 제약·주의</h3>' + "".join(cons_html))
+
+    guide = [str(g).strip() for g in (insight.get("reading_guide") or []) if str(g).strip()]
+    if guide:
+        parts.append('<h3 class="sub">읽는 법</h3><ul class="list">'
+                     + "".join(f"<li>{_esc(g)}</li>" for g in guide) + "</ul>")
+
+    caveats = [str(c).strip() for c in (insight.get("caveats") or []) if str(c).strip()]
+    if caveats:
+        parts.append(f'<div class="caveat muted">한계: {_esc(" / ".join(caveats))}</div>')
+
+    parts.append('</section>')
+    return "".join(parts)
+
+
+def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> str:
+    """지침서 추출 데이터를 미니멀 스타일 HTML 문서로 반환 (보기·인쇄용).
+
+    insight 가 주어지면 (brief_advisor.interpret_brief 결과) 핵심수치 카드 직후에
+    'AI 종합 해설' 섹션을 렌더한다. **LLM 호출 없음** — 이미 계산된 데이터를 그릴 뿐
+    (Report Generation Rule 준수).
+
+    insight 미지정 시 brief_data["_insight"] 를 폴백 사용 — 재렌더 경로(예: 재생성
+    endpoint)가 insight 를 명시 전달하지 않아도 저장된 해설이 살아난다.
+    """
+    if insight is None:
+        insight = brief_data.get("_insight")
     s  = _extract_sections(brief_data)
     a, e, r = s["area"], s["eval"], s["reqs"]
     pi = s["project_info"]
@@ -984,6 +1100,11 @@ def to_html(brief_data: dict, validation: dict) -> str:
 
     def endsec() -> None:
         P.append("</section>")
+
+    # ══ AI 종합 해설 (insight 있을 때만, 핵심수치 카드 직후·본문 앞) ════════════════
+    if insight:
+        nav_items.append(("insight", "AI해설"))
+        P.append(_insight_section_html(insight))
 
     # ══ 1. 사업 개요 ════════════════════════════════════════════════════════════
     sec(1, "사업 개요", "개요")
