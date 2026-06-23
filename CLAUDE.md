@@ -252,37 +252,11 @@ _insight: {
 
 `backend/app_settings.json` 은 추적 대상 (DB 경로·DPI·모델만). API 키는 메모리에만.
 
-## Open Issues
-
-- **🔴 배포 앱 완전 공개 + 멀티테넌시 미비 (보안):** Cloud Run `roles/run.invoker = allUsers` + `ingress = all` + 앱 자체 로그인 없음 ⇒ **URL 아는 누구나 접근**. 구조적 위험: ① `settings.api_key` 가 서버 메모리 전역 1개 → 한 사용자가 입력한 키를 같은 인스턴스의 다른 방문자가 그대로 사용 가능 (키 소유자 과금) ② DB 공유 — 모두 같은 데이터 열람/수정 ③ URL 이 유일한 비밀(공유·인덱싱 가능). 잠그는 옵션: **A) IAP** (구글 로그인 지정 계정만 — 사내팀 정석) · **B) FastAPI 앱 비밀번호/로그인 게이트** (공개 URL 유지) · **C) Cloud Run IAM `allUsers` 제거** (+브라우저는 IAP 병행) · **D) ingress 내부망 한정**. 최소한 API 키 사용자별 분리 또는 접근 게이트가 비용 사고 방지에 필요. 현황 확인: `gcloud run services get-iam-policy competition-analyzer --region asia-northeast3` (allUsers 여부) + `--format="value(metadata.annotations['run.googleapis.com/ingress'])"`.
-
-## 다음 작업 (단기)
-
-- **진짜 단순형(1~2단) area_table 케이스 확보:** API 검증 P0-3/P1-3/P2-3/KI/V-10e 는 2026-06-22 완료 (`tools/api_validation.py`, 11 PASS/0 FAIL). 단, 당초 "종로구청=단순형" 전제가 틀림 — 종로구청 세부지침서도 통합청사라 5단 복잡 계층. 영등포·종로 둘 다 복잡형이므로 **단순형(1~2단) area_table 추출 검증은 미확보**. 소규모 단일시설 지침서 1건 확보 시 `tools/analyze_brief_cli.py` 분석 후 별도 검증.
-
 ## Sequences (Future Work, 보류)
 
 - **시퀀스 B — 추출 정확도 평가 하네스:** `tools/eval/` 폴더에 B-2 까지 구현. 재개 조건: 제안서 PDF 5건 + ground_truth JSON. 다음 단계 B-3 (CI 통합 훅). `python tools/eval/run_harness.py --pdf-dir pdfs/ --max-samples 5` 로 평가, `~$0.27/PDF`. `_quantitative` 키 10개는 `tolerance.json` 과 일치 필수.
 - **시퀀스 C — 멀티파일 지침서 업로드:** 1파일 안정화 완료 후 재개. 접근 A (multi-file 동시 분석, `_brief_meta.source_files: list[...]` 도입) 권장. 충돌 우선순위 룰 미결 — 지침서 vs 과업지시서 중복 시 어느 쪽 우선인지 사용자 결정 필요.
 - **시퀀스 D — 오프라인 / 제로-API 지침서 분석 (Claude Code 가 LLM 엔진):** API 토큰 절감용 **로컬·소량 전용** 경로. 동기: 파이프라인에서 LLM 필요 단계는 **classify / extract / requirements 3개뿐**이고 나머지(파싱·표 배점 파싱·`merge_extracted_data`·`validate_brief`·exporter)는 이미 결정론적 무료. DOCX/HWP/HWPX 는 **텍스트·표 기반(비전 불필요)** 이라 그 3단계가 "블록 텍스트 읽고 JSON 생성"에 불과 → **Claude Code(또는 claude.ai)가 직접 수행 가능**(구독 기반이면 API 미터 미사용, API 키 종량제면 과금됨). 구현안: `tools/analyze_brief_offline.py` — ① 결정론적 파싱 → 블록 + `source_text` + classify/extract 프롬프트를 파일로 출력, ② Claude Code 가 그 핸드오프를 읽고 classify/extract JSON 채움, ③ 다시 도구가 `merge_extracted_data` → `validate_brief` → 기존 exporter 로 **동일한 xlsx/html/md** 산출. 한계: **배포 앱엔 불가**(Cloud Run 서버는 구독 호출 불가, API 만 가능) · PDF 는 비전 필요로 핸드오프 무거움(DOCX/HWP/HWPX 가 최적) · 소량 수동 전용(배치 부적합). 같은 원리로 compare/diagnose 도 가능하나 제안서 PDF 는 비전+복잡해 손이 더 감.
-
-## 앱 실행 검증 체크리스트 (API 키 필요)
-
-코드는 완성됐으나 실제 LLM 호출 end-to-end 검증 미완. 소규모 데이터로 한 번씩.
-
-| # | 항목 | 방법 | 기대 결과 |
-| --- | --- | --- | --- |
-| V-1 | Tier 0 fast-path | 디지털 지침서 PDF로 `/api/accumulate/run` → 로그 | `_source: "digital_haiku"` 로그 + 토큰 감소 |
-| V-2 | `classify_all_pages_brief()` 품질 | 지침서 PDF 업로드 → `_brief.json` 의 `pages` | BRIEF_PROGRAM / BRIEF_DESIGN_GUIDE / BRIEF_EVALUATION 적절 분류 |
-| V-3 | BRIEF_PROGRAM/EVALUATION Vision 강제 | V-2 + 로그 | `DIGITAL_TEXT_EXCLUDE_TYPES` 로 Tier 0 미진입, Vision 처리 |
-| V-4 | BRIEF_* 추출 스키마 | `_brief.json` 의 `data` 키 확인 | BRIEF_PROGRAM 에 `required_areas` 등 스키마 키 존재 |
-| V-5 | BRIEF_SUBMISSION/ADMIN skip | 해당 페이지 엔트리 | `_skipped: true` 또는 `data: {}` |
-| V-6 | `rubric_version` 비교 | `rerun-compare` 후 `_comparison.json` | `"rubric_version": "v1"` 최상위 |
-| V-7 | `rubric_version` MyProject | MyProject 등록 → `_deep.json` | `"rubric_version": "v1"` |
-| V-8 | 스캔본 PDF → Vision fallback | 스캔 PDF 파이프라인 | Tier 0 None → Vision 자연 전환, `_source: "vision"` |
-| V-9 | `grade_justification` 출력 | 비교/MyProject JSON·HTML | 각 axis 에 `"신호 X/Y개 충족 → <등급> 기준 행과 일치"` |
-
-**우선순위 (잔여):** V-2/V-3/V-4 (지침서 핵심) → V-1 → V-6/V-7 → V-9.
 
 ## Local Dev
 
