@@ -96,12 +96,10 @@ competition_comparison/
 │   │   ├── components/            # AccumulateMode / DiagnoseMode / BriefMode ...
 │   │   ├── constants/index.js     # GRADE_COLOR, GRADE_BG
 │   │   ├── hooks/useMeta.jsx      # 시설유형/페이지타입/평가축 단일 소스
-│   │   ├── kunwon-tokens.css      # CSS 변수 단일 소스 (색상·타이포·간격)
-│   │   └── theme.js               # 색 토큰 명세 (참고용)
+│   │   └── kunwon-tokens.css      # CSS 변수 단일 소스 (색상·타이포·간격)
 │   └── package.json
 ├── tools/
 │   ├── audit_tokens.py            # 인라인 hex 하드코딩 감사
-│   ├── change_theme.py            # 일괄 색상 교체
 │   └── eval/                      # 추출 정확도 평가 하네스
 ├── tests/
 │   └── test_docx_extractor.py     # DOCX 흐름 단위 테스트
@@ -142,16 +140,8 @@ GCP 프로젝트 정보, 환경변수, 트러블슈팅은 [DEPLOYMENT.md](DEPLOY
 | 파일 | 역할 |
 | ---- | ---- |
 | `frontend/src/kunwon-tokens.css` | **단일 소스** — 모든 CSS 변수. 여기서만 수정 |
-| `frontend/src/theme.js` | 색 토큰 명세 (참고용, 컴포넌트가 import하지 않음) |
 | `frontend/src/constants/index.js` | 등급(A~E) 색상 + 충족도 색상 |
 | `backend/services/report_generator.py` | 비교 리포트 HTML — `:root` CSS 변수 26개 (독립 문서) |
-
-### 일괄 교체 (프리셋)
-
-```powershell
-python tools/change_theme.py <preset>
-# 예: python tools/change_theme.py charcoal
-```
 
 ### 인라인 하드코딩 감사
 

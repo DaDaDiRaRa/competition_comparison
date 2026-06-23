@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react'
-import { getApiKeyStatus } from '../../api/client'
+import { hasStoredApiKey } from '../../api/client'
 
 // API 키 상태를 앱 전체에 제공. 블로킹 없음 — 키 없으면 상단 배너만 표시.
+// 키는 이 브라우저(localStorage)에 저장되므로 서버 조회 없이 로컬에서 판단.
 // SettingsPanel에서 키 저장 후 'api-key-changed' 이벤트를 dispatch하면 배너 즉시 제거.
 export default function ApiKeyGate({ children }) {
   const [hasKey, setHasKey] = useState(null)
 
-  const checkKey = () => {
-    getApiKeyStatus()
-      .then(d => setHasKey(d.has_key))
-      .catch(() => setHasKey(false))
-  }
+  const checkKey = () => setHasKey(hasStoredApiKey())
 
   useEffect(() => {
     checkKey()
@@ -45,13 +42,4 @@ export default function ApiKeyGate({ children }) {
       {children}
     </>
   )
-}
-
-// 키 상태 새로고침용 훅 — 설정 탭에서 키 저장 후 배너 제거에 사용
-export function useRefreshApiKeyStatus(setHasKey) {
-  return () => {
-    getApiKeyStatus()
-      .then(d => setHasKey?.(d.has_key))
-      .catch(() => {})
-  }
 }

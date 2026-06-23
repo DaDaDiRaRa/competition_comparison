@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from config import settings, COMPARISON_AXES, COMPARISON_AXES_META, axes_for, build_axis_rubric_block, RUBRIC_VERSION
+from config import settings, axes_for, build_axis_rubric_block, RUBRIC_VERSION
 from services.llm_client import call_messages
 from services.utils import parse_json_response
 

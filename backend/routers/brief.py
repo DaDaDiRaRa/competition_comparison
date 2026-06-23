@@ -12,7 +12,6 @@ GET  /api/brief/list               : 저장된 지침서 목록 (최신순)
 import asyncio
 import json
 import logging
-import os
 import shutil
 import tempfile
 import time

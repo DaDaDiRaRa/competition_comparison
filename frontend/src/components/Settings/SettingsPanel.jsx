@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getSettings, updateSettings, setApiKey, clearApiKey, setDbPath } from '../../api/client'
+import { getSettings, updateSettings, setStoredApiKey, clearStoredApiKey, hasStoredApiKey, setDbPath } from '../../api/client'
 import PatternViewer from './PatternViewer'
 
 const s = {
@@ -67,7 +67,7 @@ export default function SettingsPanel() {
         model_id: data.model_id || 'claude-sonnet-4-6',
       })
       setHasDbPath(!!data.has_db_path)
-      setHasKey(!!data.has_api_key)
+      setHasKey(hasStoredApiKey())   // 키는 이 브라우저(localStorage) 기준
       setLoading(false)
     })
   }
@@ -95,25 +95,21 @@ export default function SettingsPanel() {
     setTimeout(() => setSaved(false), 3000)
   }
 
-  const updateKey = async () => {
+  const updateKey = () => {
     if (!keyInput.trim()) return
-    setKeyMsg('')
-    try {
-      await setApiKey(keyInput.trim())
-      setKeyInput('')
-      setKeyMsg('✓ API 키가 적용되었습니다 (세션 전용)')
-      refresh()
-      window.dispatchEvent(new Event('api-key-changed'))
-      setTimeout(() => setKeyMsg(''), 3000)
-    } catch (e) {
-      setKeyMsg('✗ ' + (e.message || '실패'))
-    }
+    setStoredApiKey(keyInput.trim())
+    setKeyInput('')
+    setHasKey(true)
+    setKeyMsg('✓ API 키가 이 브라우저에 저장되었습니다')
+    window.dispatchEvent(new Event('api-key-changed'))
+    setTimeout(() => setKeyMsg(''), 3000)
   }
 
-  const removeKey = async () => {
-    if (!confirm('현재 세션의 API 키를 제거하시겠습니까? 다시 입력해야 사용할 수 있습니다.')) return
-    await clearApiKey()
-    refresh()
+  const removeKey = () => {
+    if (!confirm('이 브라우저에 저장된 API 키를 제거하시겠습니까? 다시 입력해야 사용할 수 있습니다.')) return
+    clearStoredApiKey()
+    setHasKey(false)
+    window.dispatchEvent(new Event('api-key-changed'))
   }
 
   if (loading) return <div style={{ color: 'var(--color-text-muted)' }}>로딩 중...</div>
@@ -181,7 +177,7 @@ export default function SettingsPanel() {
           {hasKey && <button style={s.btnDanger} onClick={removeKey}>현재 키 제거</button>}
         </div>
         <div style={s.hint}>
-          🔒 세션 전용 — 디스크에 저장되지 않으며, 앱 종료 시 자동 초기화됩니다.
+          🔒 이 브라우저에만 저장됩니다 — 다른 사람·다른 PC와 공유되지 않으며, 분석은 본인 키로 본인 Anthropic 계정에 과금됩니다.
         </div>
         {keyMsg && <div style={s.success}>{keyMsg}</div>}
       </div>

@@ -68,7 +68,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 
 - 화이트 테마 + 건원 RED `#e60012`. **단일 소스: [frontend/src/kunwon-tokens.css](frontend/src/kunwon-tokens.css)** — `main.jsx` 에서 전역 import.
 - 컴포넌트는 인라인 스타일에서 `style={{ color: 'var(--color-accent)' }}` 패턴. hex 직접 사용 금지.
-- 신규 색 필요 시 `kunwon-tokens.css` 추가 → `theme.js` 동기화.
+- 신규 색 필요 시 `kunwon-tokens.css` 에 추가 (단일 소스).
 - 비교 리포트 HTML 은 독립 문서 — `report_generator.py::_CSS` 의 `:root` CSS 변수 26개로 별도 관리.
 - 감사: `tools/audit_tokens.py` 실행 → `DESIGN_AUDIT.md`.
 
@@ -234,6 +234,7 @@ feasibility_export: {
 
 ## Open Issues
 
+- **🔴 배포 앱 완전 공개 + 멀티테넌시 미비 (보안):** Cloud Run `roles/run.invoker = allUsers` + `ingress = all` + 앱 자체 로그인 없음 ⇒ **URL 아는 누구나 접근**. 구조적 위험: ① `settings.api_key` 가 서버 메모리 전역 1개 → 한 사용자가 입력한 키를 같은 인스턴스의 다른 방문자가 그대로 사용 가능 (키 소유자 과금) ② DB 공유 — 모두 같은 데이터 열람/수정 ③ URL 이 유일한 비밀(공유·인덱싱 가능). 잠그는 옵션: **A) IAP** (구글 로그인 지정 계정만 — 사내팀 정석) · **B) FastAPI 앱 비밀번호/로그인 게이트** (공개 URL 유지) · **C) Cloud Run IAM `allUsers` 제거** (+브라우저는 IAP 병행) · **D) ingress 내부망 한정**. 최소한 API 키 사용자별 분리 또는 접근 게이트가 비용 사고 방지에 필요. 현황 확인: `gcloud run services get-iam-policy competition-analyzer --region asia-northeast3` (allUsers 여부) + `--format="value(metadata.annotations['run.googleapis.com/ingress'])"`.
 - **🟡 BRIEF_EVALUATION 100점 초과 추출 — 가드 4중 구현됨, 실재현 케이스 검증만 미완:** HWP→PDF 병합셀 붕괴로 중복 집계되는 케이스. 방어층: ① 프롬프트 `shared_with` 병합셀 메커니즘 (`points` 는 그룹 대표에만, 나머지 null — 중복 집계 소스 차단, `data_extractor.py` BRIEF_EVALUATION instruction) ② 프롬프트 자가검증 가드 ("합계가 total_points 를 크게 초과하면 병합셀 중복 집계이므로 반드시 수정", 둘 다 commit d4a3432 2026-06-16) ③ DOCX 결정적 표 파서 소계/합계 행 제외 (`_extract_docx_eval_from_table`) ④ `points_sum_warning` 후처리 안전망 (스태킹 95~105 + 개별 페이지 >110, `merge_extracted_data()` 끝 + 스택 경로). 층 ①②는 LLM 의존이라 **실제 병합셀 붕괴 PDF 1건으로 self-correct 작동 확인 미완** (영등포·종로는 합계 100 정상 케이스라 가드 경로 미진입). 결정적 자동 수정 (중복 행 탐지·정정) 은 어느 행이 중복인지 알 수 없어 불가 → `points_sum_warning` 경고가 최종 백스톱.
 - **🟢 BRIEF_EVALUATION null 항목 false positive (해소, commit 3db1100):** 정성평가 항목 (점수 미부여) 과 `shared_with` 병합셀에 medium 경고가 잘못 발생했었음. 영등포 통합신청사 케이스로 재현·수정. 회귀: `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스.
 - **🟢 BRIEF_SUBMISSION 오분류 페이지에 배점표** — 분류기 수정 없이는 해결 불가. 재분석 후 심사기준 비면 `page_map` 의 `has_scoring_table` 확인.

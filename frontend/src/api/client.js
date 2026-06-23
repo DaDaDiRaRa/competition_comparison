@@ -3,6 +3,25 @@ const BASE = '/api'
 // ── 청크 업로드 헬퍼 ──────────────────────────────────────────────────────────
 import { uploadIfLarge, cleanupUpload } from './chunkUpload.js'
 
+// ── 사용자별 API 키 (per-browser, localStorage) ───────────────────────────────
+// 키는 이 브라우저에만 저장되고, 모든 LLM 호출(streamSSE)에 X-Anthropic-Api-Key
+// 헤더로 자동 동봉된다 → 각자 자기 키로 자기 계정에 과금. 서버 전역 키 공유 없음.
+const API_KEY_STORAGE = 'anthropic_api_key'
+
+export function getStoredApiKey() {
+  try { return localStorage.getItem(API_KEY_STORAGE) || '' } catch { return '' }
+}
+export function setStoredApiKey(key) {
+  try {
+    if (key) localStorage.setItem(API_KEY_STORAGE, key)
+    else localStorage.removeItem(API_KEY_STORAGE)
+  } catch { /* localStorage 비활성 환경 무시 */ }
+}
+export function clearStoredApiKey() {
+  try { localStorage.removeItem(API_KEY_STORAGE) } catch { /* noop */ }
+}
+export function hasStoredApiKey() { return !!getStoredApiKey() }
+
 /**
  * FormData에서 대용량 File을 청크 업로드로 교체한다.
  * fileFields: { formKey: File } 맵. 교체된 field는 formKey → formKey_ref 로 변경.
@@ -36,29 +55,6 @@ export async function updateSettings(data) {
   return r.json()
 }
 
-export async function getApiKeyStatus() {
-  const r = await fetch(`${BASE}/settings/api-key-status`)
-  return r.json()
-}
-
-export async function setApiKey(apiKey) {
-  const r = await fetch(`${BASE}/settings/api-key`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ api_key: apiKey }),
-  })
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}))
-    throw new Error(err.detail || 'API 키 설정 실패')
-  }
-  return r.json()
-}
-
-export async function clearApiKey() {
-  const r = await fetch(`${BASE}/settings/api-key`, { method: 'DELETE' })
-  return r.json()
-}
-
 export async function setDbPath(dbPath) {
   const r = await fetch(`${BASE}/settings/db-path`, {
     method: 'POST',
@@ -87,16 +83,6 @@ export async function getProjects(facilityType) {
     ? `${BASE}/accumulate/projects?facility_type=${facilityType}`
     : `${BASE}/accumulate/projects`
   const r = await fetch(url)
-  return r.json()
-}
-
-export async function getProject(facilityType, competitionId) {
-  const r = await fetch(`${BASE}/accumulate/projects/${facilityType}/${competitionId}`)
-  return r.json()
-}
-
-export async function getPatterns() {
-  const r = await fetch(`${BASE}/patterns`)
   return r.json()
 }
 
@@ -233,11 +219,6 @@ export function getDiagnosisReportUrl(filename) {
   return `${BASE}/diagnose/reports/${encodeURIComponent(filename)}`
 }
 
-export async function listDiagnosisReports() {
-  const r = await fetch(`${BASE}/diagnose/reports`)
-  return r.json()
-}
-
 // ── Archive search ──────────────────────────────────────────────────────────
 
 export async function listArchive(facilityType = null) {
@@ -341,18 +322,15 @@ export async function* runBriefAnalyze(formData) {
   }
 }
 
-export async function listBriefs() {
-  const r = await fetch(`${BASE}/brief/list`)
-  if (!r.ok) throw new Error(`HTTP ${r.status}`)
-  return r.json()
-}
-
 export function getBriefExportUrl(filename) {
   return `${BASE}/brief/exports/${encodeURIComponent(filename)}`
 }
 
 async function* streamSSE(url, formData) {
-  const response = await fetch(url, { method: 'POST', body: formData ?? undefined })
+  const headers = {}
+  const apiKey = getStoredApiKey()
+  if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
+  const response = await fetch(url, { method: 'POST', headers, body: formData ?? undefined })
   if (!response.ok) {
     // 401: API 키 미설정 — 사용자 친화적 메시지
     if (response.status === 401) {

@@ -1,9 +1,24 @@
+import contextvars
 import json
 import os
 import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent
+
+# ── 요청별 API 키 (per-browser) ──────────────────────────────────────────────
+# HTTP 요청이 X-Anthropic-Api-Key 헤더로 키를 보내면 main.py 의 전역 의존성이 이
+# ContextVar 에 세팅한다. settings.api_key 가 이 값을 최우선으로 읽어 사용자(브라우저)
+# 별로 자기 키로 자기 Anthropic 계정에 과금된다. asyncio.gather/to_thread 에 컨텍스트가
+# 전파되므로 파이프라인 깊은 곳의 call_messages 도 자동으로 요청 키를 사용한다.
+_request_api_key: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "request_api_key", default=""
+)
+
+
+def set_request_api_key(key: str | None) -> None:
+    """현재 요청 컨텍스트의 API 키 설정 (main.py 전역 의존성에서 호출)."""
+    _request_api_key.set(key or "")
 
 # PyInstaller로 패키징된 경우 번들 내부는 읽기 전용/임시 디렉터리이므로
 # 사용자 홈에 영구 저장 위치를 둠. 개발 모드에선 backend/app_settings.json 그대로.
@@ -40,8 +55,6 @@ FACILITY_TYPES = {
 
 def facility_label(facility_type: str) -> str:
     return FACILITY_TYPES.get(facility_type, {}).get("label_ko", facility_type)
-
-FACILITY_GROUP = {k: v["group"] for k, v in FACILITY_TYPES.items()}
 
 PAGE_TYPES = [
     "COVER", "TOC_HERO", "SITE_CONTEXT", "CONCEPT", "SPECIAL_SPACE",
@@ -103,23 +116,6 @@ BRIEF_PAGE_TYPES = [
     "BRIEF_SUBMISSION",       # 제출 기준 (도서 목록·파일 형식·제출 방법)
     "BRIEF_ADMIN",            # 행정 절차 (Q&A·일정·문의처 — 추출 불필요)
 ]
-
-BRIEF_PAGE_TYPES_META = {
-    "BRIEF_OVERVIEW":        "공모개요",
-    "BRIEF_PROJECT_INFO":    "사업개요",
-    "BRIEF_SITE":            "대상지현황",
-    "BRIEF_PROGRAM":         "면적프로그램",
-    "BRIEF_DESIGN_MASSING":  "배치·매싱지침",
-    "BRIEF_DESIGN_FACADE":   "입면·재료지침",
-    "BRIEF_DESIGN_SUSTAIN":  "친환경·인증",
-    "BRIEF_DESIGN_SPECIAL":  "특수·보안지침",
-    "BRIEF_DESIGN_GUIDE":    "기타설계지침",
-    "BRIEF_TECHNICAL":       "기술기준",
-    "BRIEF_REGULATIONS":     "법규기준",
-    "BRIEF_EVALUATION":      "심사기준",
-    "BRIEF_SUBMISSION":      "제출기준",
-    "BRIEF_ADMIN":           "행정절차",
-}
 
 COMPARISON_AXES_BY_GROUP = {
     "redev": {
@@ -832,10 +828,6 @@ def axes_for(facility_type: str) -> dict:
 def axes_keys_for(facility_type: str) -> list:
     return list(axes_for(facility_type).keys())
 
-# Legacy aliases — backward compat for existing imports
-COMPARISON_AXES_META = COMPARISON_AXES_BY_GROUP["redev"]
-COMPARISON_AXES = list(COMPARISON_AXES_META.keys())
-
 MODEL_ID = "claude-sonnet-4-6"
 # 분류 모델: Sonnet으로 통일. Haiku는 페이지 헤더 텍스트를 환각하는 케이스 다수 발견
 # (영등포구 청사 케이스 — Haiku가 p.18 헤더를 "[표 06] 심사평가 주안점" 대신 "배점 표"로 일반화
@@ -892,8 +884,10 @@ class AppSettings:
 
     @property
     def api_key(self) -> str:
-        # 메모리 우선, 없으면 환경변수. 양쪽 모두 정제 적용.
-        raw = self._memory_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        # 요청별 키(per-browser 헤더) 우선 → 세션 메모리 → 환경변수. 모두 정제 적용.
+        raw = (_request_api_key.get()
+               or self._memory_api_key
+               or os.environ.get("ANTHROPIC_API_KEY", ""))
         return self._sanitize_api_key(raw)
 
     @staticmethod
@@ -912,13 +906,6 @@ class AppSettings:
             key = key[3:].strip()
         key = key.strip('"').strip("'")
         return key
-
-    def set_api_key(self, key: str):
-        """세션 메모리에만 저장. 디스크에 쓰지 않음."""
-        self._memory_api_key = self._sanitize_api_key(key)
-
-    def clear_api_key(self):
-        self._memory_api_key = ""
 
     def has_api_key(self) -> bool:
         return bool(self.api_key)

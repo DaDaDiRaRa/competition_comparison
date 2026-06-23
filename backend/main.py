@@ -2,15 +2,26 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from config import set_request_api_key
 from routers import accumulate, diagnose, settings, patterns, upload, archive, brief
 from services.archive_search import build_index as build_archive_index
 from services.db_manager import init_db
 from version import __version__
+
+
+async def _bind_request_api_key(x_anthropic_api_key: str | None = Header(default=None)):
+    """요청 헤더(X-Anthropic-Api-Key)의 사용자별 키를 요청 컨텍스트에 바인딩 (per-browser).
+
+    모든 LLM 호출은 settings.api_key 를 읽고, 그 property 가 이 요청 컨텍스트 키를
+    최우선 사용한다. 헤더가 없으면 빈 값 → 세션 메모리/환경변수로 폴백 (로컬 dev·tools).
+    전역 의존성이라 모든 엔드포인트(SSE 스트리밍 포함)에 적용된다.
+    """
+    set_request_api_key(x_anthropic_api_key)
 
 
 @asynccontextmanager
@@ -27,7 +38,10 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Competition Analyzer API", version=__version__, lifespan=lifespan)
+app = FastAPI(
+    title="Competition Analyzer API", version=__version__, lifespan=lifespan,
+    dependencies=[Depends(_bind_request_api_key)],
+)
 
 app.add_middleware(
     CORSMiddleware,
