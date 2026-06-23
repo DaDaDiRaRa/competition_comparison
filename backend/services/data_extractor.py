@@ -2268,9 +2268,24 @@ def merge_extracted_data(
 
     result["_quantitative"] = quant
 
+    is_brief = any(isinstance(k, str) and k.startswith("brief_") for k in result)
+
+    # 추출 수치 내부 정합성 검증 (결정론·LLM 0). 숫자는 절대 수정하지 않고 _quantitative_flags
+    # 로만 표시 — 추출 오류(필드 오결합·환각, 예: 건폐율↔건축/대지 불일치)가 패턴 DB로 유입되기
+    # 전에 가시화. 제안서(non-brief) 대상. tools/data_health.py 와 규칙 단일 소스
+    # (services.quant_validator). 실패해도 파이프라인 무중단.
+    if quant and not is_brief:
+        try:
+            from services.quant_validator import validate_quantitative
+            _qflags = validate_quantitative(quant)
+            if _qflags:
+                result["_quantitative_flags"] = _qflags
+        except Exception:
+            logger.warning("_quantitative 정합성 검증 실패 (무시)", exc_info=True)
+
     # feasibility_export — 지침서(brief)일 때만, 이미 추출된 값 재배치/정규화 (새 추출 없음).
     # 별도 앱(arch-law-diagnose) 연동용. 실패해도 파이프라인은 절대 막지 않음.
-    if any(isinstance(k, str) and k.startswith("brief_") for k in result):
+    if is_brief:
         try:
             from services.feasibility_export import build_feasibility_export
             result["feasibility_export"] = build_feasibility_export(result)

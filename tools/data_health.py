@@ -8,8 +8,9 @@ data_health.py — 운영 DB(또는 스냅샷) 무결성 건강검진 (API 호�
 설계 원칙:
 - 읽기 전용. 어떤 파일도 수정/생성하지 않는다 (리포트만 stdout).
 - LLM 0콜. 전부 결정론 산술/스키마 검사.
-- 관대하게 (영등포 false-positive 교훈): 명백한 모순만 "결함", 나머지는 "경고".
-- HARD 결함(수치 모순 + 인용 범위초과) 개수를 exit code 로 반환 → CI 훅 가능.
+- 수치 정합성 규칙은 services.quant_validator 단일 소스 — 추출 파이프라인
+  (data_extractor.merge_extracted_data)이 _quantitative_flags 부착에 쓰는 것과 동일.
+- HARD 결함(수치 error + 인용 범위초과) 개수를 exit code 로 반환 → CI 훅 가능.
 
 usage:
     backend\\venv\\Scripts\\python.exe tools\\data_health.py [--db-path PATH]
@@ -25,26 +26,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
-# 허용 범위 (관대하게 — 명백히 비현실적인 값만 잡는다)
-BOUNDS = {
-    "building_coverage_ratio_pct": (0, 100),
-    "floor_area_ratio_pct": (0, 1500),
-    "floors_above": (0, 120),
-    "floors_below": (0, 12),
-    "parking_count": (0, 50000),
-}
-COVERAGE_TOL_PP = 3.0   # 건폐율 입력값 vs 계산값 허용 오차(%p)
-FAR_TOL_PP = 5.0        # 용적률 입력값 vs 계산값 허용 오차(%p)
+from services.quant_validator import validate_quantitative  # noqa: E402
+
+# _quantitative 결측 맵에 표시할 핵심 필드 8종
 QUANT_FIELDS = [
     "site_area_sqm", "building_area_sqm", "total_floor_area_sqm",
     "building_coverage_ratio_pct", "floor_area_ratio_pct",
     "floors_above", "floors_below", "parking_count",
 ]
 CITE_RE = re.compile(r"\(p\.?\s*([0-9][0-9,\s]*|\?)\)")
-
-
-def _num(v):
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
 def _prefix_of(fname):
@@ -69,8 +59,8 @@ def _competition_dirs(db):
 
 
 def check_numeric(db):
-    """A. submission별 _quantitative 내부 정합성 + 결측 맵."""
-    defects, warns, rows, subs = [], [], [], {}
+    """A. submission별 _quantitative 내부 정합성(quant_validator) + 결측 맵."""
+    defects, warns, subs = [], [], {}
     for ft, comp, cp in _competition_dirs(db):
         subdir = os.path.join(cp, "submissions")
         if not os.path.isdir(subdir):
@@ -84,46 +74,14 @@ def check_numeric(db):
                 warns.append(f"[로드실패] {f}: {e}")
                 continue
             q = (sub.get("extracted_data", {}) or {}).get("_quantitative", {}) or {}
-            tp = sub.get("total_pages")
-            pfx = _prefix_of(f)
-            subs[(ft, comp, pfx)] = {"q": q, "total_pages": tp, "result": sub.get("result")}
-            tag = f"{ft}/{comp[:18]}/{pfx}({sub.get('result')})"
-
-            sa, ba = _num(q.get("site_area_sqm")), _num(q.get("building_area_sqm"))
-            tfa, aag = _num(q.get("total_floor_area_sqm")), _num(q.get("area_above_ground_sqm"))
-            cov, far = _num(q.get("building_coverage_ratio_pct")), _num(q.get("floor_area_ratio_pct"))
-
-            # 1) 건축면적 > 대지면적 (물리적 불가)
-            if sa and ba and ba > sa * 1.02:
-                defects.append(f"[건축>대지] {tag}: 건축 {ba:,.0f} > 대지 {sa:,.0f}㎡")
-            # 2) 건폐율 = 100×건축/대지 교차검증
-            if sa and ba and cov is not None:
-                calc = 100.0 * ba / sa
-                if abs(calc - cov) > COVERAGE_TOL_PP:
-                    defects.append(f"[건폐율 모순] {tag}: 입력 {cov}% vs 계산 {calc:.1f}% "
-                                   f"(건축{ba:,.0f}/대지{sa:,.0f})")
-            # 3) 용적률 정합성: 지상연면적(있으면) = 100×용적률/대지
-            if sa and far is not None and aag:
-                calc = 100.0 * aag / sa
-                if abs(calc - far) > FAR_TOL_PP:
-                    defects.append(f"[용적률 모순] {tag}: 입력 {far}% vs 지상연면적 기준 {calc:.1f}%")
-            # 3b) 지상연면적 없으면: 총연면적 >= 용적률 함의 지상면적 이어야 (총>=지상)
-            elif sa and far is not None and tfa:
-                implied_above = far / 100.0 * sa
-                if tfa < implied_above * 0.9:
-                    defects.append(f"[연면적<용적률함의] {tag}: 총연면적 {tfa:,.0f} < "
-                                   f"용적률 함의 지상면적 {implied_above:,.0f}㎡ (용적률 {far}%×대지)")
-            # 4) 범위
-            for fld, (lo, hi) in BOUNDS.items():
-                v = _num(q.get(fld))
-                if v is not None and not (lo <= v <= hi):
-                    defects.append(f"[범위초과] {tag}: {fld}={v} (허용 {lo}~{hi})")
-            # 5) 건폐율 > 용적률 (다층이면 비정상)
-            if cov is not None and far is not None and cov > far + 1:
-                warns.append(f"[건폐율>용적률] {tag}: 건폐율 {cov}% > 용적률 {far}%")
-
-            rows.append((ft, pfx, sub.get("result"), q))
-    return defects, warns, rows, subs
+            subs[(ft, comp, _prefix_of(f))] = {
+                "q": q, "total_pages": sub.get("total_pages"), "result": sub.get("result"),
+            }
+            tag = f"{ft}/{comp[:18]}/{_prefix_of(f)}({sub.get('result')})"
+            for fl in validate_quantitative(q):  # 단일 소스 규칙
+                line = f"[{fl['rule']}] {tag}: {fl['detail']}"
+                (defects if fl.get("severity") == "error" else warns).append(line)
+    return defects, warns, subs
 
 
 def check_drift(db, subs):
@@ -227,7 +185,7 @@ def main():
     print(f"# db: {db}")
     print("#" * 68)
 
-    num_def, num_warn, rows, subs = check_numeric(db)
+    num_def, num_warn, subs = check_numeric(db)
     drift_def, drift_lines = check_drift(db, subs)
     pat_lines = check_patterns(db)
 
@@ -249,7 +207,7 @@ def main():
         cells = "".join(("  ✓  " if q.get(f) is not None else "  ·  ") for f in QUANT_FIELDS)
         print("  " + f"{ft[:4]}/{pfx}({v['result']})".ljust(32) + cells)
 
-    print(f"\n===== B. 스키마/rubric 드리프트 (comparison) =====")
+    print("\n===== B. 스키마/rubric 드리프트 (comparison) =====")
     for ln in drift_lines:
         print(ln)
     if drift_def:
@@ -257,7 +215,7 @@ def main():
         for x in drift_def:
             print("   -", x)
 
-    print(f"\n===== C. 패턴 지표별 표본수(N) =====")
+    print("\n===== C. 패턴 지표별 표본수(N) =====")
     for ln in pat_lines:
         print(ln)
 
