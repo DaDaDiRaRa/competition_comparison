@@ -325,6 +325,15 @@ export function getBriefExportUrl(filename) {
   return `${BASE}/brief/exports/${encodeURIComponent(filename)}`
 }
 
+export async function listBriefs() {
+  const headers = {}
+  const apiKey = getStoredApiKey()
+  if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
+  const r = await fetch(`${BASE}/brief/list`, { headers })
+  if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
 // AI 종합 해설만 재생성 (추출 재처리 없음, LLM 1콜). 사용자별 키 헤더 필요.
 export async function reinterpretBrief(briefId) {
   const headers = {}

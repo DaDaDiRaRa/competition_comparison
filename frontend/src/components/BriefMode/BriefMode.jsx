@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, listBriefs } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -73,6 +73,34 @@ const s = {
     background: 'var(--color-success-bg)', border: '1px solid var(--color-success)',
     color: 'var(--color-success)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
   },
+  historyPanel: {
+    marginTop: 24, background: 'var(--color-bg-surface)', borderRadius: 12, padding: 24,
+  },
+  historyCard: {
+    border: '1px solid var(--color-border)', borderRadius: 8, padding: '14px 16px',
+    marginBottom: 10, background: 'var(--color-bg-base)',
+  },
+  historyCardTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' },
+  historyName: { fontWeight: 'var(--font-weight-semibold)', fontSize: 'var(--font-size-base)', color: 'var(--color-text-body)', marginBottom: 2 },
+  historyMeta: { fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 },
+  historyActions: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
+  historyBtn: (primary) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 14px',
+    borderRadius: 6, fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
+    cursor: 'pointer', border: primary ? 'none' : '1px solid var(--color-border)',
+    background: primary ? 'var(--color-accent)' : 'var(--color-bg-surface-alt)',
+    color: primary ? 'var(--color-text-on-accent)' : 'var(--color-text-body)',
+  }),
+  fmtBadge: {
+    fontSize: 11, padding: '2px 7px', borderRadius: 10,
+    background: 'var(--color-bg-surface-alt)', border: '1px solid var(--color-border)',
+    color: 'var(--color-text-muted)', fontWeight: 'var(--font-weight-semibold)',
+  },
+  insightBadge: {
+    fontSize: 11, padding: '2px 7px', borderRadius: 10,
+    background: 'var(--color-info-bg)', border: '1px solid var(--color-info)',
+    color: 'var(--color-info)', fontWeight: 'var(--font-weight-semibold)',
+  },
 }
 
 export default function BriefMode() {
@@ -88,6 +116,10 @@ export default function BriefMode() {
   const [includeInsight, setIncludeInsight] = useState(true)  // AI 종합 해설 포함 여부
   const [regening, setRegening] = useState(false)             // 해설 재생성 진행 중
   const [regenErr, setRegenErr] = useState('')
+  const [history, setHistory] = useState([])
+
+  const loadHistory = () => listBriefs().then(setHistory).catch(() => {})
+  useEffect(() => { loadHistory() }, [])
 
   const defaultFt = facilityTypes[0]?.key ?? ''
   const ft = facilityType || defaultFt
@@ -130,6 +162,7 @@ export default function BriefMode() {
         }
         if (ev.type === 'complete') {
           setResult(ev)
+          loadHistory()
         }
         if (ev.type === 'error') break
       }
@@ -187,6 +220,7 @@ export default function BriefMode() {
   }
 
   return (
+    <>
     <div style={s.panel}>
       <div style={s.title}>지침서 분석</div>
       <div style={s.subtitle}>공모 지침서 PDF를 업로드하면 요구사항을 추출하고 검증 경고를 생성합니다.</div>
@@ -378,5 +412,59 @@ export default function BriefMode() {
         </>
       )}
     </div>
+
+    {history.length > 0 && (
+      <div style={s.historyPanel}>
+        <div style={s.sectionTitle}>분석 이력</div>
+        {history.map(item => {
+          const name = item.brief_name || item.brief_id
+          const dateStr = item.analyzed_at
+            ? new Date(item.analyzed_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : ''
+          const sv = item.validation_summary || {}
+          return (
+            <div key={item.brief_id} style={s.historyCard}>
+              <div style={s.historyCardTop}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={s.historyName}>{name}</div>
+                  <div style={s.historyMeta}>
+                    {facilityLabel(item.facility_type)}
+                    {dateStr ? ` · ${dateStr}` : ''}
+                    {item.total_pages ? ` · ${item.total_pages}p` : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={s.fmtBadge}>{(item.source_format || 'pdf').toUpperCase()}</span>
+                    {item.has_insight && <span style={s.insightBadge}>AI 해설</span>}
+                    {(['high', 'medium', 'low']).map(sev =>
+                      sv[sev] ? (
+                        <span key={sev} style={s.badge(sev)}>{SEV[sev].label} {sv[sev]}</span>
+                      ) : null
+                    )}
+                  </div>
+                </div>
+                <div style={s.historyActions}>
+                  {item.has_html && (
+                    <button style={s.historyBtn(true)} onClick={() => handleHtml(`${item.brief_id}.html`)}>
+                      리포트 열기
+                    </button>
+                  )}
+                  {item.has_xlsx && (
+                    <button style={s.historyBtn(false)} onClick={() => handleDownload(getBriefExportUrl(`${item.brief_id}.xlsx`), `${item.brief_id}.xlsx`)}>
+                      xlsx
+                    </button>
+                  )}
+                  {item.has_md && (
+                    <button style={s.historyBtn(false)} onClick={() => handleDownload(getBriefExportUrl(`${item.brief_id}.md`), `${item.brief_id}.md`)}>
+                      md
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )}
+    </>
   )
 }
