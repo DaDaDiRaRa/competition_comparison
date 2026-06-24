@@ -834,6 +834,12 @@ MODEL_ID = "claude-sonnet-4-6"
 # → 헤더 기반 후처리 강등 무력화 → BRIEF_EVALUATION 환각 카테고리 추출).
 # 비용 증가는 페이지당 ~$0.004로 미미하며, 분류 오류로 인한 토큰 손실보다 작음.
 MODEL_ID_CLASSIFY = "claude-sonnet-4-6"
+# AI 종합 해설(brief_advisor.interpret_brief) 전용 모델.
+# 해설은 지침서 1건당 LLM 1콜뿐이라 Opus 비용 부담이 작고, 추출(classify/extract)은
+# 그대로 Sonnet 유지 → 비용 폭증 없이 "종합·번역" 품질(문장·triage 판단)만 상향.
+# 사실 정확도는 결정론 백본(배점·랭킹·강조탐지)이 정하므로 모델과 무관.
+# ⚠️ Opus 4.7/4.8·Fable 계열은 temperature 미지원 → llm_client.call_messages 가 자동 생략.
+MODEL_ID_ADVISOR = "claude-opus-4-8"
 
 RASTER_DPI_CLASSIFY = 72
 RASTER_DPI_EXTRACT = 120  # 150→120 (이미지 토큰 36% 절감, 도면 OCR 품질 유지선)
@@ -860,6 +866,7 @@ class AppSettings:
             "raster_dpi_extract": RASTER_DPI_EXTRACT,
             "model_id": MODEL_ID,
             "model_id_classify": MODEL_ID_CLASSIFY,
+            "model_id_advisor": MODEL_ID_ADVISOR,
         }
 
     def save(self):
@@ -917,6 +924,14 @@ class AppSettings:
     @property
     def model_id_classify(self) -> str:
         return self._data.get("model_id_classify", MODEL_ID_CLASSIFY)
+
+    @property
+    def model_id_advisor(self) -> str:
+        """AI 종합 해설 전용 모델. 미설정 시 Opus(MODEL_ID_ADVISOR) 기본.
+
+        기존 app_settings.json 에 키가 없어도 .get 기본값으로 동작 — 마이그레이션 불필요.
+        """
+        return self._data.get("model_id_advisor", MODEL_ID_ADVISOR)
 
     @property
     def dpi_classify(self) -> int:

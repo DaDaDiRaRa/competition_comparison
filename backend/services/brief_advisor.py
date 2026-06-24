@@ -340,9 +340,9 @@ def _interpret_sync(brief_data: dict, facility_type: str) -> dict:
     payload = _build_advisor_payload(brief_data, facility_type)
     dynamic = "지침서 데이터 (이 안의 내용만 사용):\n" + _compact(payload)
     raw = call_messages(
-        model=settings.model_id,
-        max_tokens=8192,   # 복잡한 통합청사 지침서의 긴 한국어 출력이 4096 에서 잘림 → comparator 와 동일하게 상향
-        temperature=0,
+        model=settings.model_id_advisor,   # 해설 전용 모델(기본 Opus). 추출은 그대로 Sonnet.
+        max_tokens=16000,  # 긴 한국어 출력 + Opus 가 thinking 생략 시 본문에 쓰는 추론 여유분
+        temperature=0,     # Opus 4.7/4.8 은 call_messages 가 temperature 를 자동 생략 (400 회피)
         system=_ADVISOR_SYSTEM,
         messages=[{
             "role": "user",
@@ -362,7 +362,7 @@ def _interpret_sync(brief_data: dict, facility_type: str) -> dict:
     # 결정론 값으로 덮어씀 — LLM 이 배점 숫자/랭킹을 바꾸지 못하게 (환각 차단).
     result["scoring_focus"] = payload["scoring_focus"]
     result["schema_version"] = SCHEMA_VERSION
-    result["model_id"] = settings.model_id
+    result["model_id"] = settings.model_id_advisor
     result["facility_type"] = facility_type
     return result
 

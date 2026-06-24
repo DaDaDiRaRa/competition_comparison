@@ -13,6 +13,13 @@ _RETRYABLE_STATUS = {502, 503, 529}
 _MAX_RETRIES = 3
 _RETRY_BASE_DELAY = 2.0  # 초 (지수 백오프: 2s → 4s → 8s)
 
+# temperature/top_p/top_k 등 샘플링 파라미터를 받지 않는 모델 (adaptive thinking 전용).
+# 전송 시 400 → 이 접두사로 시작하는 모델엔 temperature 를 body 에서 생략한다.
+# Opus 4.7/4.8, Fable 5, Mythos 5. (Sonnet 4.6·Haiku 4.5·Opus 4.6 은 temperature 허용.)
+_NO_SAMPLING_PREFIXES = (
+    "claude-opus-4-7", "claude-opus-4-8", "claude-fable", "claude-mythos",
+)
+
 
 def call_messages(
     *,
@@ -39,10 +46,12 @@ def call_messages(
     body = {
         "model": model,
         "max_tokens": max_tokens,
-        "temperature": temperature,
         "system": system,
         "messages": messages,
     }
+    # temperature 미지원 모델(Opus 4.7/4.8·Fable·Mythos)엔 생략 — 전송 시 400 회피.
+    if not model.startswith(_NO_SAMPLING_PREFIXES):
+        body["temperature"] = temperature
 
     last_exc: Exception | None = None
 
