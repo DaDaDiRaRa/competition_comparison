@@ -389,6 +389,92 @@ def _v(val: Any, unit: str = "") -> str:
     return s + unit
 
 
+def _md_insight_block(L: list[str], insight: Any) -> None:
+    """AI 종합 해설(_insight) → 마크다운 라인을 L 에 append. LLM 호출 없음, 렌더만.
+
+    내용 없는 하위 블록은 생략(graceful). insight 가 dict 아니거나 비면 아무것도 안 함.
+    """
+    if not isinstance(insight, dict):
+        return
+
+    def _basis(b: Any) -> str:
+        items = b if isinstance(b, list) else ([b] if b else [])
+        items = [str(x).strip() for x in items if str(x).strip()]
+        return f"  (근거 {' · '.join(items)})" if items else ""
+
+    summary = (insight.get("synthesis_summary") or "").strip()
+    emphases = [e for e in (insight.get("key_emphases") or []) if isinstance(e, dict)]
+    must = [m for m in (insight.get("must_not_miss") or []) if isinstance(m, dict)
+            and (m.get("item") or "").strip()]
+    constraints = [c for c in (insight.get("hidden_constraints") or []) if isinstance(c, dict)
+                   and (c.get("issue") or "").strip()]
+    focus = [f for f in (insight.get("scoring_focus") or []) if isinstance(f, dict)]
+    guide = [str(g).strip() for g in (insight.get("reading_guide") or []) if str(g).strip()]
+    caveats = [str(c).strip() for c in (insight.get("caveats") or []) if str(c).strip()]
+
+    if not (summary or emphases or must or constraints or focus or guide):
+        return
+
+    L.append("## 0. AI 종합 해설")
+    L.append("> AI가 추출 데이터를 종합·해석한 결과입니다. 모든 항목은 지침서 근거를 인용하며, "
+             "판단·결정은 사용자 몫입니다. 당락 예측이 아닙니다.")
+    conf = (insight.get("data_confidence") or "").lower()
+    conf_lbl = _CONF_LABEL.get(conf, "")
+    if conf_lbl:
+        L.append(f"근거 신뢰도: {conf_lbl}")
+
+    if summary:
+        L.append("")
+        L.append(f"종합 요약: {summary}")
+
+    if emphases:
+        L.append("\n### 지침서가 강조하는 것")
+        for e in emphases:
+            topic = (e.get("topic") or "").strip()
+            slbl = _STRENGTH_LABEL.get((e.get("signal_strength") or "").lower(), "")
+            sigs = [str(x).strip() for x in (e.get("signals") or []) if str(x).strip()]
+            note = (e.get("note") or "").strip()
+            head = topic + (f" [{slbl}]" if slbl else "")
+            parts: list[str] = []
+            if sigs:
+                parts.append(" · ".join(sigs))
+            if note:
+                parts.append(note)
+            body = f": {' / '.join(parts)}" if parts else ""
+            L.append(f"- {head}{body}{_basis(e.get('basis'))}")
+
+    if must:
+        L.append("\n### 놓치면 안 되는 것")
+        for m in must:
+            L.append(f"- {(m.get('item') or '').strip()}{_basis(m.get('basis'))}")
+
+    if constraints:
+        L.append("\n### 숨은 제약·주의")
+        for c in constraints:
+            issue = (c.get("issue") or "").strip()
+            note = (c.get("note") or "").strip()
+            L.append(f"- {issue}" + (f" — {note}" if note else "") + _basis(c.get("basis")))
+
+    if focus:
+        L.append("\n### 배점 집중 (랭킹)")
+        for f in focus:
+            cat = (f.get("category") or "").strip()
+            pts = f.get("points")
+            wt  = f.get("weight_pct")
+            L.append(f"- {cat}: {_v(pts, ' 점')}"
+                     + (f" / 비중 {_v(wt, '%')}" if wt is not None else ""))
+
+    if guide:
+        L.append("\n### 읽는 법")
+        for g in guide:
+            L.append(f"- {g}")
+
+    if caveats:
+        L.append(f"\n한계: {' / '.join(caveats)}")
+
+    L.append("")
+
+
 def to_markdown(brief_data: dict, validation: dict) -> str:
     """지침서 추출 데이터를 구조화 텍스트 덤프로 반환.
 
@@ -405,6 +491,11 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     L: list[str] = [f"# 지침서 추출 데이터", f"생성: {now}", ""]
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 0. AI 종합 해설 (insight 있을 때만 — 문서 맨 앞)
+    # ══════════════════════════════════════════════════════════════════════════
+    _md_insight_block(L, brief_data.get("_insight"))
 
     # ══════════════════════════════════════════════════════════════════════════
     # 1. 사업 개요
@@ -1649,6 +1740,156 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             ws.column_dimensions[
                 get_column_letter(col[0].column)
             ].width = max(min(max_len + 4, 60), 10)
+
+    # ── Sheet 0: AI 종합 해설 (insight 있을 때만, 맨 앞 탭) ────────────────────
+    # brief_data["_insight"] = brief_advisor.interpret_brief() 결과 (없으면 생략).
+    # HTML(to_html)·JSON 엔 이미 실리지만 xlsx 엔 누락돼 있어 보강 — LLM 호출 없음, 렌더만.
+    insight = brief_data.get("_insight")
+    if isinstance(insight, dict) and (
+        (insight.get("synthesis_summary") or "").strip()
+        or insight.get("key_emphases") or insight.get("must_not_miss")
+        or insight.get("hidden_constraints") or insight.get("reading_guide")
+    ):
+        _AI_SPAN = 3
+
+        def _basis_str(b: Any) -> str:
+            items = b if isinstance(b, list) else ([b] if b else [])
+            items = [str(x).strip() for x in items if str(x).strip()]
+            return " · ".join(items)
+
+        wsi = wb.create_sheet("AI 종합 해설")
+        rowi = _write_section_title(wsi, "AI 종합 해설", 1, span=_AI_SPAN)
+        rowi += 1
+        ws_i_disc = wsi.cell(
+            row=rowi, column=1,
+            value="※ AI가 추출 데이터를 종합·해석한 결과입니다. 모든 항목은 지침서 근거를 인용하며, "
+                  "판단·결정은 사용자 몫입니다. 당락 예측이 아닙니다.",
+        )
+        ws_i_disc.font = Font(italic=True, color="888888")
+        ws_i_disc.alignment = _wrap_top
+        wsi.merge_cells(start_row=rowi, start_column=1, end_row=rowi, end_column=_AI_SPAN)
+        rowi += 1
+
+        conf = (insight.get("data_confidence") or "").lower()
+        conf_lbl = _CONF_LABEL.get(conf, "")
+        if conf_lbl:
+            rowi = _write_kv(wsi, "근거 신뢰도", conf_lbl, rowi, val_end_col=_AI_SPAN)
+        rowi = _sep(wsi, rowi)
+
+        # ── 종합 요약 ──────────────────────────────────────────────────────────
+        summary_txt = (insight.get("synthesis_summary") or "").strip()
+        if summary_txt:
+            rowi = _write_subsection(wsi, "종합 요약", rowi, span=_AI_SPAN)
+            c = wsi.cell(row=rowi, column=1, value=summary_txt)
+            c.alignment = _wrap_top
+            wsi.merge_cells(start_row=rowi, start_column=1, end_row=rowi, end_column=_AI_SPAN)
+            rowi += 1
+            rowi = _sep(wsi, rowi)
+
+        # ── 지침서가 강조하는 것 (key_emphases) ────────────────────────────────
+        emphases = [em for em in (insight.get("key_emphases") or []) if isinstance(em, dict)]
+        if emphases:
+            rowi = _write_subsection(wsi, "지침서가 강조하는 것", rowi, span=_AI_SPAN)
+            rowi = _write_header(wsi, ["주제", "신호 강도", "신호·근거"], rowi)
+            for em in emphases:
+                topic = (em.get("topic") or "").strip()
+                slbl = _STRENGTH_LABEL.get((em.get("signal_strength") or "").lower(), "")
+                sigs = [str(x).strip() for x in (em.get("signals") or []) if str(x).strip()]
+                note = (em.get("note") or "").strip()
+                basis = _basis_str(em.get("basis"))
+                detail_parts = []
+                if sigs:
+                    detail_parts.append(" · ".join(sigs))
+                if note:
+                    detail_parts.append(note)
+                if basis:
+                    detail_parts.append(f"(근거 {basis})")
+                ws_t = wsi.cell(row=rowi, column=1, value=topic)
+                ws_t.font = _bold
+                ws_t.alignment = _wrap_top
+                wsi.cell(row=rowi, column=2, value=slbl).alignment = _center
+                ws_d = wsi.cell(row=rowi, column=3, value="\n".join(detail_parts))
+                ws_d.alignment = _wrap_top
+                rowi += 1
+            rowi = _sep(wsi, rowi)
+
+        # ── 놓치면 안 되는 것 (must_not_miss) ──────────────────────────────────
+        must = [m for m in (insight.get("must_not_miss") or []) if isinstance(m, dict)]
+        must = [m for m in must if (m.get("item") or "").strip()]
+        if must:
+            rowi = _write_subsection(wsi, "놓치면 안 되는 것", rowi, span=_AI_SPAN)
+            for m in must:
+                item = (m.get("item") or "").strip()
+                basis = _basis_str(m.get("basis"))
+                text = f"• {item}" + (f"  (근거 {basis})" if basis else "")
+                c = wsi.cell(row=rowi, column=1, value=text)
+                c.alignment = _wrap_top
+                wsi.merge_cells(start_row=rowi, start_column=1, end_row=rowi, end_column=_AI_SPAN)
+                rowi += 1
+            rowi = _sep(wsi, rowi)
+
+        # ── 숨은 제약·주의 (hidden_constraints) ────────────────────────────────
+        constraints = [c for c in (insight.get("hidden_constraints") or []) if isinstance(c, dict)]
+        constraints = [c for c in constraints if (c.get("issue") or "").strip()]
+        if constraints:
+            rowi = _write_subsection(wsi, "숨은 제약·주의", rowi, span=_AI_SPAN)
+            for con in constraints:
+                issue = (con.get("issue") or "").strip()
+                note = (con.get("note") or "").strip()
+                basis = _basis_str(con.get("basis"))
+                text = f"• {issue}"
+                if note:
+                    text += f" — {note}"
+                if basis:
+                    text += f"  (근거 {basis})"
+                c = wsi.cell(row=rowi, column=1, value=text)
+                c.alignment = _wrap_top
+                wsi.merge_cells(start_row=rowi, start_column=1, end_row=rowi, end_column=_AI_SPAN)
+                rowi += 1
+            rowi = _sep(wsi, rowi)
+
+        # ── 배점 집중 (scoring_focus, 결정론 랭킹) ─────────────────────────────
+        focus = [f for f in (insight.get("scoring_focus") or []) if isinstance(f, dict)]
+        if focus:
+            rowi = _write_subsection(wsi, "배점 집중 (랭킹)", rowi, span=_AI_SPAN)
+            rowi = _write_header(wsi, ["카테고리", "배점", "비중(%)"], rowi)
+            for f in focus:
+                wsi.cell(row=rowi, column=1, value=(f.get("category") or "").strip()).alignment = _wrap_top
+                cp = wsi.cell(row=rowi, column=2, value=_cell_safe(f.get("points")))
+                cp.alignment = _center
+                if isinstance(f.get("points"), (int, float)):
+                    cp.number_format = _NUM_FMT
+                cw = wsi.cell(row=rowi, column=3, value=_cell_safe(f.get("weight_pct")))
+                cw.alignment = _center
+                if isinstance(f.get("weight_pct"), (int, float)):
+                    cw.number_format = _NUM_FMT
+                rowi += 1
+            rowi = _sep(wsi, rowi)
+
+        # ── 읽는 법 (reading_guide) ────────────────────────────────────────────
+        guide = [str(g).strip() for g in (insight.get("reading_guide") or []) if str(g).strip()]
+        if guide:
+            rowi = _write_subsection(wsi, "읽는 법", rowi, span=_AI_SPAN)
+            for g in guide:
+                c = wsi.cell(row=rowi, column=1, value=f"• {g}")
+                c.alignment = _wrap_top
+                wsi.merge_cells(start_row=rowi, start_column=1, end_row=rowi, end_column=_AI_SPAN)
+                rowi += 1
+            rowi = _sep(wsi, rowi)
+
+        # ── 한계 (caveats) ─────────────────────────────────────────────────────
+        caveats = [str(c).strip() for c in (insight.get("caveats") or []) if str(c).strip()]
+        if caveats:
+            rowi = _write_subsection(wsi, "한계", rowi, span=_AI_SPAN)
+            c = wsi.cell(row=rowi, column=1, value=" / ".join(caveats))
+            c.font = Font(italic=True, color="888888")
+            c.alignment = _wrap_top
+            wsi.merge_cells(start_row=rowi, start_column=1, end_row=rowi, end_column=_AI_SPAN)
+            rowi += 1
+
+        wsi.column_dimensions["A"].width = 24
+        wsi.column_dimensions["B"].width = 14
+        wsi.column_dimensions["C"].width = 70
 
     # ── Sheet 1: 면적·프로그램 ────────────────────────────────────────────────
     ws1 = wb.create_sheet("1.면적·프로그램")

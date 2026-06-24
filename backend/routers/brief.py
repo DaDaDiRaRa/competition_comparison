@@ -450,7 +450,7 @@ async def reinterpret_brief(brief_id: str):
     """저장된 지침서의 AI 종합 해설만 재생성 (LLM 1콜, PDF 재처리 없음).
 
     용도: 분석 시 해설을 껐다가 나중에 켜기 / 프롬프트 개선 후 기존 분석에 재적용.
-    _brief.json 의 `_insight` 갱신 + HTML 재렌더 (md/xlsx 는 손대지 않음).
+    _brief.json 의 `_insight` 갱신 + HTML·xlsx·md 재렌더 (셋 다 AI 종합 해설 포함).
     """
     if not settings.has_api_key():
         raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 입력해주세요.")
@@ -480,6 +480,8 @@ async def reinterpret_brief(brief_id: str):
     try:
         _atomic_write(json_path, brief_data)
         _sync_write(briefs_dir / f"{safe_id}.html", to_html(brief_data, validation))
+        _sync_write(briefs_dir / f"{safe_id}.md", to_markdown(brief_data, validation))
+        _sync_write_bytes(briefs_dir / f"{safe_id}.xlsx", to_xlsx(brief_data, validation))
     except Exception as e:
         logger.error("reinterpret save error: %s", traceback.format_exc())
         raise HTTPException(500, f"저장 실패: {type(e).__name__}")
