@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, listBriefs } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, listBriefs } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -116,6 +116,8 @@ export default function BriefMode() {
   const [includeInsight, setIncludeInsight] = useState(true)  // AI 종합 해설 포함 여부
   const [regening, setRegening] = useState(false)             // 해설 재생성 진행 중
   const [regenErr, setRegenErr] = useState('')
+  const [proposing, setProposing] = useState(false)           // 수주 제안서 생성 진행 중
+  const [proposeErr, setProposeErr] = useState('')
   const [history, setHistory] = useState([])
 
   const loadHistory = () => listBriefs().then(setHistory).catch(() => {})
@@ -147,6 +149,7 @@ export default function BriefMode() {
     setFlags([])
 
     setRegenErr('')
+    setProposeErr('')
 
     const fd = new FormData()
     fd.append('facility_type', ft)
@@ -217,6 +220,25 @@ export default function BriefMode() {
       setRegenErr(e.message || 'AI 종합 해설 생성 실패')
     }
     setRegening(false)
+  }
+
+  // 프로젝트 수주 제안서 생성 (수주 전략). 완료 시 새 탭/파일로 제안서 리포트 열기.
+  const handlePropose = async (briefId) => {
+    const id = briefId || result?.brief_id
+    if (!id || proposing) return
+    setProposing(true)
+    setProposeErr('')
+    try {
+      const res = await proposeBrief(id)
+      if (result?.brief_id === id) {
+        setResult(prev => ({ ...prev, has_proposal: true }))
+      }
+      loadHistory()
+      handleHtml(res.proposal_filename || `${id}_proposal.html`)
+    } catch (e) {
+      setProposeErr(e.message || '수주 제안서 생성 실패')
+    }
+    setProposing(false)
   }
 
   return (
@@ -375,6 +397,39 @@ export default function BriefMode() {
             )}
           </div>
 
+          <div style={{
+            border: '1px solid var(--color-accent)', borderRadius: 10, padding: '16px 18px',
+            marginBottom: 24, background: 'var(--color-bg-surface-alt)',
+          }}>
+            <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', marginBottom: 4 }}>
+              📋 프로젝트 수주 제안서
+            </div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              지침서 근거 위에서 수주 핵심 테마·설계 접근 방향·착수 우선순위·리스크·체크리스트를 제안합니다
+              (요약·정리를 넘어선 전략 제안 · 당락 예측 아님 · API 토큰 사용).
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                style={{ ...s.dlBtn(true), ...(proposing ? s.btnDisabled : {}) }}
+                onClick={() => handlePropose()}
+                disabled={proposing}
+              >
+                {proposing ? '제안서 생성 중...' : (result.has_proposal ? '🔄 제안서 다시 생성' : '✦ 제안서 생성')}
+              </button>
+              {result.has_proposal && (
+                <button
+                  style={s.dlBtn(false)}
+                  onClick={() => handleHtml(`${result.brief_id}_proposal.html`)}
+                >
+                  📄 제안서 열기
+                </button>
+              )}
+              {proposeErr && (
+                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{proposeErr}</span>
+              )}
+            </div>
+          </div>
+
           <div style={s.sectionTitle}>검증 결과</div>
 
           <div style={s.summaryRow}>
@@ -435,6 +490,9 @@ export default function BriefMode() {
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <span style={s.fmtBadge}>{(item.source_format || 'pdf').toUpperCase()}</span>
                     {item.has_insight && <span style={s.insightBadge}>AI 해설</span>}
+                    {item.has_proposal && (
+                      <span style={{ ...s.insightBadge, background: 'var(--color-accent-bg, #fdecee)', borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}>제안서</span>
+                    )}
                     {(['high', 'medium', 'low']).map(sev =>
                       sv[sev] ? (
                         <span key={sev} style={s.badge(sev)}>{SEV[sev].label} {sv[sev]}</span>
@@ -446,6 +504,19 @@ export default function BriefMode() {
                   {item.has_html && (
                     <button style={s.historyBtn(true)} onClick={() => handleHtml(`${item.brief_id}.html`)}>
                       리포트 열기
+                    </button>
+                  )}
+                  {item.has_proposal ? (
+                    <button style={s.historyBtn(false)} onClick={() => handleHtml(`${item.brief_id}_proposal.html`)}>
+                      제안서 열기
+                    </button>
+                  ) : (
+                    <button
+                      style={{ ...s.historyBtn(false), ...(proposing ? s.btnDisabled : {}) }}
+                      onClick={() => handlePropose(item.brief_id)}
+                      disabled={proposing}
+                    >
+                      {proposing ? '생성 중...' : '제안서 생성'}
                     </button>
                   )}
                   {item.has_xlsx && (

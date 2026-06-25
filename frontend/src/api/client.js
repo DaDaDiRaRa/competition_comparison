@@ -347,6 +347,19 @@ export async function reinterpretBrief(briefId) {
   return r.json()
 }
 
+// 프로젝트 수주 제안서 생성 (수주 전략 처방, 추출 재처리 없음, LLM 1콜). 사용자별 키 헤더 필요.
+export async function proposeBrief(briefId) {
+  const headers = {}
+  const apiKey = getStoredApiKey()
+  if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/propose`, { method: 'POST', headers })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `수주 제안서 생성 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
 async function* streamSSE(url, formData) {
   const headers = {}
   const apiKey = getStoredApiKey()

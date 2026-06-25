@@ -21,7 +21,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from config import settings, FACILITY_TYPES
+from config import settings, FACILITY_TYPES, facility_label
 from routers.upload import resolve_file_ref
 from services.db_manager import _atomic_write, _sync_write, _sync_write_bytes, _slugify
 from services.page_classifier import classify_all_pages_brief, classify_all_blocks_brief
@@ -31,6 +31,8 @@ from services.hwpx_loader import split_hwpx_to_blocks
 from services.brief_validator import validate_brief
 from services.brief_checklist_exporter import to_markdown, to_xlsx, to_html
 from services.brief_advisor import interpret_brief
+from services.brief_proposal import propose_project
+from services.brief_proposal_report_generator import to_proposal_html
 from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count
 
 logger = logging.getLogger(__name__)
@@ -124,6 +126,7 @@ def list_briefs():
                 "has_xlsx":           (briefs_dir / f"{p.stem}.xlsx").exists(),
                 "has_html":           (briefs_dir / f"{p.stem}.html").exists(),
                 "has_insight":        bool(meta.get("_insight")),
+                "has_proposal":       (briefs_dir / f"{p.stem}_proposal.html").exists(),
                 "validation_summary": (meta.get("validation") or {}).get("summary", {}),
             })
         except Exception:
@@ -492,4 +495,64 @@ async def reinterpret_brief(brief_id: str):
         "has_insight":     bool(brief_data.get("_insight")),
         "data_confidence": ins.get("data_confidence"),
         "html_filename":   f"{safe_id}.html",
+    }
+
+
+# ── 프로젝트 수주 제안서 생성 (수주 전략 처방, 추출 재처리 없음) ──────────────
+
+@router.post("/{brief_id}/propose")
+async def propose_brief(brief_id: str):
+    """저장된 지침서로 '프로젝트 수주 제안서'를 생성 (LLM 1콜, PDF 재처리 없음).
+
+    AI 종합 해설(_insight)이 '사실 triage(해설가)'라면 제안서(_proposal)는
+    '수주 전략(전략가)' — 같은 결정론 백본 위에서 핵심 테마·접근 방향·우선순위·
+    리스크·착수 체크리스트를 제안한다. 사실 주장엔 근거 인용 유지, 당락 예측 아님.
+
+    _brief.json 의 `_proposal` 갱신 + 별도 `{brief_id}_proposal.html` 렌더.
+    """
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 입력해주세요.")
+
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+
+    briefs_dir = settings.db_path / "_briefs"
+    json_path  = briefs_dir / f"{safe_id}.json"
+    if not json_path.exists():
+        raise HTTPException(404, "지침서 분석을 찾을 수 없습니다.")
+
+    try:
+        brief_data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"지침서 JSON 로드 실패: {type(e).__name__}")
+
+    bm            = brief_data.get("_brief_meta") or {}
+    facility_type = bm.get("facility_type", "")
+    brief_name    = bm.get("brief_name", "") or safe_id
+
+    try:
+        proposal = await propose_project(brief_data, facility_type)
+    except Exception as e:
+        logger.error("propose error: %s", traceback.format_exc())
+        raise HTTPException(500, f"수주 제안서 생성 실패: {_user_error_msg(e)}")
+
+    proposal["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    brief_data["_proposal"] = proposal
+    proposal_filename = f"{safe_id}_proposal.html"
+    try:
+        _atomic_write(json_path, brief_data)
+        _sync_write(
+            briefs_dir / proposal_filename,
+            to_proposal_html(proposal, brief_name, facility_label(facility_type)),
+        )
+    except Exception as e:
+        logger.error("propose save error: %s", traceback.format_exc())
+        raise HTTPException(500, f"저장 실패: {type(e).__name__}")
+
+    return {
+        "brief_id":          safe_id,
+        "has_proposal":      True,
+        "data_confidence":   proposal.get("data_confidence"),
+        "proposal_filename": proposal_filename,
     }
