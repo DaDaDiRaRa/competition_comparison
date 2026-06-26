@@ -50,7 +50,7 @@ const s = {
 }
 
 export default function SettingsPanel() {
-  const [form, setForm] = useState({ db_path: '', model_id: '' })
+  const [form, setForm] = useState({ db_path: '', model_id: '', vworld_api_key: '', vworld_domain: '' })
   const [hasDbPath, setHasDbPath] = useState(false)
   const [dbPathMsg, setDbPathMsg] = useState('')
   const [hasKey, setHasKey] = useState(false)
@@ -58,6 +58,8 @@ export default function SettingsPanel() {
   const [showKey, setShowKey] = useState(false)
   const [saved, setSaved] = useState(false)
   const [keyMsg, setKeyMsg] = useState('')
+  const [hasVworldKey, setHasVworldKey] = useState(false)
+  const [vworldMsg, setVworldMsg] = useState('')
   const [loading, setLoading] = useState(true)
 
   const refresh = () => {
@@ -65,8 +67,11 @@ export default function SettingsPanel() {
       setForm({
         db_path: data.db_path || '',
         model_id: data.model_id || 'claude-sonnet-4-6',
+        vworld_api_key: data.vworld_api_key || '',
+        vworld_domain: data.vworld_domain || '',
       })
       setHasDbPath(!!data.has_db_path)
+      setHasVworldKey(!!data.has_vworld_key)
       setHasKey(hasStoredApiKey())   // 키는 이 브라우저(localStorage) 기준
       setLoading(false)
     })
@@ -93,6 +98,18 @@ export default function SettingsPanel() {
     await updateSettings({ model_id: form.model_id })
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
+  }
+
+  const saveVworld = async () => {
+    setVworldMsg('')
+    try {
+      await updateSettings({ vworld_api_key: form.vworld_api_key.trim(), vworld_domain: form.vworld_domain.trim() })
+      setHasVworldKey(!!form.vworld_api_key.trim())
+      setVworldMsg('✓ VWorld API 키가 저장되었습니다')
+      setTimeout(() => setVworldMsg(''), 3000)
+    } catch (e) {
+      setVworldMsg('✗ ' + (e.message || '저장 실패'))
+    }
   }
 
   const updateKey = () => {
@@ -190,6 +207,37 @@ export default function SettingsPanel() {
 
       <button style={s.btnPrimary} onClick={saveModel}>모델 설정 저장</button>
       {saved && <div style={s.success}>✓ 저장 완료</div>}
+
+      <div style={s.group}>
+        <label style={s.label}>
+          VWorld API Key
+          <span style={s.status(hasVworldKey)}>{hasVworldKey ? '설정됨' : '미설정'}</span>
+        </label>
+        <input
+          style={s.input}
+          type="text"
+          value={form.vworld_api_key}
+          onChange={e => set('vworld_api_key', e.target.value)}
+          placeholder="vworld.kr에서 발급받은 키"
+        />
+        <div style={{ marginTop: 6 }}>
+          <label style={{ ...s.label, marginTop: 4 }}>등록 도메인 (선택)</label>
+          <input
+            style={s.input}
+            type="text"
+            value={form.vworld_domain}
+            onChange={e => set('vworld_domain', e.target.value)}
+            placeholder="예: competition-analyzer-xxx.a.run.app (Cloud Run URL, 없으면 공백)"
+          />
+        </div>
+        <button style={{ ...s.btn, marginTop: 8 }} onClick={saveVworld} disabled={!form.vworld_api_key.trim()}>
+          VWorld 키 저장
+        </button>
+        <div style={s.hint}>
+          국토부 공간정보 오픈플랫폼(vworld.kr) 무료 API. 지침서 대지 분석에 사용됩니다.
+        </div>
+        {vworldMsg && <div style={s.success}>{vworldMsg}</div>}
+      </div>
 
       <PatternViewer />
     </div>

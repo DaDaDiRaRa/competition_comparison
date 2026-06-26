@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, listBriefs } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, listBriefs, analyzeSite, getBriefSiteImageUrl } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -118,6 +118,10 @@ export default function BriefMode() {
   const [regenErr, setRegenErr] = useState('')
   const [proposing, setProposing] = useState(false)           // 수주 제안서 생성 진행 중
   const [proposeErr, setProposeErr] = useState('')
+  const [siteAddr, setSiteAddr] = useState('')                 // 대지 분석 주소 입력
+  const [siteAnalyzing, setSiteAnalyzing] = useState(false)
+  const [siteResult, setSiteResult] = useState(null)          // 대지 분석 결과
+  const [siteErr, setSiteErr] = useState('')
   const [history, setHistory] = useState([])
 
   const loadHistory = () => listBriefs().then(setHistory).catch(() => {})
@@ -221,6 +225,24 @@ export default function BriefMode() {
       setRegenErr(e.message || 'AI 종합 해설 생성 실패')
     }
     setRegening(false)
+  }
+
+  // VWorld 대지·맥락 분석
+  const handleSiteAnalyze = async () => {
+    if (!result?.brief_id || siteAnalyzing) return
+    const addr = siteAddr.trim()
+    if (!addr) return
+    setSiteAnalyzing(true)
+    setSiteErr('')
+    setSiteResult(null)
+    try {
+      const res = await analyzeSite(result.brief_id, addr)
+      setSiteResult(res)
+      if (result?.brief_id) setResult(prev => ({ ...prev, has_site_context: true }))
+    } catch (e) {
+      setSiteErr(e.message || '대지 분석 실패')
+    }
+    setSiteAnalyzing(false)
   }
 
   // 프로젝트 수주 제안서 생성 (수주 전략). 완료 시 새 탭/파일로 제안서 리포트 열기.
@@ -429,6 +451,79 @@ export default function BriefMode() {
             )}
             {regenErr && (
               <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{regenErr}</span>
+            )}
+          </div>
+
+          {/* ── 대지·맥락 분석 ── */}
+          <div style={{
+            border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 18px',
+            marginBottom: 16, background: 'var(--color-bg-surface-alt)',
+          }}>
+            <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', marginBottom: 4 }}>
+              🛰 대지·맥락 분석
+              {result.has_site_context && (
+                <span style={{ fontSize: 11, marginLeft: 8, padding: '2px 7px', borderRadius: 10,
+                  background: 'var(--color-info-bg)', border: '1px solid var(--color-info)',
+                  color: 'var(--color-info)', fontWeight: 'var(--font-weight-semibold)' }}>
+                  완료
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 10 }}>
+              VWorld 위성+지적도 이미지를 AI로 판독해 대지 맥락(방위·접도·주변용도·자연자산)을 분석합니다.
+              완료 후 수주 제안서 생성 시 자동으로 반영됩니다. (VWorld API 키 설정 필요)
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <input
+                style={{ ...s.input, flex: 1, marginTop: 0 }}
+                value={siteAddr}
+                onChange={e => setSiteAddr(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSiteAnalyze()}
+                placeholder="대지 주소 (예: 서울시 영등포구 여의대방로 358)"
+              />
+              <button
+                style={{ ...s.dlBtn(true), whiteSpace: 'nowrap', ...(siteAnalyzing || !siteAddr.trim() ? s.btnDisabled : {}) }}
+                onClick={handleSiteAnalyze}
+                disabled={siteAnalyzing || !siteAddr.trim()}
+              >
+                {siteAnalyzing ? '분석 중...' : '분석 실행'}
+              </button>
+            </div>
+            {siteErr && (
+              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)', marginBottom: 8 }}>{siteErr}</div>
+            )}
+            {siteResult && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <img
+                    src={getBriefSiteImageUrl(result.brief_id)}
+                    alt="대지 위성+지적도"
+                    style={{ width: 160, height: 160, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--color-border)', flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)' }}>
+                    <div style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 4, color: 'var(--color-text-muted)', fontSize: 11 }}>
+                      {siteResult.matched_address}
+                    </div>
+                    {[
+                      ['방위·형상', siteResult.analysis?.orientation],
+                      ['접도 조건', siteResult.analysis?.road_access],
+                      ['주변 용도', siteResult.analysis?.surrounding_uses],
+                      ['자연자산', siteResult.analysis?.natural_assets],
+                    ].map(([label, val]) => val && val !== '위성 확인 불가' && (
+                      <div key={label} style={{ marginBottom: 3 }}>
+                        <span style={{ color: 'var(--color-text-muted)', marginRight: 4 }}>{label}:</span>{val}
+                      </div>
+                    ))}
+                    {siteResult.analysis?.overall_summary && (
+                      <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6,
+                        background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
+                        fontStyle: 'italic', color: 'var(--color-text-body)' }}>
+                        {siteResult.analysis.overall_summary}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 

@@ -372,6 +372,27 @@ export async function reinterpretBrief(briefId) {
   return r.json()
 }
 
+// VWorld 대지·맥락 분석 (geocoding + WMS + Claude vision). 사용자별 Anthropic 키 헤더 필요.
+export async function analyzeSite(briefId, address, radiusM = 500) {
+  const headers = { 'Content-Type': 'application/json' }
+  const apiKey = getStoredApiKey()
+  if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/site-analyze`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ address, radius_m: radiusM }),
+  })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `대지 분석 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
+export function getBriefSiteImageUrl(briefId) {
+  return `${BASE}/brief/${encodeURIComponent(briefId)}/site-image`
+}
+
 // 프로젝트 수주 제안서 생성 (수주 전략 처방, 추출 재처리 없음, LLM 1콜). 사용자별 키 헤더 필요.
 export async function proposeBrief(briefId) {
   const headers = {}

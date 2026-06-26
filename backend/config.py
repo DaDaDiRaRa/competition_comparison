@@ -946,12 +946,26 @@ class AppSettings:
         # 2 = priority<=2만 추출 (표지·렌더링 스킵). 3 = 모든 페이지 추출 (기존 동작).
         return int(self._data.get("extraction_priority_limit", 2))
 
+    @property
+    def vworld_api_key(self) -> str:
+        return self._data.get("vworld_api_key", "")
+
+    def has_vworld_key(self) -> bool:
+        return bool(self.vworld_api_key)
+
+    @property
+    def vworld_domain(self) -> str:
+        return self._data.get("vworld_domain", "")
+
     def to_dict(self) -> dict:
+        _HIDDEN = {"anthropic_api_key", "vworld_api_key"}
         return {
-            **{k: v for k, v in self._data.items() if k != "anthropic_api_key"},
+            **{k: v for k, v in self._data.items() if k not in _HIDDEN},
             "db_path": str(self.db_path),
             "has_db_path": self.has_db_path,
             "has_api_key": self.has_api_key(),
+            "has_vworld_key": self.has_vworld_key(),
+            "vworld_domain": self.vworld_domain,
         }
 
     def update(self, data: dict):

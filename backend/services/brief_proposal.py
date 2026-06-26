@@ -75,6 +75,12 @@ _PROPOSAL_INSTRUCTION = (
     "  요구·배점하는 것)으로 인용 절대 금지 — 다른 공모·다른 지침서의 통계임.\n"
     "  (c) win_n ≤ 2 이면 신호가 약하니 단정 말고 '경향이 있다' 수준으로.\n"
     "  (d) 패턴과 이 지침서 요구가 충돌하면 지침서가 우선.\n"
+    "- site_context: (있으면) VWorld 위성·지적도 이미지를 Claude vision으로 판독한 실제 대지 맥락.\n"
+    "  analysis 하위 키: orientation(방위·형상) / road_access(접도) / surrounding_uses(주변용도) /\n"
+    "  natural_assets(자연자산) / special_context(특이사항) / overall_summary(대지요약).\n"
+    "  규칙: (a) 대지 맥락을 설계 방향에 연결할 때 반드시 이 데이터를 우선 참고.\n"
+    "  (b) design_directions 5안에 대지 형상·접도·조망 조건을 직접 반영 (이 부지라서 가능한 안).\n"
+    "  (c) 불확실(confidence=low)이면 '위성 분석 기준, 현장 확인 필요' 단서를 붙여라.\n"
     "\n"
     "[출력 JSON — 정확히 이 키만, 다른 키 추가 금지]\n"
     "{\n"
@@ -197,6 +203,17 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     ps = _pattern_signals(facility_type)
     if ps:
         payload["pattern_context"] = ps
+
+    # VWorld 대지 맥락 (사전에 site-analyze 엔드포인트가 실행됐을 때만, 없으면 skip)
+    sc = brief_data.get("_site_context")
+    if sc and isinstance(sc, dict) and sc.get("analysis"):
+        payload["site_context"] = {
+            "matched_address": sc.get("matched_address", ""),
+            "lat":             sc.get("lat"),
+            "lng":             sc.get("lng"),
+            "radius_m":        sc.get("radius_m", 500),
+            "analysis":        sc["analysis"],
+        }
 
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)
     raw = call_messages(

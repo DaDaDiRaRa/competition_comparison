@@ -19,7 +19,8 @@ import traceback
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from pydantic import BaseModel
 
 from config import settings, FACILITY_TYPES, facility_label
 from routers.upload import resolve_file_ref
@@ -176,6 +177,7 @@ def list_briefs():
                 "has_html":           (briefs_dir / f"{p.stem}.html").exists(),
                 "has_insight":        bool(meta.get("_insight")),
                 "has_proposal":       (briefs_dir / f"{p.stem}_proposal.html").exists(),
+                "has_site_context":   bool(meta.get("_site_context")),
                 "validation_summary": (meta.get("validation") or {}).get("summary", {}),
             })
         except Exception:
@@ -650,3 +652,101 @@ async def propose_brief(brief_id: str):
         "data_confidence":   proposal.get("data_confidence"),
         "proposal_filename": proposal_filename,
     }
+
+
+# ── 대지·맥락 분석 (VWorld + Claude vision) ──────────────────────────────────
+
+class SiteAnalyzeRequest(BaseModel):
+    address: str                   # 분석할 주소 (지번 또는 도로명)
+    radius_m: int = 500            # 분석 반경 (m)
+
+
+@router.post("/{brief_id}/site-analyze")
+async def analyze_site(brief_id: str, req: SiteAnalyzeRequest):
+    """VWorld 위성+지적도 이미지 취득 → Claude vision 대지·맥락 분석.
+
+    - VWorld API 키: settings.vworld_api_key (설정 탭에서 저장)
+    - Anthropic API 키: X-Anthropic-Api-Key 헤더 (기존 경로)
+    - 결과: _site_context 로 _brief.json 갱신 + {brief_id}_site.jpg 저장
+    """
+    if not settings.has_vworld_key():
+        raise HTTPException(400, "VWorld API 키가 설정되지 않았습니다. 설정 탭에서 입력해주세요.")
+    if not settings.has_api_key():
+        raise HTTPException(401, "Anthropic API 키가 설정되지 않았습니다.")
+
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+
+    briefs_dir = settings.db_path / "_briefs"
+    json_path  = briefs_dir / f"{safe_id}.json"
+    if not json_path.exists():
+        raise HTTPException(404, "지침서 분석을 찾을 수 없습니다.")
+
+    try:
+        brief_data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"지침서 JSON 로드 실패: {type(e).__name__}")
+
+    address = req.address.strip()
+    if not address:
+        raise HTTPException(400, "주소가 비어있습니다.")
+
+    from services.vworld_analyzer import run_site_analysis
+    image_filename = f"{safe_id}_site.jpg"
+    image_path = briefs_dir / image_filename
+
+    try:
+        result = await run_site_analysis(
+            address=address,
+            vworld_key=settings.vworld_api_key,
+            vworld_domain=settings.vworld_domain,
+            radius_m=req.radius_m,
+            save_image_path=image_path,
+        )
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("site-analyze error: %s", traceback.format_exc())
+        raise HTTPException(500, f"대지 분석 실패: {type(e).__name__}: {e}")
+
+    # _site_context 저장 (_brief.json 갱신)
+    site_ctx = {
+        "address_input":   result["address_input"],
+        "matched_address": result["matched_address"],
+        "lat":             result["lat"],
+        "lng":             result["lng"],
+        "radius_m":        result["radius_m"],
+        "image_filename":  image_filename,
+        "analyzed_at":     time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "analysis":        result["analysis"],
+    }
+    brief_data["_site_context"] = site_ctx
+    try:
+        _atomic_write(json_path, brief_data)
+    except Exception as e:
+        logger.error("site-analyze save error: %s", traceback.format_exc())
+        raise HTTPException(500, f"저장 실패: {type(e).__name__}")
+
+    return {
+        "brief_id":        safe_id,
+        "has_site_context": True,
+        "matched_address": result["matched_address"],
+        "lat":             result["lat"],
+        "lng":             result["lng"],
+        "image_filename":  image_filename,
+        "analysis":        result["analysis"],
+        "image_jpeg_b64":  result.get("image_jpeg_b64", ""),
+    }
+
+
+@router.get("/{brief_id}/site-image")
+def get_site_image(brief_id: str):
+    """저장된 대지 분석 위성 이미지 반환 (JPEG)."""
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+    image_path = settings.db_path / "_briefs" / f"{safe_id}_site.jpg"
+    if not image_path.exists():
+        raise HTTPException(404, "대지 이미지가 없습니다. 대지 분석을 먼저 실행해주세요.")
+    return FileResponse(image_path, media_type="image/jpeg")
