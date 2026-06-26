@@ -23,6 +23,7 @@ from config import settings
 from services.llm_client import call_messages
 from services.utils import parse_json_response
 from services.brief_advisor import _build_advisor_payload, compute_scoring_focus
+from services.db_manager import load_pattern
 
 
 SCHEMA_VERSION = 1   # _proposal 스키마 버전
@@ -69,6 +70,11 @@ _PROPOSAL_INSTRUCTION = (
     "- design_overview / sites / special_conditions / validation_flags: 보조 근거.\n"
     "- prior_insight: (있으면) 앞서 생성된 사실 triage 해설 — 제안의 토대로 삼되 그대로\n"
     "  복붙하지 말고 '그래서 어떻게 할지'로 발전시킨다.\n"
+    "- pattern_context: (있으면) 동일 시설유형 과거 공모 당선·낙선 분석 경향.\n"
+    "  규칙: (a) 전략·제안을 구체화하는 힌트로만 활용. (b) 이 공모의 사실 주장(지침서가\n"
+    "  요구·배점하는 것)으로 인용 절대 금지 — 다른 공모·다른 지침서의 통계임.\n"
+    "  (c) win_n ≤ 2 이면 신호가 약하니 단정 말고 '경향이 있다' 수준으로.\n"
+    "  (d) 패턴과 이 지침서 요구가 충돌하면 지침서가 우선.\n"
     "\n"
     "[출력 JSON — 정확히 이 키만, 다른 키 추가 금지]\n"
     "{\n"
@@ -132,6 +138,36 @@ def _compact(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
 
 
+def _pattern_signals(facility_type: str) -> dict:
+    """시설유형 패턴에서 제안서 참고용 신호 추출. 없거나 N=0이면 {} 반환."""
+    try:
+        pattern = load_pattern(facility_type)
+        if not isinstance(pattern, dict):
+            return {}
+        win_n = pattern.get("win_count") or 0
+        if win_n == 0:
+            return {}
+        qi  = pattern.get("qualitative_insights") or {}
+        ls  = pattern.get("loser_stats") or {}
+        lqi = ls.get("qualitative_insights") or {}
+        lose_n = ls.get("lose_count") or 0
+        return {
+            "note": (
+                f"동일 시설유형 과거 공모 당선 {win_n}건·낙선 {lose_n}건 집계 경향. "
+                "직접 인용 금지 — 전략·제안 힌트로만 사용."
+            ),
+            "win_n": win_n,
+            "lose_n": lose_n,
+            "winner_keywords":     (pattern.get("concept_keywords") or [])[:8],
+            "winner_patterns":     (qi.get("winner_patterns") or [])[:5],
+            "loser_patterns":      (qi.get("loser_patterns") or [])[:5],
+            "key_differentiators": (qi.get("key_differentiators") or [])[:4],
+            "loser_keywords":      (ls.get("concept_keywords") or [])[:8],
+        }
+    except Exception:
+        return {}
+
+
 def _prior_insight_digest(brief_data: dict) -> dict:
     """기존 _insight(사실 triage)에서 제안의 토대로 쓸 부분만 요약 전달.
 
@@ -156,6 +192,11 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     # advisor 와 동일한 결정론 백본 신호 — 단일 소스 재사용 (드리프트 차단)
     payload = _build_advisor_payload(brief_data, facility_type)
     payload["prior_insight"] = _prior_insight_digest(brief_data)
+
+    # 시설유형 당선·낙선 패턴 (있을 때만, 없으면 조용히 skip)
+    ps = _pattern_signals(facility_type)
+    if ps:
+        payload["pattern_context"] = ps
 
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)
     raw = call_messages(

@@ -1,92 +1,189 @@
 """
-brief_proposal_report_generator.py — 수주 제안서(_proposal) → HTML.
+brief_proposal_report_generator.py — 수주 제안서(_proposal) → HTML (PPT형 스크롤 덱).
 
 **LLM 호출 없음** (Report Generation Rule). brief_proposal.propose_project 가 만든
 _proposal dict 를 화이트 + 건원 RED 자체완결 HTML 로 렌더만 한다. 데이터는 html.escape.
-brief_checklist_exporter._HTML_CSS 의 디자인 토큰 계열을 재사용(자체 정의).
 
-섹션: 헤더 → (전략 요약) → 배점 무게중심 카드 → 수주 핵심 테마 →
-      설계 접근 방향 → 우선순위 → 리스크·대응 → 착수 체크리스트 → 확인 필요 → 한계.
-내용 없는 섹션은 생략(graceful skip).
+레이아웃: 통일 캔버스(배경색 분리 없음) · 밀도 높게(나란히 배치) · 글→도식 치환.
+- 배점 무게중심: 100칸 와플 차트 SVG + 범례
+- 설계 접근 방향: 한눈 매트릭스 + 상세 카드(공간전략/포기/근거 + 매스 실루엣)
 """
 from __future__ import annotations
 
 import html
+import math
 from typing import Any
 
 
+_WAFFLE_COLORS = [
+    "#e60012", "#c47b00", "#2a6496", "#5a8a3e",
+    "#7a3a8e", "#3a8a8e", "#c45a00", "#6a6a6a",
+]
+
+# 5가지 컨셉 매스 실루엣 (측면 개념 실루엣, 평면 도식 아님)
+_MASS_SVGS = [
+    '<svg viewBox="0 0 80 72" width="80" height="72" fill="none" stroke="#1a1a1a" stroke-width="1.5" aria-hidden="true">'
+    '<rect x="15" y="10" width="18" height="54" rx="1"/>'
+    '<rect x="47" y="20" width="18" height="44" rx="1"/>'
+    '<line x1="8" y1="66" x2="72" y2="66"/></svg>',
+
+    '<svg viewBox="0 0 80 72" width="80" height="72" fill="none" stroke="#1a1a1a" stroke-width="1.5" aria-hidden="true">'
+    '<rect x="12" y="36" width="56" height="28" rx="1"/>'
+    '<rect x="28" y="12" width="26" height="26" rx="1"/>'
+    '<line x1="8" y1="66" x2="72" y2="66"/></svg>',
+
+    '<svg viewBox="0 0 80 72" width="80" height="72" fill="none" stroke="#1a1a1a" stroke-width="1.5" aria-hidden="true">'
+    '<rect x="10" y="12" width="16" height="52" rx="1"/>'
+    '<rect x="28" y="26" width="16" height="38" rx="1"/>'
+    '<rect x="46" y="40" width="16" height="24" rx="1"/>'
+    '<line x1="6" y1="66" x2="68" y2="66"/></svg>',
+
+    '<svg viewBox="0 0 80 72" width="80" height="72" fill="none" stroke="#1a1a1a" stroke-width="1.5" aria-hidden="true">'
+    '<rect x="8" y="30" width="64" height="34" rx="1"/>'
+    '<rect x="22" y="16" width="22" height="16" rx="1"/>'
+    '<line x1="4" y1="66" x2="76" y2="66"/></svg>',
+
+    '<svg viewBox="0 0 80 72" width="80" height="72" fill="none" stroke="#1a1a1a" stroke-width="1.5" aria-hidden="true">'
+    '<rect x="8" y="18" width="20" height="46" rx="1"/>'
+    '<rect x="31" y="10" width="20" height="54" rx="1"/>'
+    '<rect x="54" y="28" width="18" height="36" rx="1"/>'
+    '<line x1="4" y1="66" x2="76" y2="66"/></svg>',
+]
+
+_CIRCLE_NUMS = "①②③④⑤⑥⑦⑧⑨⑩"
+
 _PROPOSAL_CSS = """
 :root{
-  --ink:#1a1a1a; --text:#3a3a3a; --muted:#9a9a9a; --line:#ececec;
-  --soft:#f7f7f8; --accent:#e60012;
-  --high:#e60012; --med:#c47b00; --low:#9a9a9a;
+  --ink:#1a1a1a;--text:#3a3a3a;--muted:#9a9a9a;--line:#e8e8e8;
+  --soft:#f7f7f8;--accent:#e60012;
+  --high:#e60012;--med:#c47b00;--low:#9a9a9a;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:#fff;color:var(--text);
   font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased}
-.wrap{max-width:900px;margin:0 auto;padding:52px 30px 110px}
+.wrap{max-width:960px;margin:0 auto;padding:52px 30px 110px}
 header.doc{margin-bottom:8px;padding-bottom:22px;border-bottom:2px solid var(--ink)}
 header.doc .eyebrow{font-size:12px;letter-spacing:.14em;color:var(--accent);font-weight:700;text-transform:uppercase}
 header.doc h1{margin:8px 0 0;font-size:25px;font-weight:700;color:var(--ink);letter-spacing:-.02em;line-height:1.3}
 header.doc .meta{margin-top:12px;color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 18px}
-.disclaimer{font-size:12px;color:var(--muted);background:var(--soft);border-radius:8px;padding:10px 14px;margin:18px 0 4px}
-section.sec{margin:42px 0 0;scroll-margin-top:62px}
-section.sec>h2{display:flex;align-items:center;gap:11px;margin:0 0 16px;
-  font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+.disclaimer{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:18px 0 4px}
+
+/* ── 섹션 ─────────────────────────── */
+section.sec{margin:38px 0 0;scroll-margin-top:58px}
+section.sec>h2{display:flex;align-items:center;gap:10px;margin:0 0 14px;
+  font-size:17px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
 section.sec>h2 .n{display:inline-flex;align-items:center;justify-content:center;
-  min-width:25px;height:25px;padding:0 7px;border-radius:7px;
-  background:var(--accent);color:#fff;font-size:13px;font-weight:700;flex:0 0 auto}
-section.sec>h2 .conf{margin-left:auto;font-size:11.5px;font-weight:600;border:1px solid var(--line);
-  border-radius:20px;padding:3px 11px;color:var(--muted)}
+  min-width:24px;height:24px;padding:0 6px;border-radius:6px;
+  background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex:0 0 auto}
+section.sec>h2 .conf{margin-left:auto;font-size:11px;font-weight:600;border:1px solid var(--line);
+  border-radius:20px;padding:3px 10px;color:var(--muted)}
 section.sec>h2 .conf.high{color:#2a8a3e;border-color:#bfe3c6}
 section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
-.summ{font-size:15px;line-height:1.7;color:var(--ink);border-left:3px solid var(--accent);padding:2px 0 2px 14px;margin:6px 0 4px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0}
-.card{border:1px solid var(--line);border-radius:11px;padding:13px 15px;background:#fff}
-.card .rk{font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:.04em}
-.card .nm{font-size:14.5px;font-weight:700;color:var(--ink);line-height:1.3}
-.card .v{font-size:18px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;margin-top:4px}
-.card .v .u{font-size:12px;font-weight:500;color:var(--muted);margin-left:2px}
-.item{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin:10px 0;border-left:3px solid var(--accent)}
-.item .topic{font-weight:700;color:var(--ink);font-size:15px}
-.item .field{margin-top:6px;color:var(--text)}
-.item .field .k{color:var(--muted);font-size:12px;font-weight:600;margin-right:6px}
-.item .scoring{margin-top:6px;font-size:12.5px;color:var(--accent);font-weight:600}
-.cite{font-size:11px;color:var(--muted);background:var(--soft);border-radius:4px;padding:1px 6px;margin-left:4px;white-space:nowrap}
+
+/* ── 전략 요약 ───────────────────── */
+.summ{font-size:15.5px;line-height:1.75;color:var(--ink);
+  border-left:3px solid var(--accent);padding:4px 0 4px 16px;margin:4px 0}
+
+/* ── 와플 차트 ───────────────────── */
+.waffle-wrap{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}
+.waffle-legend{display:flex;flex-direction:column;gap:7px;min-width:160px}
+.waffle-legend-item{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.waffle-legend-item .dot{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+.waffle-legend-item .lname{color:var(--ink);font-weight:600}
+.waffle-legend-item .lpts{color:var(--muted);margin-left:2px}
+
+/* ── 테마 카드 ───────────────────── */
+.theme-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin:6px 0}
+.theme-card{border:1px solid var(--line);border-radius:10px;padding:14px 16px;border-left:3px solid var(--accent)}
+.theme-card .tc-title{font-size:15px;font-weight:700;color:var(--ink)}
+.theme-card .tc-rat{margin-top:5px;color:var(--text);font-size:13.5px}
+.theme-card .tc-link{margin-top:6px;font-size:12.5px;color:var(--accent);font-weight:600}
+
+/* ── 방향 매트릭스 ───────────────── */
+.dir-matrix{width:100%;border-collapse:collapse;margin:8px 0 20px;font-size:13px}
+.dir-matrix th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;
+  letter-spacing:.05em;padding:6px 10px;border-bottom:2px solid var(--ink)}
+.dir-matrix td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--text)}
+.dir-matrix td:first-child{font-weight:700;color:var(--ink);white-space:nowrap}
+.dir-matrix tr:last-child td{border-bottom:none}
+.dir-matrix .dn{color:var(--accent);margin-right:5px}
+
+/* ── 방향 상세 카드 ─────────────── */
+.dir-cards{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+.dir-card{border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.dir-card-head{display:flex;align-items:stretch;gap:0}
+.dir-card-main{flex:1;padding:14px 16px}
+.dir-card-svgbox{display:flex;align-items:center;justify-content:center;
+  padding:12px 16px;border-left:1px solid var(--line);min-width:112px;color:var(--muted)}
+.dir-card-title{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px}
+.dir-card-title .num{color:var(--accent);margin-right:6px}
+.dir-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
+.dir-field .dfk{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);margin-bottom:2px;text-transform:uppercase}
+.dir-field .dfv{font-size:13px;color:var(--text)}
+.dir-card-basis{padding:7px 16px 12px;font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);background:#fafafa}
+
+/* ── 우선순위 ────────────────────── */
 ol.pri{margin:8px 0;padding:0;list-style:none;counter-reset:pri}
-ol.pri li{counter-increment:pri;border-bottom:1px solid #f4f4f4;padding:11px 0 11px 44px;position:relative}
-ol.pri li::before{content:counter(pri);position:absolute;left:0;top:10px;width:28px;height:28px;
-  display:inline-flex;align-items:center;justify-content:center;border-radius:8px;
-  background:var(--accent);color:#fff;font-weight:700;font-size:13px}
+ol.pri li{counter-increment:pri;display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f4f4f4}
+ol.pri li:last-child{border-bottom:none}
+ol.pri li::before{content:counter(pri);display:inline-flex;align-items:center;justify-content:center;
+  min-width:26px;height:26px;border-radius:7px;background:var(--accent);
+  color:#fff;font-weight:700;font-size:12px;flex:0 0 auto;margin-top:1px}
+ol.pri li .pri-body{flex:1}
 ol.pri li .focus{font-weight:700;color:var(--ink)}
-ol.pri li .focus .w{font-weight:600;color:var(--accent);margin-left:7px;font-size:12.5px}
-ol.pri li .why{color:var(--text);margin-top:2px}
-.risk{border-left:3px solid var(--low);background:var(--soft);padding:11px 14px;margin:9px 0;border-radius:0 7px 7px 0}
-.risk.high{border-color:var(--high)} .risk.medium{border-color:var(--med)}
+ol.pri li .w{font-weight:600;color:var(--accent);margin-left:7px;font-size:12px}
+ol.pri li .why{color:var(--text);margin-top:2px;font-size:13px}
+
+/* ── 리스크 ──────────────────────── */
+.risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:6px 0}
+.risk{border-left:3px solid var(--low);padding:11px 14px;border-radius:0 8px 8px 0;
+  border:1px solid var(--line);border-left-width:3px}
+.risk.high{border-left-color:var(--high)}
+.risk.medium{border-left-color:var(--med)}
 .risk .rt{font-weight:700;color:var(--ink);font-size:13.5px}
-.risk .rt .sev{font-size:11px;color:var(--muted);font-weight:600;margin-left:7px}
-.risk.high .rt .sev{color:var(--high)} .risk.medium .rt .sev{color:var(--med)}
-.risk .rm{margin-top:4px;color:var(--text)}
+.risk .sev{font-size:11px;color:var(--muted);font-weight:600;margin-left:7px}
+.risk.high .sev{color:var(--high)} .risk.medium .sev{color:var(--med)}
+.risk .rm{margin-top:5px;color:var(--text);font-size:13px}
+.risk .rm .k{color:var(--muted);font-size:11px;font-weight:700;margin-right:5px;letter-spacing:.04em}
+
+/* ── 리스트 섹션 ─────────────────── */
 ul.list{margin:8px 0;padding-left:20px}
-ul.list li{margin:5px 0}
+ul.list li{margin:5px 0;font-size:13.5px}
+.checklist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;margin:6px 0}
+.check-item{display:flex;align-items:flex-start;gap:7px;font-size:13px;color:var(--text)}
+.check-item::before{content:"☐";color:var(--accent);font-size:15px;flex:0 0 auto;margin-top:-1px}
+
+/* ── 공통 ────────────────────────── */
+.cite{font-size:11px;color:var(--muted);background:var(--soft);border-radius:4px;
+  padding:1px 5px;margin-left:3px;white-space:nowrap}
 .caveat{margin:16px 0 0;font-size:12px;color:var(--muted)}
 footer.doc{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);color:#c0c0c0;font-size:11.5px;text-align:center}
+
+/* ── 상단 nav ────────────────────── */
 nav.top{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.92);
-  backdrop-filter:saturate(160%) blur(8px);-webkit-backdrop-filter:saturate(160%) blur(8px);border-bottom:1px solid var(--line)}
-nav.top .inner{max-width:900px;margin:0 auto;padding:10px 30px;display:flex;align-items:center;gap:14px}
-nav.top .ttl{font-weight:700;color:var(--ink);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:36%}
+  backdrop-filter:saturate(160%) blur(8px);-webkit-backdrop-filter:saturate(160%) blur(8px);
+  border-bottom:1px solid var(--line)}
+nav.top .inner{max-width:960px;margin:0 auto;padding:9px 30px;display:flex;align-items:center;gap:14px}
+nav.top .ttl{font-weight:700;color:var(--ink);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34%}
 nav.top .links{display:flex;gap:2px;margin-left:auto;flex-wrap:nowrap;overflow-x:auto}
-nav.top .links a{font-size:12.5px;color:var(--muted);text-decoration:none;padding:5px 11px;border-radius:7px;white-space:nowrap}
+nav.top .links a{font-size:12px;color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:6px;white-space:nowrap}
 nav.top .links a:hover{background:var(--soft);color:var(--ink)}
+
 @media print{.wrap{padding:0}body{font-size:12px}section.sec{break-inside:avoid}nav.top{display:none}}
-@media(max-width:560px){.wrap{padding:32px 18px 64px}nav.top .ttl{display:none}nav.top .inner{padding:8px 18px}}
+@media(max-width:600px){
+  .wrap{padding:32px 18px 64px}
+  nav.top .ttl{display:none}
+  nav.top .inner{padding:8px 18px}
+  .dir-fields{grid-template-columns:1fr}
+  .dir-card-svgbox{display:none}
+  .waffle-wrap{flex-direction:column}
+}
 """
 
-
 _CONF_LABEL = {"high": "높음", "medium": "보통", "low": "낮음 (근거 부족)"}
-_SEV_LABEL = {"high": "높음", "medium": "중간", "low": "낮음"}
+_SEV_LABEL   = {"high": "높음", "medium": "중간",  "low": "낮음"}
 
 
 def _esc(v: Any) -> str:
@@ -98,74 +195,195 @@ def _esc(v: Any) -> str:
 def _basis_html(b) -> str:
     items = b if isinstance(b, list) else ([b] if b else [])
     items = [str(x).strip() for x in items if str(x).strip()]
-    return f'<span class="cite">근거 {_esc(" · ".join(items))}</span>' if items else ""
+    if not items:
+        return ""
+    parts = " · ".join(_esc(x) for x in items)
+    return f'<span class="cite">근거 {parts}</span>'
 
 
-def _scoring_cards(proposal: dict) -> str:
-    """결정론 scoring_focus → 배점 무게중심 카드 (상위 6개, 명시 배점 우선)."""
+# ── 와플 차트 ────────────────────────────────────────────────────────
+
+def _waffle_cells(focus_ranked: list) -> list[tuple[str, str, int]]:
+    """최대잉여법으로 100칸 배분 → [(category, color, count)]."""
+    items = [(f, _WAFFLE_COLORS[i % len(_WAFFLE_COLORS)])
+             for i, f in enumerate(focus_ranked)
+             if isinstance(f.get("weight_pct"), (int, float)) and f["weight_pct"] > 0]
+    if not items:
+        return []
+    floored = [(f, c, int(f["weight_pct"])) for f, c in items]
+    remainder = 100 - sum(x[2] for x in floored)
+    fracs = sorted(((f["weight_pct"] % 1, i) for i, (f, c, _) in enumerate(floored)), reverse=True)
+    for _, idx in fracs[:max(0, remainder)]:
+        f, c, n = floored[idx]
+        floored[idx] = (f, c, n + 1)
+    return [(f.get("category") or "", c, n) for f, c, n in floored]
+
+
+def _waffle_svg(cells: list) -> str:
+    cell_px, gap = 12, 2
+    step = cell_px + gap
+    dim = step * 10 - gap  # 138
+
+    flat: list[str] = []
+    for _, color, count in cells:
+        flat.extend([color] * count)
+    flat.extend(["#e8e8e8"] * (100 - len(flat)))
+
+    rects = []
+    for i, color in enumerate(flat[:100]):
+        col, row = i % 10, i // 10
+        rects.append(
+            f'<rect x="{col*step}" y="{row*step}" width="{cell_px}" height="{cell_px}" '
+            f'fill="{color}" rx="2"/>'
+        )
+    return (
+        f'<svg viewBox="0 0 {dim} {dim}" width="{dim}" height="{dim}" '
+        f'style="display:block;flex:0 0 auto" aria-hidden="true">'
+        + "".join(rects) + "</svg>"
+    )
+
+
+def _scoring_waffle(proposal: dict) -> str:
     focus = [f for f in (proposal.get("scoring_focus") or []) if isinstance(f, dict)]
-    ranked = sorted(
-        [f for f in focus if f.get("rank")],
-        key=lambda f: f.get("rank") or 99,
-    )[:6]
+    ranked = sorted([f for f in focus if isinstance(f.get("rank"), (int, float))],
+                    key=lambda f: f["rank"])[:8]
     if not ranked:
         return ""
-    cards = []
-    for f in ranked:
-        name = _esc((f.get("category") or "").strip())
-        pts = f.get("points")
-        wt = f.get("weight_pct")
-        v = f"{pts:g}점" if isinstance(pts, (int, float)) else ""
-        u = f'<span class="u">({wt:g}%)</span>' if isinstance(wt, (int, float)) else ""
-        cards.append(
-            f'<div class="card"><div class="rk">배점 {f.get("rank")}순위</div>'
-            f'<div class="nm">{name}</div><div class="v">{_esc(v)}{u}</div></div>'
-        )
-    return ('<section id="scoring" class="sec"><h2><span class="n">·</span>배점 무게중심</h2>'
-            '<div class="cards">' + "".join(cards) + '</div></section>')
+    cells = _waffle_cells(ranked)
+    if not cells:
+        return ""
 
+    legend_items = []
+    for cat, color, n in cells:
+        pts_f = next((f for f in ranked if (f.get("category") or "") == cat), {})
+        pts = pts_f.get("points")
+        pts_txt = f'{pts:g}점' if isinstance(pts, (int, float)) else f'{n}%'
+        legend_items.append(
+            f'<div class="waffle-legend-item">'
+            f'<span class="dot" style="background:{color}"></span>'
+            f'<span class="lname">{_esc(cat)}</span>'
+            f'<span class="lpts">{_esc(pts_txt)}</span>'
+            f'</div>'
+        )
+
+    return (
+        '<section id="scoring" class="sec">'
+        '<h2><span class="n">·</span>배점 무게중심</h2>'
+        '<div class="waffle-wrap">'
+        + _waffle_svg(cells)
+        + '<div class="waffle-legend">' + "".join(legend_items) + '</div>'
+        '</div></section>'
+    )
+
+
+# ── 핵심 테마 ────────────────────────────────────────────────────────
 
 def _win_themes_html(proposal: dict) -> str:
     themes = [t for t in (proposal.get("win_themes") or []) if isinstance(t, dict)]
-    blocks = []
+    cards = []
     for t in themes:
         topic = _esc((t.get("theme") or "").strip())
         if not topic:
             continue
         rat = (t.get("rationale") or "").strip()
-        rat_html = f'<div class="field">{_esc(rat)}</div>' if rat else ""
         link = (t.get("scoring_link") or "").strip()
-        link_html = f'<div class="scoring">↳ {_esc(link)}</div>' if link else ""
-        blocks.append(
-            f'<div class="item"><div class="topic">{topic}</div>{rat_html}{link_html}'
-            f'<div class="field">{_basis_html(t.get("basis"))}</div></div>'
+        cards.append(
+            f'<div class="theme-card">'
+            f'<div class="tc-title">{topic}</div>'
+            + (f'<div class="tc-rat">{_esc(rat)}</div>' if rat else "")
+            + (f'<div class="tc-link">↳ {_esc(link)}</div>' if link else "")
+            + f'<div style="margin-top:6px">{_basis_html(t.get("basis"))}</div>'
+            f'</div>'
         )
-    if not blocks:
+    if not cards:
         return ""
-    return ('<section id="themes" class="sec"><h2><span class="n">1</span>수주 핵심 테마</h2>'
-            + "".join(blocks) + '</section>')
+    return (
+        '<section id="themes" class="sec">'
+        '<h2><span class="n">1</span>수주 핵심 테마</h2>'
+        '<div class="theme-grid">' + "".join(cards) + '</div>'
+        '</section>'
+    )
+
+
+# ── 설계 접근 방향 (매트릭스 + 상세 카드) ───────────────────────────
+
+def _direction_matrix(dirs: list) -> str:
+    if not dirs:
+        return ""
+    rows = []
+    for i, d in enumerate(dirs):
+        num = _CIRCLE_NUMS[i] if i < len(_CIRCLE_NUMS) else str(i + 1)
+        name = _esc((d.get("direction") or "").strip())
+        addr = _esc((d.get("addresses") or "").strip())
+        tr   = _esc((d.get("tradeoffs") or "").strip())
+        rows.append(
+            f'<tr><td><span class="dn">{_esc(num)}</span>{name}</td>'
+            f'<td>{addr}</td><td>{tr}</td></tr>'
+        )
+    return (
+        '<table class="dir-matrix">'
+        '<thead><tr><th>안</th><th>접근 방향</th><th>포기·유의</th></tr></thead>'
+        '<tbody>' + "".join(rows) + '</tbody></table>'
+    )
+
+
+def _direction_cards(dirs: list) -> str:
+    if not dirs:
+        return ""
+    cards = []
+    for i, d in enumerate(dirs):
+        num   = _CIRCLE_NUMS[i] if i < len(_CIRCLE_NUMS) else str(i + 1)
+        name  = _esc((d.get("direction") or "").strip())
+        addr  = _esc((d.get("addresses") or "").strip())
+        tr    = _esc((d.get("tradeoffs") or "").strip())
+        basis = _basis_html(d.get("basis"))
+        svg   = _MASS_SVGS[i % len(_MASS_SVGS)]
+
+        fields = ""
+        if addr:
+            fields += (
+                '<div class="dir-field">'
+                '<div class="dfk">공간전략</div>'
+                f'<div class="dfv">{addr}</div>'
+                '</div>'
+            )
+        if tr:
+            fields += (
+                '<div class="dir-field">'
+                '<div class="dfk">포기·유의</div>'
+                f'<div class="dfv">{tr}</div>'
+                '</div>'
+            )
+
+        cards.append(
+            '<div class="dir-card">'
+            '<div class="dir-card-head">'
+            '<div class="dir-card-main">'
+            f'<div class="dir-card-title"><span class="num">{_esc(num)}</span>{name}</div>'
+            + (f'<div class="dir-fields">{fields}</div>' if fields else "")
+            + '</div>'
+            f'<div class="dir-card-svgbox">{svg}</div>'
+            '</div>'
+            + (f'<div class="dir-card-basis">{basis}</div>' if basis else "")
+            + '</div>'
+        )
+    return '<div class="dir-cards">' + "".join(cards) + '</div>'
 
 
 def _directions_html(proposal: dict) -> str:
     dirs = [d for d in (proposal.get("design_directions") or []) if isinstance(d, dict)]
-    blocks = []
-    for d in dirs:
-        direction = _esc((d.get("direction") or "").strip())
-        if not direction:
-            continue
-        addr = (d.get("addresses") or "").strip()
-        addr_html = f'<div class="field"><span class="k">대응</span>{_esc(addr)}</div>' if addr else ""
-        tr = (d.get("tradeoffs") or "").strip()
-        tr_html = f'<div class="field"><span class="k">유의</span>{_esc(tr)}</div>' if tr else ""
-        blocks.append(
-            f'<div class="item"><div class="topic">{direction}</div>{addr_html}{tr_html}'
-            f'<div class="field">{_basis_html(d.get("basis"))}</div></div>'
-        )
-    if not blocks:
+    if not dirs:
         return ""
-    return ('<section id="directions" class="sec"><h2><span class="n">2</span>설계 접근 방향 (후보)</h2>'
-            + "".join(blocks) + '</section>')
+    return (
+        '<section id="directions" class="sec">'
+        '<h2><span class="n">2</span>설계 접근 방향</h2>'
+        + _direction_matrix(dirs)
+        + _direction_cards(dirs)
+        + '</section>'
+    )
 
+
+# ── 착수 우선순위 ────────────────────────────────────────────────────
 
 def _priorities_html(proposal: dict) -> str:
     pris = [p for p in (proposal.get("priorities") or []) if isinstance(p, dict)]
@@ -175,16 +393,27 @@ def _priorities_html(proposal: dict) -> str:
         focus = _esc((p.get("focus") or "").strip())
         if not focus:
             continue
-        wt = (str(p.get("scoring_weight")).strip() if p.get("scoring_weight") else "")
-        wt_html = f'<span class="w">{_esc(wt)}</span>' if wt else ""
+        wt = str(p.get("scoring_weight") or "").strip()
         why = (p.get("why") or "").strip()
-        why_html = f'<div class="why">{_esc(why)}</div>' if why else ""
-        lis.append(f'<li><span class="focus">{focus}{wt_html}</span>{why_html}</li>')
+        lis.append(
+            f'<li><div class="pri-body">'
+            f'<span class="focus">{focus}'
+            + (f'<span class="w">{_esc(wt)}</span>' if wt else "")
+            + '</span>'
+            + (f'<div class="why">{_esc(why)}</div>' if why else "")
+            + '</div></li>'
+        )
     if not lis:
         return ""
-    return ('<section id="priorities" class="sec"><h2><span class="n">3</span>착수 우선순위</h2>'
-            '<ol class="pri">' + "".join(lis) + '</ol></section>')
+    return (
+        '<section id="priorities" class="sec">'
+        '<h2><span class="n">3</span>착수 우선순위</h2>'
+        '<ol class="pri">' + "".join(lis) + '</ol>'
+        '</section>'
+    )
 
+
+# ── 리스크 ──────────────────────────────────────────────────────────
 
 def _risks_html(proposal: dict) -> str:
     risks = [r for r in (proposal.get("risks") or []) if isinstance(r, dict)]
@@ -198,42 +427,62 @@ def _risks_html(proposal: dict) -> str:
         sev = (r.get("severity") or "").lower()
         sev_cls = sev if sev in _SEV_LABEL else ""
         sev_lbl = _SEV_LABEL.get(sev, "")
-        sev_html = f'<span class="sev">{_esc(sev_lbl)}</span>' if sev_lbl else ""
         mit = (r.get("mitigation") or "").strip()
-        mit_html = f'<div class="rm"><span class="k" style="color:var(--muted);font-size:12px;font-weight:600;margin-right:6px">대응</span>{_esc(mit)}</div>' if mit else ""
         blocks.append(
-            f'<div class="risk {sev_cls}"><div class="rt">{risk}{sev_html}</div>{mit_html}'
-            f'<div class="rm">{_basis_html(r.get("basis"))}</div></div>'
+            f'<div class="risk {sev_cls}">'
+            f'<div class="rt">{risk}'
+            + (f'<span class="sev">{_esc(sev_lbl)}</span>' if sev_lbl else "")
+            + '</div>'
+            + (f'<div class="rm"><span class="k">대응</span>{_esc(mit)}</div>' if mit else "")
+            + f'<div class="rm">{_basis_html(r.get("basis"))}</div>'
+            + '</div>'
         )
     if not blocks:
         return ""
-    return ('<section id="risks" class="sec"><h2><span class="n">4</span>리스크 · 대응</h2>'
-            + "".join(blocks) + '</section>')
+    return (
+        '<section id="risks" class="sec">'
+        '<h2><span class="n">4</span>리스크 · 대응</h2>'
+        '<div class="risk-grid">' + "".join(blocks) + '</div>'
+        '</section>'
+    )
 
 
-def _list_section(proposal: dict, key: str, sec_id: str, n: str, title: str) -> str:
+# ── 체크리스트 · 확인 필요 ───────────────────────────────────────────
+
+def _checklist_html(proposal: dict, key: str, sec_id: str, n: str, title: str) -> str:
     items = [str(x).strip() for x in (proposal.get(key) or []) if str(x).strip()]
     if not items:
         return ""
-    lis = "".join(f"<li>{_esc(x)}</li>" for x in items)
-    return (f'<section id="{sec_id}" class="sec"><h2><span class="n">{n}</span>{_esc(title)}</h2>'
-            f'<ul class="list">{lis}</ul></section>')
+    cells = "".join(f'<div class="check-item">{_esc(x)}</div>' for x in items)
+    return (
+        f'<section id="{sec_id}" class="sec">'
+        f'<h2><span class="n">{n}</span>{_esc(title)}</h2>'
+        f'<div class="checklist-grid">{cells}</div>'
+        '</section>'
+    )
 
+
+# ── 메인 렌더 ────────────────────────────────────────────────────────
 
 def to_proposal_html(proposal: dict, brief_name: str = "", facility_label: str = "") -> str:
-    """_proposal dict → 자체완결 HTML 문자열 (LLM 호출 없음)."""
+    """_proposal dict → 자체완결 HTML 문자열 (PPT형 스크롤 덱, LLM 호출 없음)."""
     proposal = proposal or {}
     title = (brief_name or "").strip() or "프로젝트 수주 제안서"
 
     conf = (proposal.get("data_confidence") or "").lower()
     conf_cls = conf if conf in _CONF_LABEL else ""
     conf_lbl = _CONF_LABEL.get(conf, "")
-    conf_html = f'<span class="conf {conf_cls}">근거 신뢰도 {_esc(conf_lbl)}</span>' if conf_lbl else ""
+    conf_html = (
+        f'<span class="conf {conf_cls}">근거 신뢰도 {_esc(conf_lbl)}</span>'
+        if conf_lbl else ""
+    )
 
     summary = (proposal.get("executive_summary") or "").strip()
     summary_html = (
-        f'<section id="summary" class="sec"><h2><span class="n">·</span>전략 요약{conf_html}</h2>'
-        f'<div class="summ">{_esc(summary)}</div></section>'
+        '<section id="summary" class="sec">'
+        f'<h2><span class="n">·</span>전략 요약{conf_html}</h2>'
+        f'<div class="summ">{_esc(summary)}</div>'
+        '</section>'
     ) if summary else ""
 
     meta_bits = []
@@ -246,25 +495,30 @@ def to_proposal_html(proposal: dict, brief_name: str = "", facility_label: str =
 
     body = (
         summary_html
-        + _scoring_cards(proposal)
+        + _scoring_waffle(proposal)
         + _win_themes_html(proposal)
         + _directions_html(proposal)
         + _priorities_html(proposal)
         + _risks_html(proposal)
-        + _list_section(proposal, "kickoff_checklist", "kickoff", "5", "착수 체크리스트")
-        + _list_section(proposal, "open_questions", "questions", "6", "발주처 확인 필요")
+        + _checklist_html(proposal, "kickoff_checklist", "kickoff", "5", "착수 체크리스트")
+        + _checklist_html(proposal, "open_questions",    "questions", "6", "발주처 확인 필요")
     )
 
     caveats = [str(c).strip() for c in (proposal.get("caveats") or []) if str(c).strip()]
     caveat_html = (
-        '<section id="caveats" class="sec"><h2><span class="n">·</span>한계</h2>'
-        '<ul class="list">' + "".join(f"<li>{_esc(c)}</li>" for c in caveats) + "</ul></section>"
+        '<section id="caveats" class="sec">'
+        '<h2><span class="n">·</span>한계</h2>'
+        '<ul class="list">' + "".join(f"<li>{_esc(c)}</li>" for c in caveats) + '</ul>'
+        '</section>'
     ) if caveats else ""
 
     nav_links = (
-        '<a href="#summary">요약</a><a href="#themes">핵심 테마</a>'
-        '<a href="#directions">접근 방향</a><a href="#priorities">우선순위</a>'
-        '<a href="#risks">리스크</a><a href="#kickoff">체크리스트</a>'
+        '<a href="#summary">요약</a>'
+        '<a href="#themes">핵심 테마</a>'
+        '<a href="#directions">접근 방향</a>'
+        '<a href="#priorities">우선순위</a>'
+        '<a href="#risks">리스크</a>'
+        '<a href="#kickoff">체크리스트</a>'
     )
 
     return (
@@ -278,11 +532,15 @@ def to_proposal_html(proposal: dict, brief_name: str = "", facility_label: str =
         "<header class='doc'><div class='eyebrow'>PROJECT PROPOSAL</div>"
         f"<h1>{_esc(title)}</h1>"
         f"<div class='meta'>{''.join(meta_bits)}</div></header>"
-        "<div class='disclaimer'>본 제안서는 추출된 지침서 데이터에 근거한 <b>수주 전략 가설</b>입니다. "
-        "사실 주장(지침서가 요구·강조·배점하는 것)에는 근거를 인용하며, 전략·접근 방향은 제안이고 "
-        "실제 심사 결과를 보장하지 않습니다. 최종 판단은 설계팀의 몫입니다.</div>"
+        "<div class='disclaimer'>"
+        "본 제안서는 추출된 지침서 데이터에 근거한 <b>수주 전략 가설</b>입니다. "
+        "사실 주장(지침서가 요구·강조·배점하는 것)에는 근거를 인용하며, "
+        "전략·접근 방향은 제안이고 실제 심사 결과를 보장하지 않습니다. "
+        "최종 판단은 설계팀의 몫입니다.</div>"
         + body
         + caveat_html
-        + "<footer class='doc'>Competition Analyzer · 지침서 기반 수주 제안서 (AI 생성 · 당락 예측 아님)</footer>"
+        + "<footer class='doc'>"
+        "Competition Analyzer · 지침서 기반 수주 제안서 (AI 생성 · 당락 예측 아님)"
+        "</footer>"
         "</div></body></html>"
     )
