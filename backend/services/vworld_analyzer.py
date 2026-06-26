@@ -57,80 +57,62 @@ async def geocode(address: str, api_key: str) -> dict:
     raise RuntimeError(f"VWorld 지오코딩 실패: '{address}' — 주소를 찾을 수 없습니다. 더 자세한 주소로 재시도해주세요.")
 
 
-# ── WMS 이미지 취득 ───────────────────────────────────────────────────────────
+# ── WMTS 타일 취득 (위성 영상) ────────────────────────────────────────────────
 
-def _bbox(lat: float, lng: float, radius_m: int) -> str:
-    """WMS 1.3.0 EPSG:4326 bbox 문자열 (minLat,minLng,maxLat,maxLng)."""
-    lat_d = radius_m / 111_000
-    lng_d = radius_m / (111_000 * abs(math.cos(math.radians(lat))))
-    return f"{lat - lat_d},{lng - lng_d},{lat + lat_d},{lng + lng_d}"
+def _lat_lng_to_tile(lat: float, lng: float, zoom: int) -> tuple:
+    """WGS84 → Slippy Map 타일 좌표 (Web Mercator)."""
+    n = 2 ** zoom
+    x = int((lng + 180) / 360 * n)
+    y = int((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * n)
+    return x, y
 
 
-async def _fetch_wms(
-    lat: float, lng: float, api_key: str, domain: str,
-    layers: str, radius_m: int = _DEFAULT_RADIUS_M,
-    width: int = 800, height: int = 800,
+async def _fetch_wmts_satellite(
+    lat: float, lng: float, api_key: str, domain: str = "",
+    zoom: int = 16, grid: int = 3,
 ) -> bytes:
-    """VWorld WMS GetMap → PNG bytes."""
-    params = {
-        "service": "WMS",
-        "request": "GetMap",
-        "version": "1.3.0",
-        "layers": layers,
-        "styles": "",
-        "CRS": "EPSG:4326",
-        "bbox": _bbox(lat, lng, radius_m),
-        "width": str(width),
-        "height": str(height),
-        "format": "image/png",
-        "transparent": "true",
-        "key": api_key,
-    }
-    if domain:
-        params["domain"] = domain
+    """VWorld WMTS 위성 타일 grid×grid 합성 → JPEG bytes.
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(f"{_VWORLD_BASE}/wms", params=params)
-    r.raise_for_status()
-    ct = r.headers.get("content-type", "")
-    if "image" not in ct:
-        import re as _re
-        xml = r.text
-        m = _re.search(r'<ServiceException[^>]*>(.*?)</ServiceException>', xml, _re.DOTALL)
-        detail = m.group(1).strip() if m else xml[:800]
-        raise RuntimeError(f"WMS 오류 (layer={layers}): {detail}")
-    return r.content
+    URL: https://api.vworld.kr/req/wmts/1.0.0/{key}/Satellite/{z}/{y}/{x}.jpeg
+    zoom 16 기준 타일 1장 ≈ 488m (위도 37°), 3×3 그리드 ≈ 1.4km 시야.
+    """
+    cx, cy = _lat_lng_to_tile(lat, lng, zoom)
+    half = grid // 2
+    tile_size = 256
 
+    async def _get_tile(tx: int, ty: int) -> bytes | None:
+        url = f"https://api.vworld.kr/req/wmts/1.0.0/{api_key}/Satellite/{zoom}/{ty}/{tx}.jpeg"
+        params = {"domain": domain} if domain else {}
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.get(url, params=params)
+            if r.is_success and "image" in r.headers.get("content-type", ""):
+                return r.content
+            logger.warning("WMTS tile (%d/%d/%d) 실패: %s", zoom, ty, tx, r.status_code)
+        except Exception as e:
+            logger.warning("WMTS tile (%d/%d/%d) 오류: %s", zoom, ty, tx, e)
+        return None
 
-def _compose(satellite_bytes: bytes, overlay_bytes: bytes, overlay_alpha: float = 0.55) -> bytes:
-    """위성 이미지 위에 지적도 오버레이 합성 → PNG bytes."""
-    sat = Image.open(io.BytesIO(satellite_bytes)).convert("RGBA")
-    ov  = Image.open(io.BytesIO(overlay_bytes)).convert("RGBA")
-    if sat.size != ov.size:
-        ov = ov.resize(sat.size, Image.LANCZOS)
-    r, g, b, a = ov.split()
-    a = a.point(lambda x: int(x * overlay_alpha))
-    ov = Image.merge("RGBA", (r, g, b, a))
-    sat.alpha_composite(ov)
+    coords = [(cx + dx, cy + dy) for dy in range(-half, half + 1) for dx in range(-half, half + 1)]
+    tiles = await asyncio.gather(*[_get_tile(tx, ty) for tx, ty in coords])
+
+    img = Image.new("RGB", (grid * tile_size, grid * tile_size), (180, 180, 180))
+    for idx, tile_bytes in enumerate(tiles):
+        if tile_bytes:
+            gx, gy = idx % grid, idx // grid
+            img.paste(Image.open(io.BytesIO(tile_bytes)).convert("RGB"), (gx * tile_size, gy * tile_size))
+
+    if all(t is None for t in tiles):
+        raise RuntimeError("VWorld WMTS 위성 타일을 하나도 가져오지 못했습니다. API 키·도메인을 확인하세요.")
+
     out = io.BytesIO()
-    # 배경 흰색으로 플래튼해 JPEG 호환
-    sat_rgb = Image.new("RGB", sat.size, (255, 255, 255))
-    sat_rgb.paste(sat, mask=sat.split()[3])
-    sat_rgb.save(out, format="JPEG", quality=90)
-    return out.getvalue()
-
-
-def _satellite_only_jpeg(satellite_bytes: bytes) -> bytes:
-    """위성 이미지 단독 → JPEG bytes (지적도 오버레이 없음)."""
-    sat = Image.open(io.BytesIO(satellite_bytes)).convert("RGB")
-    out = io.BytesIO()
-    sat.save(out, format="JPEG", quality=90)
+    img.save(out, format="JPEG", quality=90)
     return out.getvalue()
 
 
 # ── Claude vision 대지 분석 ───────────────────────────────────────────────────
 
-_SITE_ANALYSIS_PROMPT = """이 이미지는 '{address}' 일대의 위성사진 + 연속지적도 합성 이미지입니다.
+_SITE_ANALYSIS_PROMPT = """이 이미지는 '{address}' 일대의 VWorld 위성사진입니다 (3×3 타일 합성).
 좌표: 위도 {lat:.5f}, 경도 {lng:.5f} | 반경 약 {radius_m}m.
 
 건축 공모 수주 전략 수립을 위해 아래를 분석해주세요.
@@ -213,32 +195,16 @@ async def run_site_analysis(
     lat, lng = geo["lat"], geo["lng"]
     logger.info("geocode OK: %s → (%.5f, %.5f)", geo["matched"], lat, lng)
 
-    # 2. 위성 이미지 취득 (필수)
-    sat_bytes = await _fetch_wms(lat, lng, vworld_key, vworld_domain, "Satellite", radius_m)
+    # 2. 위성 이미지 취득 (WMTS 타일, 3×3 그리드)
+    composed = await _fetch_wmts_satellite(lat, lng, vworld_key, vworld_domain)
+    logger.info("WMTS satellite OK: %d bytes", len(composed))
 
-    # 3. 지적도 오버레이 (실패 시 위성 단독 사용)
-    cad_bytes = None
-    for cad_layer in ("lp_pa_cn_A", "LP_PA_CN_A", "lp_pa_cn_a"):
-        try:
-            cad_bytes = await _fetch_wms(lat, lng, vworld_key, vworld_domain, cad_layer, radius_m)
-            logger.info("cadastral layer OK: %s", cad_layer)
-            break
-        except Exception as e:
-            logger.warning("cadastral layer '%s' failed: %s", cad_layer, e)
-
-    # 4. 합성 (Pillow) — 지적도 없으면 위성 단독 JPEG 변환
-    if cad_bytes:
-        composed = await asyncio.to_thread(_compose, sat_bytes, cad_bytes)
-    else:
-        logger.warning("지적도 오버레이 실패 — 위성 단독으로 분석 진행")
-        composed = await asyncio.to_thread(_satellite_only_jpeg, sat_bytes)
-
-    # 5. 이미지 저장 (옵션)
+    # 3. 이미지 저장 (옵션)
     if save_image_path:
         save_image_path.write_bytes(composed)
         logger.info("site image saved: %s", save_image_path)
 
-    # 6. Vision 분석
+    # 4. Vision 분석
     analysis = await _vision_analyze(composed, geo["matched"], lat, lng, radius_m)
 
     return {
