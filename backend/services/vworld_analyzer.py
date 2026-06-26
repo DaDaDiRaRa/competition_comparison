@@ -120,6 +120,14 @@ def _compose(satellite_bytes: bytes, overlay_bytes: bytes, overlay_alpha: float 
     return out.getvalue()
 
 
+def _satellite_only_jpeg(satellite_bytes: bytes) -> bytes:
+    """위성 이미지 단독 → JPEG bytes (지적도 오버레이 없음)."""
+    sat = Image.open(io.BytesIO(satellite_bytes)).convert("RGB")
+    out = io.BytesIO()
+    sat.save(out, format="JPEG", quality=90)
+    return out.getvalue()
+
+
 # ── Claude vision 대지 분석 ───────────────────────────────────────────────────
 
 _SITE_ANALYSIS_PROMPT = """이 이미지는 '{address}' 일대의 위성사진 + 연속지적도 합성 이미지입니다.
@@ -205,21 +213,32 @@ async def run_site_analysis(
     lat, lng = geo["lat"], geo["lng"]
     logger.info("geocode OK: %s → (%.5f, %.5f)", geo["matched"], lat, lng)
 
-    # 2. 위성 + 지적도 이미지 병렬 취득
-    sat_bytes, cad_bytes = await asyncio.gather(
-        _fetch_wms(lat, lng, vworld_key, vworld_domain, "Satellite", radius_m),
-        _fetch_wms(lat, lng, vworld_key, vworld_domain, "lp_pa_cn_A", radius_m),
-    )
+    # 2. 위성 이미지 취득 (필수)
+    sat_bytes = await _fetch_wms(lat, lng, vworld_key, vworld_domain, "Satellite", radius_m)
 
-    # 3. 합성 (Pillow)
-    composed = await asyncio.to_thread(_compose, sat_bytes, cad_bytes)
+    # 3. 지적도 오버레이 (실패 시 위성 단독 사용)
+    cad_bytes = None
+    for cad_layer in ("lp_pa_cn_A", "LP_PA_CN_A", "lp_pa_cn_a"):
+        try:
+            cad_bytes = await _fetch_wms(lat, lng, vworld_key, vworld_domain, cad_layer, radius_m)
+            logger.info("cadastral layer OK: %s", cad_layer)
+            break
+        except Exception as e:
+            logger.warning("cadastral layer '%s' failed: %s", cad_layer, e)
 
-    # 4. 이미지 저장 (옵션)
+    # 4. 합성 (Pillow) — 지적도 없으면 위성 단독 JPEG 변환
+    if cad_bytes:
+        composed = await asyncio.to_thread(_compose, sat_bytes, cad_bytes)
+    else:
+        logger.warning("지적도 오버레이 실패 — 위성 단독으로 분석 진행")
+        composed = await asyncio.to_thread(_satellite_only_jpeg, sat_bytes)
+
+    # 5. 이미지 저장 (옵션)
     if save_image_path:
         save_image_path.write_bytes(composed)
         logger.info("site image saved: %s", save_image_path)
 
-    # 5. Vision 분석
+    # 6. Vision 분석
     analysis = await _vision_analyze(composed, geo["matched"], lat, lng, radius_m)
 
     return {
