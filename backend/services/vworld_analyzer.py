@@ -94,7 +94,11 @@ async def _fetch_wms(
     r.raise_for_status()
     ct = r.headers.get("content-type", "")
     if "image" not in ct:
-        raise RuntimeError(f"WMS 오류 (layer={layers}): {r.text[:300]}")
+        import re as _re
+        xml = r.text
+        m = _re.search(r'<ServiceException[^>]*>(.*?)</ServiceException>', xml, _re.DOTALL)
+        detail = m.group(1).strip() if m else xml[:800]
+        raise RuntimeError(f"WMS 오류 (layer={layers}): {detail}")
     return r.content
 
 
