@@ -122,6 +122,10 @@ export default function BriefMode() {
   const [siteAnalyzing, setSiteAnalyzing] = useState(false)
   const [siteResult, setSiteResult] = useState(null)          // 대지 분석 결과
   const [siteErr, setSiteErr] = useState('')
+  const [siteHistoryId, setSiteHistoryId] = useState(null)    // 이력 카드 대지분석 열린 brief_id
+  const [siteHistoryAddr, setSiteHistoryAddr] = useState('')
+  const [siteHistoryBusy, setSiteHistoryBusy] = useState(false)
+  const [siteHistoryErr, setSiteHistoryErr] = useState('')
   const [history, setHistory] = useState([])
 
   const loadHistory = () => listBriefs().then(setHistory).catch(() => {})
@@ -243,6 +247,23 @@ export default function BriefMode() {
       setSiteErr(e.message || '대지 분석 실패')
     }
     setSiteAnalyzing(false)
+  }
+
+  // 이력 카드에서 직접 대지분석
+  const handleHistorySiteAnalyze = async (briefId) => {
+    const addr = siteHistoryAddr.trim()
+    if (!addr || siteHistoryBusy) return
+    setSiteHistoryBusy(true)
+    setSiteHistoryErr('')
+    try {
+      await analyzeSite(briefId, addr)
+      setHistory(prev => prev.map(h => h.brief_id === briefId ? { ...h, has_site_context: true } : h))
+      setSiteHistoryId(null)
+      setSiteHistoryAddr('')
+    } catch (e) {
+      setSiteHistoryErr(e.message || '대지 분석 실패')
+    }
+    setSiteHistoryBusy(false)
   }
 
   // 프로젝트 수주 제안서 생성 (수주 전략). 완료 시 새 탭/파일로 제안서 리포트 열기.
@@ -661,8 +682,42 @@ export default function BriefMode() {
                       md
                     </button>
                   )}
+                  <button
+                    style={{ ...s.historyBtn(false), color: 'var(--color-info)' }}
+                    onClick={() => {
+                      setSiteHistoryId(siteHistoryId === item.brief_id ? null : item.brief_id)
+                      setSiteHistoryErr('')
+                      setSiteHistoryAddr('')
+                    }}
+                  >
+                    🛰 {item.has_site_context ? '대지재분석' : '대지분석'}
+                  </button>
                 </div>
               </div>
+              {siteHistoryId === item.brief_id && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      style={{ ...s.input, flex: 1, marginTop: 0 }}
+                      value={siteHistoryAddr}
+                      onChange={e => setSiteHistoryAddr(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleHistorySiteAnalyze(item.brief_id)}
+                      placeholder="대지 주소 (예: 서울시 영등포구 여의대방로 358)"
+                      autoFocus
+                    />
+                    <button
+                      style={{ ...s.historyBtn(true), whiteSpace: 'nowrap', ...(!siteHistoryAddr.trim() || siteHistoryBusy ? s.btnDisabled : {}) }}
+                      onClick={() => handleHistorySiteAnalyze(item.brief_id)}
+                      disabled={!siteHistoryAddr.trim() || siteHistoryBusy}
+                    >
+                      {siteHistoryBusy ? '분석 중...' : '실행'}
+                    </button>
+                  </div>
+                  {siteHistoryErr && (
+                    <div style={{ color: 'var(--color-danger)', fontSize: 12, marginTop: 6 }}>{siteHistoryErr}</div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
