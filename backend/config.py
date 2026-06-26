@@ -948,24 +948,21 @@ class AppSettings:
 
     @property
     def vworld_api_key(self) -> str:
-        return self._data.get("vworld_api_key", "")
+        return os.environ.get("VWORLD_API_KEY", "")
 
     def has_vworld_key(self) -> bool:
         return bool(self.vworld_api_key)
 
     @property
     def vworld_domain(self) -> str:
-        return self._data.get("vworld_domain", "")
+        return os.environ.get("VWORLD_DOMAIN", "")
 
     def to_dict(self) -> dict:
-        _HIDDEN = {"anthropic_api_key", "vworld_api_key"}
         return {
-            **{k: v for k, v in self._data.items() if k not in _HIDDEN},
+            **{k: v for k, v in self._data.items() if k != "anthropic_api_key"},
             "db_path": str(self.db_path),
             "has_db_path": self.has_db_path,
             "has_api_key": self.has_api_key(),
-            "has_vworld_key": self.has_vworld_key(),
-            "vworld_domain": self.vworld_domain,
         }
 
     def update(self, data: dict):
