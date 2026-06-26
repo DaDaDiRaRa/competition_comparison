@@ -311,9 +311,34 @@ export function crossCompare(items) {
 // ── Brief analysis ───────────────────────────────────────────────────────────
 
 export async function* runBriefAnalyze(formData) {
-  const refs = await upgradeFormDataFiles(formData, {
-    brief_pdf: formData.get('brief_pdf') instanceof File ? formData.get('brief_pdf') : null,
-  })
+  const refs = []
+  const briefFiles = formData.getAll('brief_pdf')
+
+  if (briefFiles.length > 1) {
+    // 복수 파일: 모두 청크 업로드 → brief_pdf_refs JSON 배열
+    const allRefs = []
+    for (const file of briefFiles) {
+      if (file instanceof File) {
+        const ref = await chunkUpload(file)
+        allRefs.push(ref)
+        refs.push(ref)
+      }
+    }
+    formData.delete('brief_pdf')
+    formData.set('brief_pdf_refs', JSON.stringify(allRefs))
+  } else {
+    // 단일 파일: 소파일 직접 전송 / 대파일(25MB↑) 청크
+    const single = briefFiles[0]
+    if (single instanceof File) {
+      const ref = await uploadIfLarge(single)
+      if (ref) {
+        formData.delete('brief_pdf')
+        formData.set('brief_pdf_ref', ref)
+        refs.push(ref)
+      }
+    }
+  }
+
   try {
     yield* streamSSE(`${BASE}/brief/analyze`, formData)
   } finally {

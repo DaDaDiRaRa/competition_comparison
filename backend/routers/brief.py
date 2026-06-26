@@ -33,7 +33,7 @@ from services.brief_checklist_exporter import to_markdown, to_xlsx, to_html
 from services.brief_advisor import interpret_brief
 from services.brief_proposal import propose_project
 from services.brief_proposal_report_generator import to_proposal_html
-from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count
+from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count, normalize_design_guidelines_grouped
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -99,6 +99,55 @@ def _briefs_dir() -> Path:
     d = settings.db_path / "_briefs"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _merge_multi_brief_data(data_list: list[dict]) -> dict:
+    """여러 파일의 brief_data를 첫 번째 파일 우선(first_wins)으로 병합.
+
+    - design_guidelines_grouped: 모든 파일 연결 후 재정규화 (cross-file dedup)
+    - _quantitative: 필드별 first non-null wins
+    - page_map / total_pages: 합산
+    - 나머지: 첫 번째 파일 비어있는 경우만 뒤 파일 값 사용
+    """
+    if len(data_list) == 1:
+        return data_list[0]
+
+    base = {k: v for k, v in data_list[0].items() if k != "_by_type"}
+
+    # design_guidelines_grouped 전파일 수집 (나중에 재정규화)
+    all_grouped: list[dict] = list(base.get("design_guidelines_grouped") or [])
+
+    for extra in data_list[1:]:
+        all_grouped.extend(extra.get("design_guidelines_grouped") or [])
+
+        for key, val in extra.items():
+            if key in ("_by_type", "design_guidelines_grouped", "page_map",
+                       "total_pages", "_quantitative"):
+                continue
+            base_val = base.get(key)
+            empty = base_val is None or base_val == "" or base_val == {} or base_val == []
+            if empty:
+                base[key] = val
+
+    # design_guidelines_grouped 재정규화 (cross-file 중복 제거)
+    base["design_guidelines_grouped"] = normalize_design_guidelines_grouped(all_grouped) if all_grouped else []
+
+    # _quantitative: 필드별 first non-null wins
+    merged_quant: dict = {}
+    for d in data_list:
+        for k, v in (d.get("_quantitative") or {}).items():
+            if v is not None and k not in merged_quant:
+                merged_quant[k] = v
+    base["_quantitative"] = merged_quant
+
+    # page_map / total_pages 합산
+    all_pages: list[dict] = []
+    for d in data_list:
+        all_pages.extend(d.get("page_map") or [])
+    base["page_map"] = all_pages
+    base["total_pages"] = len(all_pages)
+
+    return base
 
 
 # ── 목록 조회 ─────────────────────────────────────────────────────────────────
@@ -178,18 +227,21 @@ async def analyze_brief(
     brief_name: str = Form(""),
     brief_pdf: UploadFile | None = File(None),
     brief_pdf_ref: str | None = Form(None),
+    brief_pdf_refs: str | None = Form(None),   # JSON 배열 — 복수 파일 청크 업로드용
     include_insight: bool = Form(True),
 ):
     """
-    지침서 PDF 단독 분석 + 체크리스트 내보내기.
+    지침서 분석 + 체크리스트 내보내기. 단일 파일 또는 복수 파일(혼합 포맷 가능) 지원.
 
-    facility_type : FACILITY_TYPES 키 — axes rubric 결정
-    brief_name    : 파일명 라벨 (비어있으면 datetime 만 사용)
-    brief_pdf     : multipart 직접 업로드
-    brief_pdf_ref : /api/upload 청크 업로드 file_ref
+    facility_type  : FACILITY_TYPES 키
+    brief_name     : 파일명 라벨
+    brief_pdf      : multipart 직접 업로드 (단일, 소파일용)
+    brief_pdf_ref  : 청크 업로드 file_ref (단일)
+    brief_pdf_refs : JSON 배열 ["ref1","ref2",...] (복수 파일, /api/upload 경유)
 
     SSE 스테이지:
-      classify_brief → extract_brief → brief_reqs → validate → save → complete
+      classify_brief → extract_brief (파일마다) → brief_reqs → validate → save → complete
+    첫 번째 파일 우선 충돌 처리. design_guidelines_grouped 는 모든 파일 합산.
     """
     if not settings.has_api_key():
         raise HTTPException(
@@ -199,24 +251,39 @@ async def analyze_brief(
     if facility_type not in FACILITY_TYPES:
         raise HTTPException(400, f"Unknown facility_type: {facility_type}")
 
-    # 파일 bytes 해소 — 청크 업로드(file_ref) 우선, 없으면 multipart
-    upload_filename: str = ""
-    if brief_pdf_ref:
+    # 파일 목록 해소 — [(bytes, filename), ...]
+    file_items: list[tuple[bytes, str]] = []
+    if brief_pdf_refs:
+        # 복수 파일: JSON 배열 of refs
+        try:
+            refs = json.loads(brief_pdf_refs)
+        except Exception:
+            raise HTTPException(400, "brief_pdf_refs가 유효한 JSON 배열이 아닙니다.")
+        if not isinstance(refs, list) or not refs:
+            raise HTTPException(400, "brief_pdf_refs 배열이 비어있습니다.")
+        for ref in refs:
+            ref_path = resolve_file_ref(ref)
+            file_items.append((ref_path.read_bytes(), ref_path.name))
+    elif brief_pdf_ref:
         ref_path = resolve_file_ref(brief_pdf_ref)
-        file_bytes = ref_path.read_bytes()
-        upload_filename = ref_path.name
+        file_items.append((ref_path.read_bytes(), ref_path.name))
     elif brief_pdf:
-        file_bytes = await brief_pdf.read()
-        upload_filename = brief_pdf.filename or ""
+        file_items.append((await brief_pdf.read(), brief_pdf.filename or ""))
     else:
-        raise HTTPException(400, "brief_pdf 또는 brief_pdf_ref 중 하나가 필요합니다.")
+        raise HTTPException(400, "brief_pdf 또는 brief_pdf_ref(s) 중 하나가 필요합니다.")
 
-    source_format = _validate_brief_file(file_bytes, upload_filename, "지침서 파일")
+    # 각 파일 형식 사전 검증 (event_stream 진입 전)
+    validated_formats: list[str] = []
+    for i, (fb, fn) in enumerate(file_items):
+        validated_formats.append(
+            _validate_brief_file(fb, fn, f"파일 {i + 1}")
+        )
 
     async def event_stream():
         # _timestamp: 파이프라인 시작 시각(ms). 모든 SSE 이벤트에 포함 (ProgressLog 필수).
         ts      = int(time.time() * 1000)
         tmp_dir = Path(tempfile.mkdtemp(prefix="comp_brief_"))
+        n_files = len(file_items)
 
         try:
             # ── 파일명 스템 생성 ───────────────────────────────────────────
@@ -225,103 +292,132 @@ async def analyze_brief(
             brief_id = f"{stamp}_{facility_type}_{slug}" if slug else f"{stamp}_{facility_type}"
             brief_id = brief_id[:120]   # Windows 경로 길이 여유 확보
 
-            # ── 1. 분류 ─────────────────────────────────────────────────────
-            classify_msg = "지침서 블록 분류 중" if source_format in ("docx", "hwp", "hwpx") else "지침서 페이지 분류 중"
-            yield sse({
-                "type": "stage", "stage": "classify_brief",
-                "msg": classify_msg, "_timestamp": ts,
-            })
+            # ── 1+2. 파일별 분류 · 추출 루프 ────────────────────────────────
+            all_brief_data: list[dict] = []
+            source_files_meta: list[dict] = []
 
-            if source_format == "docx":
-                docx_path = tmp_dir / "brief.docx"
-                docx_path.write_bytes(file_bytes)
+            for fi, (file_bytes, upload_filename) in enumerate(file_items):
+                source_format = validated_formats[fi]
+                file_label    = f"[{fi + 1}/{n_files}] " if n_files > 1 else ""
 
-                yield sse({
-                    "type": "progress", "step": "classify_brief",
-                    "page": 0, "total": 1, "_timestamp": ts,
-                })
-                try:
-                    blocks = await asyncio.to_thread(split_docx_to_blocks, str(docx_path))
-                except Exception as e:
-                    logger.error("DOCX 파싱 실패: %s", traceback.format_exc())
-                    raise RuntimeError(f"DOCX 파싱 오류. PDF로 변환 후 재시도 권장: {type(e).__name__}: {e}") from e
-                classifications = await classify_all_blocks_brief(blocks)
-            elif source_format in ("hwp", "hwpx"):
-                hwpx_path = tmp_dir / f"brief.{source_format}"
-                hwpx_path.write_bytes(file_bytes)
-
-                yield sse({
-                    "type": "progress", "step": "classify_brief",
-                    "page": 0, "total": 1, "_timestamp": ts,
-                })
-                try:
-                    blocks = await asyncio.to_thread(split_hwpx_to_blocks, str(hwpx_path))
-                except Exception as e:
-                    logger.error("HWP/HWPX 파싱 실패: %s", traceback.format_exc())
-                    raise RuntimeError(f"HWP/HWPX 파싱 오류. PDF로 변환 후 재시도 권장: {type(e).__name__}: {e}") from e
-                classifications = await classify_all_blocks_brief(blocks)
-            else:
-                pdf_path = tmp_dir / "brief.pdf"
-                pdf_path.write_bytes(file_bytes)
-
-                # rasterize 없이 즉시 총 페이지 수 파악 → 진행 바에 total 표시
-                total_pages_hint = pdf_page_count(pdf_path)
-                yield sse({
-                    "type": "progress", "step": "classify_brief",
-                    "page": 0, "total": total_pages_hint, "_timestamp": ts,
-                })
-
-                # 배치 완료마다 큐로 진행률 수신
-                progress_q: asyncio.Queue = asyncio.Queue()
-                classify_task = asyncio.ensure_future(
-                    classify_all_pages_brief(pdf_path, progress_q)
+                # ── 1. 분류 ────────────────────────────────────────────────
+                classify_msg = (
+                    f"{file_label}지침서 블록 분류 중"
+                    if source_format in ("docx", "hwp", "hwpx")
+                    else f"{file_label}지침서 페이지 분류 중"
                 )
-                while True:
-                    done_count = await progress_q.get()
-                    if done_count is None:
-                        break
+                yield sse({
+                    "type": "stage", "stage": "classify_brief",
+                    "msg": classify_msg, "_timestamp": ts,
+                })
+
+                if source_format == "docx":
+                    docx_path = tmp_dir / f"brief_{fi}.docx"
+                    docx_path.write_bytes(file_bytes)
                     yield sse({
                         "type": "progress", "step": "classify_brief",
-                        "page": done_count, "total": total_pages_hint, "_timestamp": ts,
+                        "page": 0, "total": 1, "_timestamp": ts,
                     })
-                classifications = await classify_task
+                    try:
+                        blocks = await asyncio.to_thread(split_docx_to_blocks, str(docx_path))
+                    except Exception as e:
+                        logger.error("DOCX 파싱 실패: %s", traceback.format_exc())
+                        raise RuntimeError(
+                            f"DOCX 파싱 오류 ({upload_filename}). PDF로 변환 후 재시도 권장: "
+                            f"{type(e).__name__}: {e}"
+                        ) from e
+                    classifications = await classify_all_blocks_brief(blocks)
 
-            total_pages = len(classifications)
-            yield sse({
-                "type": "done", "step": "classify_brief",
-                "total_pages": total_pages, "_timestamp": ts,
-            })
+                elif source_format in ("hwp", "hwpx"):
+                    hwpx_path = tmp_dir / f"brief_{fi}.{source_format}"
+                    hwpx_path.write_bytes(file_bytes)
+                    yield sse({
+                        "type": "progress", "step": "classify_brief",
+                        "page": 0, "total": 1, "_timestamp": ts,
+                    })
+                    try:
+                        blocks = await asyncio.to_thread(split_hwpx_to_blocks, str(hwpx_path))
+                    except Exception as e:
+                        logger.error("HWP/HWPX 파싱 실패: %s", traceback.format_exc())
+                        raise RuntimeError(
+                            f"HWP/HWPX 파싱 오류 ({upload_filename}). PDF로 변환 후 재시도 권장: "
+                            f"{type(e).__name__}: {e}"
+                        ) from e
+                    classifications = await classify_all_blocks_brief(blocks)
 
-            # ── 2. 데이터 추출 ─────────────────────────────────────────────
-            yield sse({
-                "type": "stage", "stage": "extract_brief",
-                "msg": "지침서 데이터 추출 중", "_timestamp": ts,
-            })
-            yield sse({
-                "type": "progress", "step": "extract_brief",
-                "page": 0, "total": 1, "_timestamp": ts,
-            })
-            if source_format == "docx":
-                extractions = await extract_docx(
-                    str(docx_path), page_map=classifications, is_brief=True,
-                )
-            elif source_format in ("hwp", "hwpx"):
-                extractions = await extract_hwpx(
-                    str(hwpx_path), page_map=classifications, is_brief=True,
-                )
-            else:
-                extractions = await extract_pdf(
-                    pdf_path, page_map=classifications, is_brief=True,
-                )
-            brief_data                = merge_extracted_data(classifications, extractions)
-            brief_data["page_map"]    = classifications
-            brief_data["total_pages"] = total_pages
+                else:  # pdf
+                    pdf_path = tmp_dir / f"brief_{fi}.pdf"
+                    pdf_path.write_bytes(file_bytes)
+                    total_pages_hint = pdf_page_count(pdf_path)
+                    yield sse({
+                        "type": "progress", "step": "classify_brief",
+                        "page": 0, "total": total_pages_hint, "_timestamp": ts,
+                    })
+                    progress_q: asyncio.Queue = asyncio.Queue()
+                    classify_task = asyncio.ensure_future(
+                        classify_all_pages_brief(pdf_path, progress_q)
+                    )
+                    while True:
+                        done_count = await progress_q.get()
+                        if done_count is None:
+                            break
+                        yield sse({
+                            "type": "progress", "step": "classify_brief",
+                            "page": done_count, "total": total_pages_hint, "_timestamp": ts,
+                        })
+                    classifications = await classify_task
 
-            yield sse({
-                "type": "progress", "step": "extract_brief",
-                "page": 1, "total": 1, "_timestamp": ts,
-            })
-            yield sse({"type": "done", "step": "extract_brief", "_timestamp": ts})
+                total_pages_i = len(classifications)
+                yield sse({
+                    "type": "done", "step": "classify_brief",
+                    "total_pages": total_pages_i, "_timestamp": ts,
+                })
+
+                # ── 2. 데이터 추출 ─────────────────────────────────────────
+                yield sse({
+                    "type": "stage", "stage": "extract_brief",
+                    "msg": f"{file_label}지침서 데이터 추출 중", "_timestamp": ts,
+                })
+                yield sse({
+                    "type": "progress", "step": "extract_brief",
+                    "page": 0, "total": 1, "_timestamp": ts,
+                })
+
+                if source_format == "docx":
+                    extractions = await extract_docx(
+                        str(docx_path), page_map=classifications, is_brief=True,
+                    )
+                elif source_format in ("hwp", "hwpx"):
+                    extractions = await extract_hwpx(
+                        str(hwpx_path), page_map=classifications, is_brief=True,
+                    )
+                else:
+                    extractions = await extract_pdf(
+                        pdf_path, page_map=classifications, is_brief=True,
+                    )
+
+                partial_data              = merge_extracted_data(classifications, extractions)
+                partial_data["page_map"]  = classifications
+                partial_data["total_pages"] = total_pages_i
+                all_brief_data.append(partial_data)
+                source_files_meta.append({
+                    "filename":      upload_filename,
+                    "source_format": source_format,
+                    "total_pages":   total_pages_i,
+                })
+
+                yield sse({
+                    "type": "progress", "step": "extract_brief",
+                    "page": 1, "total": 1, "_timestamp": ts,
+                })
+                yield sse({"type": "done", "step": "extract_brief", "_timestamp": ts})
+
+            # ── 파일 합산 ──────────────────────────────────────────────────
+            brief_data   = _merge_multi_brief_data(all_brief_data)
+            total_pages  = brief_data.get("total_pages", 0)
+            # source_format: 단일 포맷이면 그대로, 혼합이면 "multi"
+            fmt_set      = {m["source_format"] for m in source_files_meta}
+            source_format = next(iter(fmt_set)) if len(fmt_set) == 1 else "multi"
 
             # ── 3. 요구사항 분석 ────────────────────────────────────────────
             yield sse({
@@ -334,13 +430,13 @@ async def analyze_brief(
             yield sse({"type": "done", "step": "brief_reqs", "_timestamp": ts})
 
             # ── 4. 검증 (결정론적, LLM 없음) ───────────────────────────────
-            # validate_brief()가 facility_type을 사용하므로 _brief_meta를 먼저 설정
             brief_data["_brief_meta"] = {
                 "brief_id":      brief_id,
                 "facility_type": facility_type,
                 "brief_name":    brief_name.strip() or "",
                 "analyzed_at":   time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "source_format": source_format,
+                "source_files":  source_files_meta,  # 복수 파일 상세
             }
             yield sse({
                 "type": "stage", "stage": "validate",
@@ -361,7 +457,6 @@ async def analyze_brief(
             })
 
             # ── 4.5 AI 종합 해설 (옵션, LLM 1콜) ─────────────────────────────
-            # 한 방 통합: 추출 직후 같은 run 에서 해설까지. 실패해도 추출 결과는 살림.
             brief_data["_insight"] = None
             if include_insight and settings.has_api_key():
                 yield sse({
@@ -377,13 +472,12 @@ async def analyze_brief(
                     })
                 except Exception as ie:
                     logger.error("brief insight error: %s", traceback.format_exc())
-                    # 해설 실패는 비치명적 — 경고만 보내고 추출 산출물은 그대로 저장
                     yield sse({
                         "type": "insight_error",
                         "message": _user_error_msg(ie), "_timestamp": ts,
                     })
 
-            # ── 5. 저장 — JSON · MD · xlsx ──────────────────────────────────
+            # ── 5. 저장 — JSON · MD · xlsx · html ──────────────────────────
             yield sse({
                 "type": "stage", "stage": "save",
                 "msg": "결과 저장 중 (JSON · MD · xlsx)", "_timestamp": ts,

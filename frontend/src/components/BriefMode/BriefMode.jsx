@@ -108,7 +108,7 @@ export default function BriefMode() {
 
   const [facilityType, setFacilityType] = useState('')
   const [briefName, setBriefName] = useState('')
-  const [briefFile, setBriefFile] = useState(null)
+  const [briefFiles, setBriefFiles] = useState([])  // 복수 파일 지원
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)   // complete 이벤트 payload
@@ -126,21 +126,22 @@ export default function BriefMode() {
   const defaultFt = facilityTypes[0]?.key ?? ''
   const ft = facilityType || defaultFt
 
-  // 파일 확장자로 포맷 판단 (텍스트 기반: docx / hwp / hwpx)
-  const fileExt = (briefFile?.name || '').toLowerCase()
-  const isDocx = /\.docx$/.test(fileExt)
-  const isHwp  = /\.(hwp|hwpx)$/.test(fileExt)
-  const fileFormat = isDocx ? 'docx'
-    : /\.hwpx$/.test(fileExt) ? 'hwpx'
-    : /\.hwp$/.test(fileExt) ? 'hwp'
-    : 'pdf'
+  // 첫 번째 파일 기준 포맷 판단 (알림 표시용)
+  const firstExt = (briefFiles[0]?.name || '').toLowerCase()
+  const hasDocx = briefFiles.some(f => /\.docx$/.test((f.name || '').toLowerCase()))
+  const hasHwp  = briefFiles.some(f => /\.(hwp|hwpx)$/.test((f.name || '').toLowerCase()))
+  const isDocx  = hasDocx && briefFiles.length === 1
+  const isHwp   = hasHwp  && briefFiles.length === 1
 
-  // complete 이벤트가 알려주는 source_format 우선, 없으면 업로드 파일 확장자 기반
+  // complete 이벤트가 알려주는 source_format 우선, 없으면 첫 파일 확장자 기반
+  const fileFormat = /\.docx$/.test(firstExt) ? 'docx'
+    : /\.hwpx$/.test(firstExt) ? 'hwpx'
+    : /\.hwp$/.test(firstExt) ? 'hwp'
+    : 'pdf'
   const sourceFormat = result?.source_format ?? fileFormat
-  // 블록 기반 포맷(docx/hwp/hwpx)은 flag location 을 "블록 N" 으로 표시
   const isBlockFormat = sourceFormat === 'docx' || sourceFormat === 'hwp' || sourceFormat === 'hwpx'
 
-  const canRun = !!briefFile && !running && !!ft
+  const canRun = briefFiles.length > 0 && !running && !!ft
 
   const run = async () => {
     setRunning(true)
@@ -154,7 +155,7 @@ export default function BriefMode() {
     const fd = new FormData()
     fd.append('facility_type', ft)
     fd.append('brief_name', briefName.trim())
-    fd.append('brief_pdf', briefFile)
+    briefFiles.forEach(f => fd.append('brief_pdf', f))
     fd.append('include_insight', includeInsight ? 'true' : 'false')
 
     try {
@@ -275,34 +276,68 @@ export default function BriefMode() {
       </div>
 
       <div style={s.group}>
-        <label style={s.label}>지침서 파일 (PDF, DOCX, HWP, HWPX)</label>
+        <label style={s.label}>
+          지침서 파일 (PDF, DOCX, HWP, HWPX)
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: 6 }}>
+            복수 파일 가능 — 첫 번째 파일이 주 문서(배점표·날짜 우선)
+          </span>
+        </label>
         <DropZone
-          label="지침서 PDF/DOCX/HWP/HWPX 드래그 또는 클릭"
+          label="지침서 PDF/DOCX/HWP/HWPX 드래그 또는 클릭 (복수 선택 가능)"
           accept=".pdf,.docx,.hwp,.hwpx"
-          onFiles={setBriefFile}
+          multiple={true}
+          onFiles={files => setBriefFiles(Array.isArray(files) ? files : [files].filter(Boolean))}
         />
-        {isDocx && (
+        {briefFiles.length > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {briefFiles.map((f, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 6,
+                background: 'var(--color-bg-surface-alt)', border: '1px solid var(--color-border)',
+                fontSize: 'var(--font-size-sm)',
+              }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 'var(--font-weight-bold)',
+                  color: i === 0 ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                  minWidth: 24,
+                }}>
+                  {i === 0 ? '주' : `${i + 1}`}
+                </span>
+                <span style={{ flex: 1, color: 'var(--color-text-body)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {f.name}
+                </span>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
+                  {(f.size / 1024 / 1024).toFixed(1)}MB
+                </span>
+                <button
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-text-muted)', fontSize: 14, padding: '0 2px', lineHeight: 1,
+                  }}
+                  onClick={() => setBriefFiles(prev => prev.filter((_, j) => j !== i))}
+                  title="제거"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {(isDocx || hasDocx) && (
           <div style={{
-            marginTop: 8,
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-muted)',
-            background: 'var(--color-info-bg)',
-            border: '1px solid var(--color-info)',
-            borderRadius: 6,
-            padding: '8px 12px',
+            marginTop: 8, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)',
+            background: 'var(--color-info-bg)', border: '1px solid var(--color-info)',
+            borderRadius: 6, padding: '8px 12px',
           }}>
             DOCX 파일: 텍스트와 표만 분석됩니다. 도면이 포함된 지침서는 PDF로 업로드해주세요.
           </div>
         )}
-        {isHwp && (
+        {(isHwp || hasHwp) && (
           <div style={{
-            marginTop: 8,
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-muted)',
-            background: 'var(--color-info-bg)',
-            border: '1px solid var(--color-info)',
-            borderRadius: 6,
-            padding: '8px 12px',
+            marginTop: 8, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)',
+            background: 'var(--color-info-bg)', border: '1px solid var(--color-info)',
+            borderRadius: 6, padding: '8px 12px',
           }}>
             HWP/HWPX 파일: 텍스트와 표만 분석됩니다. 도면이 포함된 지침서는 PDF로 업로드해주세요.
           </div>
@@ -488,7 +523,9 @@ export default function BriefMode() {
                     {item.total_pages ? ` · ${item.total_pages}p` : ''}
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={s.fmtBadge}>{(item.source_format || 'pdf').toUpperCase()}</span>
+                    <span style={s.fmtBadge}>
+                      {item.source_format === 'multi' ? '복수파일' : (item.source_format || 'pdf').toUpperCase()}
+                    </span>
                     {item.has_insight && <span style={s.insightBadge}>AI 해설</span>}
                     {item.has_proposal && (
                       <span style={{ ...s.insightBadge, background: 'var(--color-accent-bg, #fdecee)', borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}>제안서</span>
