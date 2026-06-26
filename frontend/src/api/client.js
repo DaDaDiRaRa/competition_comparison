@@ -393,6 +393,12 @@ export function getBriefSiteImageUrl(briefId) {
   return `${BASE}/brief/${encodeURIComponent(briefId)}/site-image`
 }
 
+export async function getBriefSiteContext(briefId) {
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/site-context`)
+  if (!r.ok) throw new Error('대지 분석 결과 로드 실패')
+  return r.json()
+}
+
 // 프로젝트 수주 제안서 생성 (수주 전략 처방, 추출 재처리 없음, LLM 1콜). 사용자별 키 헤더 필요.
 export async function proposeBrief(briefId) {
   const headers = {}

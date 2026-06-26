@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, listBriefs, analyzeSite, getBriefSiteImageUrl } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, listBriefs, analyzeSite, getBriefSiteImageUrl, getBriefSiteContext } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -126,10 +126,21 @@ export default function BriefMode() {
   const [siteHistoryAddr, setSiteHistoryAddr] = useState('')
   const [siteHistoryBusy, setSiteHistoryBusy] = useState(false)
   const [siteHistoryErr, setSiteHistoryErr] = useState('')
+  const [siteViewId, setSiteViewId] = useState(null)          // 이력 카드 대지분석 보기 열린 brief_id
+  const [siteViewData, setSiteViewData] = useState({})        // { [brief_id]: siteContext }
   const [history, setHistory] = useState([])
 
   const loadHistory = () => listBriefs().then(setHistory).catch(() => {})
   useEffect(() => { loadHistory() }, [])
+
+  // 결과 화면에서 has_site_context이지만 siteResult가 없으면 자동 로드
+  useEffect(() => {
+    if (result?.has_site_context && !siteResult && result.brief_id) {
+      getBriefSiteContext(result.brief_id)
+        .then(sc => setSiteResult({ matched_address: sc.matched_address || '', analysis: sc.analysis }))
+        .catch(() => {})
+    }
+  }, [result?.brief_id, result?.has_site_context])
 
   const defaultFt = facilityTypes[0]?.key ?? ''
   const ft = facilityType || defaultFt
@@ -711,18 +722,74 @@ export default function BriefMode() {
                       md
                     </button>
                   )}
+                  {item.has_site_context && (
+                    <button
+                      style={{ ...s.historyBtn(false), color: 'var(--color-info)' }}
+                      onClick={() => {
+                        const next = siteViewId === item.brief_id ? null : item.brief_id
+                        setSiteViewId(next)
+                        if (next && !siteViewData[next]) {
+                          getBriefSiteContext(next)
+                            .then(sc => setSiteViewData(prev => ({ ...prev, [next]: sc })))
+                            .catch(() => {})
+                        }
+                      }}
+                    >
+                      🛰 대지분석 보기
+                    </button>
+                  )}
                   <button
-                    style={{ ...s.historyBtn(false), color: 'var(--color-info)' }}
+                    style={{ ...s.historyBtn(false), color: 'var(--color-text-muted)' }}
                     onClick={() => {
                       setSiteHistoryId(siteHistoryId === item.brief_id ? null : item.brief_id)
                       setSiteHistoryErr('')
                       setSiteHistoryAddr('')
                     }}
                   >
-                    🛰 {item.has_site_context ? '대지재분석' : '대지분석'}
+                    🛰 {item.has_site_context ? '재분석' : '대지분석'}
                   </button>
                 </div>
               </div>
+              {siteViewId === item.brief_id && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--color-border)' }}>
+                  {siteViewData[item.brief_id] ? (
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                      <img
+                        src={getBriefSiteImageUrl(item.brief_id)}
+                        alt="대지 위성사진"
+                        style={{ width: 140, height: 140, objectFit: 'cover', borderRadius: 6,
+                          border: '1px solid var(--color-border)', flexShrink: 0 }}
+                      />
+                      <div style={{ flex: 1, fontSize: 12, color: 'var(--color-text-body)' }}>
+                        {siteViewData[item.brief_id].matched_address && (
+                          <div style={{ color: 'var(--color-text-muted)', fontSize: 11, marginBottom: 4 }}>
+                            {siteViewData[item.brief_id].matched_address}
+                          </div>
+                        )}
+                        {[
+                          ['방위·형상', siteViewData[item.brief_id].analysis?.orientation],
+                          ['접도 조건', siteViewData[item.brief_id].analysis?.road_access],
+                          ['주변 용도', siteViewData[item.brief_id].analysis?.surrounding_uses],
+                          ['자연자산', siteViewData[item.brief_id].analysis?.natural_assets],
+                        ].map(([label, val]) => val && val !== '위성 확인 불가' && (
+                          <div key={label} style={{ marginBottom: 2 }}>
+                            <span style={{ color: 'var(--color-text-muted)', marginRight: 4 }}>{label}:</span>{val}
+                          </div>
+                        ))}
+                        {siteViewData[item.brief_id].analysis?.overall_summary && (
+                          <div style={{ marginTop: 6, padding: '5px 8px', borderRadius: 5,
+                            background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
+                            fontStyle: 'italic' }}>
+                            {siteViewData[item.brief_id].analysis.overall_summary}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>로딩 중...</div>
+                  )}
+                </div>
+              )}
               {siteHistoryId === item.brief_id && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--color-border)' }}>
                   <div style={{ display: 'flex', gap: 8 }}>

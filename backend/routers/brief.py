@@ -779,3 +779,22 @@ def get_site_image(brief_id: str):
     if not image_path.exists():
         raise HTTPException(404, "대지 이미지가 없습니다. 대지 분석을 먼저 실행해주세요.")
     return FileResponse(image_path, media_type="image/jpeg")
+
+
+@router.get("/{brief_id}/site-context")
+def get_site_context(brief_id: str):
+    """저장된 _site_context 반환 (이력 카드 표시용)."""
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+    json_path = settings.db_path / "_briefs" / f"{safe_id}.json"
+    if not json_path.exists():
+        raise HTTPException(404, "지침서를 찾을 수 없습니다.")
+    try:
+        brief_data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"JSON 로드 실패: {type(e).__name__}")
+    sc = brief_data.get("_site_context")
+    if not sc:
+        raise HTTPException(404, "대지 분석 결과가 없습니다.")
+    return sc
