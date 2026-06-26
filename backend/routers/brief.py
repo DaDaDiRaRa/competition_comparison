@@ -459,6 +459,7 @@ async def analyze_brief(
             })
 
             # ── 4.5 AI 종합 해설 (옵션, LLM 1콜) ─────────────────────────────
+            briefs_dir = _briefs_dir()   # 이후 단계(대지분석·저장) 공유
             brief_data["_insight"] = None
             if include_insight and settings.has_api_key():
                 yield sse({
@@ -479,12 +480,38 @@ async def analyze_brief(
                         "message": _user_error_msg(ie), "_timestamp": ts,
                     })
 
+            # ── 4.7 대지·맥락 분석 (자동, VWorld 키 있을 때만) ──────────────
+            brief_data["_site_context"] = None
+            if settings.has_vworld_key():
+                fe_sites = (brief_data.get("feasibility_export") or {}).get("sites") or []
+                site_address = next((s.get("address") for s in fe_sites if s.get("address")), None)
+                if site_address:
+                    yield sse({
+                        "type": "stage", "stage": "site_analysis",
+                        "msg": f"대지·맥락 분석 중 ({site_address})", "_timestamp": ts,
+                    })
+                    try:
+                        from services.vworld_analyzer import run_site_analysis
+                        site_result = await run_site_analysis(
+                            address=site_address,
+                            vworld_key=settings.vworld_api_key,
+                            vworld_domain=settings.vworld_domain,
+                            save_image_path=briefs_dir / f"{brief_id}_site.jpg",
+                        )
+                        brief_data["_site_context"] = {k: v for k, v in site_result.items() if k != "image_jpeg_b64"}
+                        yield sse({"type": "done", "step": "site_analysis", "_timestamp": ts})
+                    except Exception as se:
+                        logger.warning("대지 분석 자동 실행 실패 (비치명): %s", se)
+                        yield sse({
+                            "type": "site_analysis_error",
+                            "message": str(se)[:300], "_timestamp": ts,
+                        })
+
             # ── 5. 저장 — JSON · MD · xlsx · html ──────────────────────────
             yield sse({
                 "type": "stage", "stage": "save",
                 "msg": "결과 저장 중 (JSON · MD · xlsx)", "_timestamp": ts,
             })
-            briefs_dir = _briefs_dir()
 
             json_path  = briefs_dir / f"{brief_id}.json"
             md_path    = briefs_dir / f"{brief_id}.md"
@@ -529,6 +556,8 @@ async def analyze_brief(
                 "validation_summary": flag_summary,
                 "source_format":      source_format,
                 "has_insight":        bool(brief_data.get("_insight")),
+                "has_site_context":   bool(brief_data.get("_site_context")),
+                "site_context":       brief_data.get("_site_context"),
                 "_timestamp":         ts,
             })
 

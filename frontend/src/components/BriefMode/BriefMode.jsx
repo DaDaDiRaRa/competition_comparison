@@ -175,6 +175,12 @@ export default function BriefMode() {
         if (ev.type === 'complete') {
           setResult(ev)
           loadHistory()
+          if (ev.has_site_context && ev.site_context) {
+            setSiteResult({
+              matched_address: ev.site_context.matched_address || '',
+              analysis: ev.site_context.analysis,
+            })
+          }
         }
         if (ev.type === 'error') break
       }
@@ -480,70 +486,93 @@ export default function BriefMode() {
             border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 18px',
             marginBottom: 16, background: 'var(--color-bg-surface-alt)',
           }}>
-            <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', marginBottom: 4 }}>
-              🛰 대지·맥락 분석
-              {result.has_site_context && (
-                <span style={{ fontSize: 11, marginLeft: 8, padding: '2px 7px', borderRadius: 10,
-                  background: 'var(--color-info-bg)', border: '1px solid var(--color-info)',
-                  color: 'var(--color-info)', fontWeight: 'var(--font-weight-semibold)' }}>
-                  완료
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 10 }}>
-              VWorld 위성+지적도 이미지를 AI로 판독해 대지 맥락(방위·접도·주변용도·자연자산)을 분석합니다.
-              완료 후 수주 제안서 생성 시 자동으로 반영됩니다. (VWorld API 키 설정 필요)
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <input
-                style={{ ...s.input, flex: 1, marginTop: 0 }}
-                value={siteAddr}
-                onChange={e => setSiteAddr(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSiteAnalyze()}
-                placeholder="대지 주소 (예: 서울시 영등포구 여의대방로 358)"
-              />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)' }}>
+                🛰 대지·맥락 분석
+                {result.has_site_context && (
+                  <span style={{ fontSize: 11, marginLeft: 8, padding: '2px 7px', borderRadius: 10,
+                    background: 'var(--color-info-bg)', border: '1px solid var(--color-info)',
+                    color: 'var(--color-info)', fontWeight: 'var(--font-weight-semibold)' }}>
+                    완료
+                  </span>
+                )}
+              </div>
               <button
-                style={{ ...s.dlBtn(true), whiteSpace: 'nowrap', ...(siteAnalyzing || !siteAddr.trim() ? s.btnDisabled : {}) }}
-                onClick={handleSiteAnalyze}
-                disabled={siteAnalyzing || !siteAddr.trim()}
+                style={{ fontSize: 12, background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--color-text-muted)', padding: '2px 6px' }}
+                onClick={() => { setSiteAddr(''); setSiteErr(''); setSiteAnalyzing(false);
+                  setResult(prev => ({ ...prev, _showSiteInput: !prev._showSiteInput })) }}
               >
-                {siteAnalyzing ? '분석 중...' : '분석 실행'}
+                {result._showSiteInput ? '닫기' : (result.has_site_context ? '재분석' : '수동 입력')}
               </button>
             </div>
-            {siteErr && (
-              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)', marginBottom: 8 }}>{siteErr}</div>
-            )}
-            {siteResult && (
-              <div style={{ marginTop: 8 }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <img
-                    src={getBriefSiteImageUrl(result.brief_id)}
-                    alt="대지 위성+지적도"
-                    style={{ width: 160, height: 160, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--color-border)', flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)' }}>
-                    <div style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 4, color: 'var(--color-text-muted)', fontSize: 11 }}>
+
+            {/* 자동 분석 결과 */}
+            {siteResult && !result._showSiteInput && (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginTop: 8 }}>
+                <img
+                  src={getBriefSiteImageUrl(result.brief_id)}
+                  alt="대지 위성사진"
+                  style={{ width: 160, height: 160, objectFit: 'cover', borderRadius: 6,
+                    border: '1px solid var(--color-border)', flexShrink: 0 }}
+                />
+                <div style={{ flex: 1, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)' }}>
+                  {siteResult.matched_address && (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: 11, marginBottom: 6 }}>
                       {siteResult.matched_address}
                     </div>
-                    {[
-                      ['방위·형상', siteResult.analysis?.orientation],
-                      ['접도 조건', siteResult.analysis?.road_access],
-                      ['주변 용도', siteResult.analysis?.surrounding_uses],
-                      ['자연자산', siteResult.analysis?.natural_assets],
-                    ].map(([label, val]) => val && val !== '위성 확인 불가' && (
-                      <div key={label} style={{ marginBottom: 3 }}>
-                        <span style={{ color: 'var(--color-text-muted)', marginRight: 4 }}>{label}:</span>{val}
-                      </div>
-                    ))}
-                    {siteResult.analysis?.overall_summary && (
-                      <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6,
-                        background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
-                        fontStyle: 'italic', color: 'var(--color-text-body)' }}>
-                        {siteResult.analysis.overall_summary}
-                      </div>
-                    )}
-                  </div>
+                  )}
+                  {[
+                    ['방위·형상', siteResult.analysis?.orientation],
+                    ['접도 조건', siteResult.analysis?.road_access],
+                    ['주변 용도', siteResult.analysis?.surrounding_uses],
+                    ['자연자산', siteResult.analysis?.natural_assets],
+                  ].map(([label, val]) => val && val !== '위성 확인 불가' && (
+                    <div key={label} style={{ marginBottom: 3 }}>
+                      <span style={{ color: 'var(--color-text-muted)', marginRight: 4 }}>{label}:</span>{val}
+                    </div>
+                  ))}
+                  {siteResult.analysis?.overall_summary && (
+                    <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6,
+                      background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)',
+                      fontStyle: 'italic' }}>
+                      {siteResult.analysis.overall_summary}
+                    </div>
+                  )}
                 </div>
+              </div>
+            )}
+
+            {/* 미완료 안내 */}
+            {!siteResult && !result._showSiteInput && (
+              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+                지침서 분석 시 자동 실행됩니다. 주소 추출 실패 시 수동 입력을 사용하세요.
+              </div>
+            )}
+
+            {/* 수동 입력 (재분석 / 오류 보정) */}
+            {result._showSiteInput && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <input
+                    style={{ ...s.input, flex: 1, marginTop: 0 }}
+                    value={siteAddr}
+                    onChange={e => setSiteAddr(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleSiteAnalyze()}
+                    placeholder="대지 주소 (예: 서울시 영등포구 여의대방로 358)"
+                    autoFocus
+                  />
+                  <button
+                    style={{ ...s.dlBtn(true), whiteSpace: 'nowrap', ...(siteAnalyzing || !siteAddr.trim() ? s.btnDisabled : {}) }}
+                    onClick={handleSiteAnalyze}
+                    disabled={siteAnalyzing || !siteAddr.trim()}
+                  >
+                    {siteAnalyzing ? '분석 중...' : '실행'}
+                  </button>
+                </div>
+                {siteErr && (
+                  <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{siteErr}</div>
+                )}
               </div>
             )}
           </div>
