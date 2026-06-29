@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 from config import settings
 from services.llm_client import call_messages
@@ -25,6 +26,8 @@ from services.utils import parse_json_response
 from services.brief_advisor import _build_advisor_payload, compute_scoring_focus
 from services.db_manager import load_pattern
 
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1   # _proposal 스키마 버전
 
@@ -93,9 +96,27 @@ _PROPOSAL_INSTRUCTION = (
     "  ],\n"
     '  "design_directions": [\n'
     '    { "direction": "짧은 컨셉 이름 + 한 줄 (예: \'저층 개방형 — 저층부를 시민에게 내주고 업무동을 상부로\')",\n'
-    '      "addresses": "이 컨셉이 베팅하는 것 — 어떤 배점/강조에 거는가",\n'
-    '      "tradeoffs": "이 컨셉이 포기·감수하는 것 (면적/공사비/운영 등 상충)",\n'
+    '      "narrative": "이 컨셉을 2~4문장으로 풀어라 — 어떤 발상이고, 배점·강조·대지의 어떤 사실에서 출발하며, 공간적으로 무엇을 하는가. 근거 있는 추론만, 새 숫자 금지.",\n'
+    '      "addresses": "이 컨셉이 베팅하는 것 — 어떤 배점/강조에 거는가 (1~2문장)",\n'
+    '      "scoring_play": "이 안이 실제로 따는 점수 — 어떤 배점 항목을 얼마나 가져가는가(예: \'배치 10 + 조망 5\')",\n'
+    '      "tradeoffs": "이 컨셉이 포기·감수하는 것 (면적/공사비/운영 등 상충, 1~2문장)",\n'
+    '      "site_rationale": "이 부지라서 가능/유리한 이유 — site_context 의 실측 대지 조건에 연결(없으면 생략)",\n'
     '      "basis": ["p.N 또는 항목명"] }\n'
+    "  ],\n"
+    '  "program_directions": [\n'
+    '    { "claim": "프로그램 구성 제안 — 한 줄 제목격 (예: \'저층부에 시민개방형 공유 프로그램 집중\')",\n'
+    '      "detail": "2~4문장 — 왜 이게 배점/강조/대지에서 나오는지 + 설계적으로 무엇을 의미하는지(어떤 공간·동선·구성). 근거 있는 추론, 새 숫자·새 사실 금지.",\n'
+    '      "basis": ["근거가 된 사실의 위치/항목 — 배점 항목명 또는 p.N 또는 site_context.키"] }\n'
+    "  ],\n"
+    '  "massing_strategy": [\n'
+    '    { "claim": "매스·배치 전략 제안 — 한 줄 제목격 (예: \'남측 조망축으로 판상 펼치고 코어를 북측에\')",\n'
+    '      "detail": "2~4문장 — 대지 형상·접도·조망(site_context)과 배점에 비춘 배치 논리와 그 효과. 근거 있는 추론, 새 숫자 금지.",\n'
+    '      "basis": ["근거 위치/항목"] }\n'
+    "  ],\n"
+    '  "phasing": [\n'
+    '    { "claim": "착수·전개 단계 제안 — 한 줄 제목격 (설계 진행 순서·의사결정 분기)",\n'
+    '      "detail": "2~4문장 — 어떤 사실(실격/한도/배점 무게)이 이 순서를 강제하는지 + 각 단계에서 무엇을 확정하는지. 근거 있는 추론, 새 숫자 금지.",\n'
+    '      "basis": ["근거 위치/항목"] }\n'
     "  ],\n"
     '  "priorities": [\n'
     '    { "rank": 1, "focus": "가장 먼저·가장 무겁게 다룰 영역",\n'
@@ -127,6 +148,19 @@ _PROPOSAL_INSTRUCTION = (
     "  '흔한 감점 함정' 으로 제시하되, 추론임을 note/근거에 드러내고 단정하지 말 것.\n"
     "- win_themes·priorities·risks 는 억지로 개수 채우지 말 것(강한 것 위주 triage). 단\n"
     "  design_directions 는 위 규칙대로 5안을 채운다. 신호 없는 항목은 지어내지 말 것.\n"
+    "- program_directions·massing_strategy·phasing 은 **AI 해석 확장층** — 1층 사실\n"
+    "  (배점·강조·대지) 위에서 추론한 제안이다. 각 claim 은 **반드시 basis 로 어떤 사실에서\n"
+    "  나왔는지 앵커**하라(앵커 못 달면 그 항목은 빼라). 신호가 얕으면 항목 수를 줄여라.\n"
+    "  사실로 위장하지 말 것 — 이 셋은 '제안'으로 읽히게 쓴다.\n"
+    "- **읽을 만한 깊이 (CRITICAL):** 각 항목은 한 줄 제목(claim/direction)에서 끝내지 말고\n"
+    "  detail/narrative 로 **2~4문장 풀어써라** — 설계팀이 읽고 판단할 수 있게. 단 분량을\n"
+    "  늘리는 건 'filler(미사여구·동어반복)'가 아니라 **근거 있는 추론의 깊이**다: ① 어떤\n"
+    "  사실(배점·강조·대지)에서 출발하는지 ② 공간·동선·구성으로 무엇을 하는지 ③ 그래서\n"
+    "  무엇을 얻고 무엇과 상충하는지. 풀어쓰되 **새 사실·새 숫자(분양가·세대수·ROI 등)는\n"
+    "  여전히 도입 금지** — 깊이는 '해석의 밀도'에서 나오지 '없는 데이터'에서 나오지 않는다.\n"
+    "- **새 숫자를 사실로 만들지 말 것(CRITICAL):** 분양가·ROI·미분양률·세대수·절감액 같은\n"
+    "  수치를 지어내 단정하지 마라. 규모·비용 가정이 필요하면 '가정/시나리오'로 명시하거나\n"
+    "  open_questions(발주처 확인)로 빼라. 인용 가능한 사실 숫자는 지침서에 실재하는 것만.\n"
     "- data_confidence: scoring_focus 가 비었거나 항목 2개 이하면 low. high severity flag\n"
     "  있으면 한 단계 ↓.\n"
     "- caveats 에는 반드시 '실제 심사 결과는 보장할 수 없으며 본 제안은 지침서 근거 기반\n"
@@ -242,14 +276,27 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     result["model_id"] = settings.model_id_advisor
     result["facility_type"] = facility_type
     result["brief_id"] = (brief_data.get("_brief_meta") or {}).get("brief_id", "")
+
+    # 근거 없는 수치 검산 (LLM 0, 숫자 수정 0). 비치명 — 실패해도 제안서는 유지.
+    try:
+        from services.proposal_number_check import check_proposal_numbers
+        result["_number_flags"] = check_proposal_numbers(result, brief_data)
+    except Exception as e:
+        logger.warning("제안서 수치 검산 실패 (비치명): %s", e)
+        result["_number_flags"] = []
     return result
 
 
 async def propose_project(brief_data: dict, facility_type: str = "") -> dict:
     """지침서 기반 수주 제안서 생성 (LLM 1콜). 저장된 _brief.json 재해석, 추가 추출 없음.
 
-    반환은 _proposal 스키마 dict (executive_summary / win_themes / design_directions /
+    반환은 _proposal 스키마 dict (executive_summary / win_themes / design_directions(+
+    scoring_play·site_rationale) / program_directions / massing_strategy / phasing /
     priorities / risks / kickoff_checklist / open_questions / scoring_focus(결정론) +
     data_confidence / caveats + 메타).
+
+    program_directions·massing_strategy·phasing 은 시퀀스 E Phase 2 의 'AI 해석 확장층'
+    — 1층 사실(배점·강조·대지) 위에서 추론한 제안, 각 항목 basis 앵커 강제. 새 숫자를
+    사실로 만들지 않음(가정은 open_questions/caveats 로).
     """
     return await asyncio.to_thread(_propose_sync, brief_data, facility_type)

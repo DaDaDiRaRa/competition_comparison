@@ -99,6 +99,22 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
 .site-field .sfv{font-size:13px;color:var(--text)}
 .site-note{margin-top:13px;font-size:11.5px;color:var(--muted);background:var(--soft);border-radius:6px;padding:8px 12px;line-height:1.55}
 
+/* ── 히어로 (대지 실측 이미지) ───── */
+.hero{margin:20px 0 6px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.hero img{width:100%;height:360px;object-fit:cover;object-position:center;display:block}
+.hero .hero-cap{padding:13px 18px}
+.hero .hero-src{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.hero .hero-sum{font-size:15px;line-height:1.7;color:var(--ink);margin-top:5px;font-weight:600}
+
+/* ── 사업 규모 팩트 밴드 (실추출) ── */
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(116px,1fr));
+  gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:6px 0}
+.fact{background:#fff;padding:14px 16px}
+.fact .fv{font-size:21px;font-weight:800;color:var(--ink);letter-spacing:-.02em;line-height:1.1}
+.fact .fv .u{font-size:12px;font-weight:600;color:var(--muted);margin-left:2px}
+.fact .fk{font-size:11px;color:var(--muted);margin-top:5px;font-weight:600}
+.facts-note{font-size:11px;color:var(--muted);margin-top:6px}
+
 /* ── 와플 차트 ───────────────────── */
 .waffle-wrap{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}
 .waffle-legend{display:flex;flex-direction:column;gap:7px;min-width:160px}
@@ -132,10 +148,27 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
   padding:12px 16px;border-left:1px solid var(--line);min-width:112px;color:var(--muted)}
 .dir-card-title{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:8px}
 .dir-card-title .num{color:var(--accent);margin-right:6px}
+.dir-card-narr{font-size:13px;color:var(--text);line-height:1.75;margin:-2px 0 11px}
 .dir-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}
 .dir-field .dfk{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);margin-bottom:2px;text-transform:uppercase}
 .dir-field .dfv{font-size:13px;color:var(--text)}
 .dir-card-basis{padding:7px 16px 12px;font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);background:#fafafa}
+
+/* ── 2층 범례 (사실 vs AI 해석) ──── */
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin:16px 0 2px;
+  padding:11px 16px;border:1px solid var(--line);border-radius:10px;background:var(--soft);font-size:12px}
+.legend .lg-h{font-weight:700;color:var(--ink);margin-right:2px}
+.legend .lg-item{display:flex;align-items:center;gap:7px;color:var(--text)}
+.ai-badge{display:inline-flex;align-items:center;font-size:10.5px;font-weight:700;letter-spacing:.04em;
+  color:#2a6496;background:#eaf1f7;border:1px solid #cfe0ee;border-radius:20px;padding:2px 9px;vertical-align:middle}
+section.sec>h2 .ai-badge{margin-left:8px}
+
+/* ── AI 해석 리스트 (프로그램·매스·단계) ── */
+ul.interp{list-style:none;margin:6px 0;padding:0}
+ul.interp li{padding:13px 0;border-bottom:1px solid #f4f4f4;display:flex;flex-direction:column;gap:5px}
+ul.interp li:last-child{border-bottom:none}
+ul.interp .ic{font-size:14px;font-weight:700;color:var(--ink);line-height:1.55}
+ul.interp .id{font-size:13px;color:var(--text);line-height:1.75;margin-top:1px}
 
 /* ── 우선순위 ────────────────────── */
 ol.pri{margin:8px 0;padding:0;list-style:none;counter-reset:pri}
@@ -172,6 +205,14 @@ ul.list li{margin:5px 0;font-size:13.5px}
 .cite{font-size:11px;color:var(--muted);background:var(--soft);border-radius:4px;
   padding:1px 5px;margin-left:3px;white-space:nowrap}
 .caveat{margin:16px 0 0;font-size:12px;color:var(--muted)}
+
+/* ── 근거 미확인 수치 검산 ─────────── */
+.numcheck{border:1px solid #f3c2c6;background:#fdf2f3;border-radius:10px;padding:13px 16px;margin:6px 0}
+.numcheck .nc-h{font-size:12.5px;font-weight:700;color:var(--accent);margin-bottom:8px}
+.numcheck ul{list-style:none;margin:0;padding:0}
+.numcheck li{font-size:12.5px;color:var(--text);padding:4px 0;line-height:1.55}
+.numcheck li .nv{font-weight:800;color:var(--accent);font-family:'Montserrat',monospace}
+.numcheck li .nctx{color:var(--muted)}
 footer.doc{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);color:#c0c0c0;font-size:11.5px;text-align:center}
 
 /* ── 상단 nav ────────────────────── */
@@ -194,6 +235,7 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
   .waffle-wrap{flex-direction:column}
   .site-fields{grid-template-columns:1fr}
   .site-thumb{width:100%}
+  .hero img{height:220px}
 }
 """
 
@@ -302,21 +344,101 @@ _SITE_FIELDS = [
 ]
 
 
-def _site_context_html(site_context: dict | None, image_b64: str = "") -> str:
-    """_site_context (VWorld 위성 + AI 판독) → 대지·맥락 섹션. 데이터 없으면 ''."""
+def _hero_html(site_context: dict | None, image_b64: str = "") -> str:
+    """대지 실측(위성+지적도) 이미지를 덱 최상단 히어로로. 이미지 없으면 ''.
+
+    '상상이 아니라 실측'을 첫 화면에 — 캡션엔 주소·출처 + 대지 요약.
+    """
+    sc = site_context or {}
+    if not image_b64:
+        return ""
+    analysis = sc.get("analysis") if isinstance(sc.get("analysis"), dict) else {}
+    matched = (sc.get("matched_address") or sc.get("address_input") or "").strip()
+    summary = (analysis.get("overall_summary") or "").strip()
+    src = "VWorld 위성 + 연속지적도" if sc.get("has_cadastral") else "VWorld 위성"
+    src_line = " · ".join(x for x in [_esc(matched), _esc(src)] if x)
+    return (
+        '<div class="hero">'
+        f'<img src="data:image/jpeg;base64,{image_b64}" alt="대지 위성·지적도 실측" />'
+        '<div class="hero-cap">'
+        f'<div class="hero-src">{src_line}</div>'
+        + (f'<div class="hero-sum">{_esc(summary)}</div>' if summary else "")
+        + '</div></div>'
+    )
+
+
+# ── 사업 규모 팩트 밴드 (지침서 실추출 — 날조 0) ─────────────────────
+
+_FACT_FIELDS = [
+    ("site_area_sqm",          "㎡",   "부지면적", lambda v: f"{v:,.0f}"),
+    ("floor_area_ratio_pct",   "%",    "용적률",   lambda v: f"{v:g}"),
+    ("building_coverage_pct",  "%",    "건폐율",   lambda v: f"{v:g}"),
+    ("max_height_m",           "m",    "최고높이", lambda v: f"{v:g}"),
+]
+_FACT_TOPLEVEL = [
+    ("construction_cost_100m_won", "억",   "공사비",   lambda v: f"{v:,.0f}"),
+    ("design_cost_100m_won",       "억",   "설계비",   lambda v: f"{v:,.0f}"),
+    ("construction_period_months", "개월", "공사기간", lambda v: f"{v:g}"),
+]
+
+
+def _facts_band_html(feasibility: dict | None) -> str:
+    """feasibility_export 의 실추출 수치를 대형 숫자 밴드로. 데이터 없으면 ''.
+
+    첨부물의 '지어낸 분양가·ROI'와 정반대 — 지침서에서 뽑은 사실 숫자만.
+    """
+    fe = feasibility if isinstance(feasibility, dict) else {}
+    sites = [s for s in (fe.get("sites") or []) if isinstance(s, dict)]
+    s0 = sites[0] if sites else {}
+
+    facts = []
+    for key, unit, label, fmt in _FACT_FIELDS:
+        v = s0.get(key)
+        if isinstance(v, (int, float)):
+            facts.append((fmt(v), unit, label))
+    for key, unit, label, fmt in _FACT_TOPLEVEL:
+        v = fe.get(key)
+        if isinstance(v, (int, float)):
+            facts.append((fmt(v), unit, label))
+    if not facts:
+        return ""
+
+    cells = "".join(
+        f'<div class="fact"><div class="fv">{_esc(v)}<span class="u">{_esc(u)}</span></div>'
+        f'<div class="fk">{_esc(k)}</div></div>'
+        for v, u, k in facts
+    )
+    multi = (
+        f'<div class="facts-note">부지 {len(sites)}곳 중 대표(1번지) 기준</div>'
+        if len(sites) > 1 else ""
+    )
+    return (
+        '<section id="facts" class="sec">'
+        '<h2><span class="n">·</span>사업 규모 <span style="font-size:12px;font-weight:600;color:var(--muted)">· 지침서 추출 사실</span></h2>'
+        f'<div class="facts">{cells}</div>'
+        + multi
+        + '</section>'
+    )
+
+
+def _site_context_html(site_context: dict | None, image_b64: str = "", compact: bool = False) -> str:
+    """_site_context (VWorld 위성 + AI 판독) → 대지·맥락 섹션. 데이터 없으면 ''.
+
+    compact=True 면 이미지·요약을 히어로가 이미 보여주므로 생략(필드·주의만).
+    """
     sc = site_context or {}
     analysis = sc.get("analysis")
     if not isinstance(analysis, dict):
         analysis = {}
 
-    summary = (analysis.get("overall_summary") or "").strip()
+    summary = "" if compact else (analysis.get("overall_summary") or "").strip()
     matched = (sc.get("matched_address") or sc.get("address_input") or "").strip()
     has_fields = any((analysis.get(k) or "").strip() for k, _ in _SITE_FIELDS)
-    if not (summary or has_fields or image_b64):
+    if not (summary or has_fields or (image_b64 and not compact)):
         return ""
 
     thumb = ""
-    if image_b64:
+    if image_b64 and not compact:
         src_lbl = "VWorld 위성 + 연속지적도" if sc.get("has_cadastral") else "VWorld 위성"
         cap = (_esc(matched) + " · " if matched else "") + src_lbl
         thumb = (
@@ -423,32 +545,36 @@ def _direction_cards(dirs: list) -> str:
     for i, d in enumerate(dirs):
         num   = _CIRCLE_NUMS[i] if i < len(_CIRCLE_NUMS) else str(i + 1)
         name  = _esc((d.get("direction") or "").strip())
+        narr  = _esc((d.get("narrative") or "").strip())
         addr  = _esc((d.get("addresses") or "").strip())
         tr    = _esc((d.get("tradeoffs") or "").strip())
         basis = _basis_html(d.get("basis"))
         svg   = _MASS_SVGS[i % len(_MASS_SVGS)]
 
-        fields = ""
-        if addr:
-            fields += (
+        play = _esc((d.get("scoring_play") or "").strip())     # 득점 (Phase 2)
+        srat = _esc((d.get("site_rationale") or "").strip())   # 이 부지라서 (Phase 2)
+
+        def _field(k, v):
+            return (
                 '<div class="dir-field">'
-                '<div class="dfk">공간전략</div>'
-                f'<div class="dfv">{addr}</div>'
+                f'<div class="dfk">{k}</div>'
+                f'<div class="dfv">{v}</div>'
                 '</div>'
-            )
-        if tr:
-            fields += (
-                '<div class="dir-field">'
-                '<div class="dfk">포기·유의</div>'
-                f'<div class="dfv">{tr}</div>'
-                '</div>'
-            )
+            ) if v else ""
+
+        fields = (
+            _field("공간전략", addr)
+            + _field("득점", play)
+            + _field("포기·유의", tr)
+            + _field("이 부지라서", srat)
+        )
 
         cards.append(
             '<div class="dir-card">'
             '<div class="dir-card-head">'
             '<div class="dir-card-main">'
             f'<div class="dir-card-title"><span class="num">{_esc(num)}</span>{name}</div>'
+            + (f'<div class="dir-card-narr">{narr}</div>' if narr else "")
             + (f'<div class="dir-fields">{fields}</div>' if fields else "")
             + '</div>'
             f'<div class="dir-card-svgbox">{svg}</div>'
@@ -465,10 +591,87 @@ def _directions_html(proposal: dict) -> str:
         return ""
     return (
         '<section id="directions" class="sec">'
-        '<h2><span class="n">2</span>설계 접근 방향</h2>'
+        '<h2><span class="n">2</span>설계 접근 방향'
+        '<span class="ai-badge">AI 해석</span></h2>'
         + _direction_matrix(dirs)
         + _direction_cards(dirs)
         + '</section>'
+    )
+
+
+# ── AI 해석 확장층 (프로그램·매스·단계 — Phase 2) ──────────────────────
+
+_AI_BADGE = '<span class="ai-badge">AI 해석</span>'
+
+
+def _interp_section(proposal: dict, key: str, sec_id: str, title: str) -> str:
+    """{claim, basis} 리스트 → 'AI 해석' 배지 단 확장 섹션. 각 항목에 근거 앵커.
+
+    1층 사실 위에서 AI가 추론한 제안층 — 사실로 위장하지 않게 배지·앵커로 명시.
+    """
+    items = [x for x in (proposal.get(key) or []) if isinstance(x, dict)]
+    lis = []
+    for it in items:
+        claim = _esc((it.get("claim") or "").strip())
+        if not claim:
+            continue
+        detail = _esc((it.get("detail") or "").strip())
+        basis = _basis_html(it.get("basis"))
+        lis.append(
+            f'<li><div class="ic">{claim}</div>'
+            + (f'<div class="id">{detail}</div>' if detail else "")
+            + (basis or "")
+            + '</li>'
+        )
+    if not lis:
+        return ""
+    return (
+        f'<section id="{sec_id}" class="sec">'
+        f'<h2><span class="n">·</span>{_esc(title)}{_AI_BADGE}</h2>'
+        '<ul class="interp">' + "".join(lis) + '</ul>'
+        '</section>'
+    )
+
+
+def _number_flags_html(proposal: dict) -> str:
+    """근거 미확인 수치 검산 결과(`_number_flags`)를 경고 밴드로. 없으면 ''.
+
+    제안서 서술에 나왔지만 지침서 추출 데이터에서 확인 안 된 숫자 — 일반지식·추정일
+    수 있으니 인용 전 원문 확인하라는 투명성 신호 (숫자 수정 0, 플래그만).
+    """
+    flags = [f for f in (proposal.get("_number_flags") or []) if isinstance(f, dict)]
+    if not flags:
+        return ""
+    rows = []
+    for f in flags[:20]:
+        val = _esc((f.get("value") or "").strip())
+        ctx = _esc((f.get("context") or "").strip())
+        if not val:
+            continue
+        rows.append(f'<li><span class="nv">{val}</span> · <span class="nctx">…{ctx}…</span></li>')
+    if not rows:
+        return ""
+    return (
+        '<section id="numcheck" class="sec">'
+        '<h2><span class="n">·</span>근거 미확인 수치</h2>'
+        '<div class="numcheck">'
+        '<div class="nc-h">⚠ 아래 수치는 지침서 추출 데이터에서 확인되지 않았습니다 '
+        '— 일반지식·추정일 수 있으니 인용 전 원문 확인 필요</div>'
+        '<ul>' + "".join(rows) + '</ul>'
+        '</div></section>'
+    )
+
+
+def _legend_html() -> str:
+    """2층 범례 — 사실(근거 인용) vs AI 해석(추론·제안). 차별화 선언."""
+    return (
+        '<div class="legend">'
+        '<span class="lg-h">읽는 법 ·</span>'
+        '<span class="lg-item">'
+        '<span class="cite">근거 p.N</span> 지침서·대지에서 확인된 <b>사실</b></span>'
+        '<span class="lg-item">'
+        f'{_AI_BADGE} 그 사실 위에서 AI가 추론한 <b>제안</b> (검증 필요)</span>'
+        '</div>'
     )
 
 
@@ -559,11 +762,13 @@ def to_proposal_html(
     facility_label: str = "",
     site_context: dict | None = None,
     site_image_b64: str = "",
+    feasibility: dict | None = None,
 ) -> str:
     """_proposal dict → 자체완결 HTML 문자열 (PPT형 스크롤 덱, LLM 호출 없음).
 
-    site_context/site_image_b64 가 있으면 전략 요약 직후 '대지·맥락 분석' 섹션을
-    삽입 (VWorld 위성 썸네일 + AI 판독 — 어떤 대지 정보를 반영했나 투명성).
+    - site_image_b64 가 있으면 덱 최상단에 대지 실측(위성+지적도) 히어로.
+    - site_context 의 판독 필드는 '대지·맥락' 섹션으로(히어로 있으면 compact).
+    - feasibility(feasibility_export) 가 있으면 '사업 규모' 실추출 팩트 밴드.
     """
     proposal = proposal or {}
     title = (brief_name or "").strip() or "프로젝트 수주 제안서"
@@ -592,18 +797,34 @@ def to_proposal_html(
     if proposal.get("model_id"):
         meta_bits.append(f'<span>모델 {_esc(proposal.get("model_id"))}</span>')
 
-    site_html = _site_context_html(site_context, site_image_b64)
+    hero_html = _hero_html(site_context, site_image_b64)
+    site_html = _site_context_html(site_context, site_image_b64, compact=bool(hero_html))
+    facts_html = _facts_band_html(feasibility)
+
+    # Phase 2: AI 해석 확장층 (프로그램·매스·단계). 있을 때만 렌더.
+    directions_html = _directions_html(proposal)
+    interp_html = (
+        _interp_section(proposal, "program_directions", "program", "프로그램 방향")
+        + _interp_section(proposal, "massing_strategy",  "massing", "매스 전략")
+        + _interp_section(proposal, "phasing",           "phasing", "단계 접근")
+    )
+    # 해석 마커가 실제로 쓰일 때만 범례 노출
+    legend_html = _legend_html() if (interp_html or directions_html) else ""
 
     body = (
-        summary_html
+        legend_html
+        + summary_html
+        + facts_html
         + site_html
         + _scoring_waffle(proposal)
         + _win_themes_html(proposal)
-        + _directions_html(proposal)
+        + directions_html
+        + interp_html
         + _priorities_html(proposal)
         + _risks_html(proposal)
         + _checklist_html(proposal, "kickoff_checklist", "kickoff", "5", "착수 체크리스트")
         + _checklist_html(proposal, "open_questions",    "questions", "6", "발주처 확인 필요")
+        + _number_flags_html(proposal)
     )
 
     caveats = [str(c).strip() for c in (proposal.get("caveats") or []) if str(c).strip()]
@@ -616,10 +837,12 @@ def to_proposal_html(
 
     nav_links = (
         '<a href="#summary">요약</a>'
+        + ('<a href="#facts">규모</a>' if facts_html else "")
         + ('<a href="#site">대지</a>' if site_html else "")
         + '<a href="#themes">핵심 테마</a>'
         '<a href="#directions">접근 방향</a>'
-        '<a href="#priorities">우선순위</a>'
+        + ('<a href="#program">프로그램</a>' if interp_html else "")
+        + '<a href="#priorities">우선순위</a>'
         '<a href="#risks">리스크</a>'
         '<a href="#kickoff">체크리스트</a>'
     )
@@ -635,7 +858,8 @@ def to_proposal_html(
         "<header class='doc'><div class='eyebrow'>PROJECT PROPOSAL</div>"
         f"<h1>{_esc(title)}</h1>"
         f"<div class='meta'>{''.join(meta_bits)}</div></header>"
-        "<div class='disclaimer'>"
+        + hero_html
+        + "<div class='disclaimer'>"
         "본 제안서는 추출된 지침서 데이터에 근거한 <b>수주 전략 가설</b>입니다. "
         "사실 주장(지침서가 요구·강조·배점하는 것)에는 근거를 인용하며, "
         "전략·접근 방향은 제안이고 실제 심사 결과를 보장하지 않습니다. "

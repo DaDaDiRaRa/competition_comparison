@@ -686,6 +686,7 @@ async def propose_brief(brief_id: str):
             to_proposal_html(
                 proposal, brief_name, facility_label(facility_type),
                 site_context=site_context, site_image_b64=site_image_b64,
+                feasibility=brief_data.get("feasibility_export"),
             ),
         )
     except Exception as e:

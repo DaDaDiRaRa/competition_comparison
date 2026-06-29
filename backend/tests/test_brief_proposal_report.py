@@ -145,3 +145,141 @@ class TestSiteContextSection:
         h = to_proposal_html(_PROPOSAL, "x", "y", site_context=sc)
         assert "<script>x</script>" not in h
         assert "&lt;script&gt;" in h
+
+
+_FEASIBILITY = {
+    "sites": [{
+        "site_area_sqm": 43000, "floor_area_ratio_pct": 250,
+        "building_coverage_pct": 18, "max_height_m": 95,
+    }],
+    "construction_cost_100m_won": 1440, "design_cost_100m_won": 120,
+    "construction_period_months": 32,
+}
+
+
+class TestPhase1Hero:
+
+    def test_hero_renders_image_and_summary(self):
+        h = to_proposal_html(_PROPOSAL, "영등포", "공공청사",
+                             site_context=_SITE_CONTEXT, site_image_b64="QUJD")
+        assert 'class="hero"' in h
+        assert 'data:image/jpeg;base64,QUJD' in h
+        assert "남향·코너의 도심 부지로 가시성이 높다." in h     # overall_summary in hero
+        assert "VWorld 위성" in h
+
+    def test_hero_compacts_site_section(self):
+        # 히어로가 이미지를 보여주면 대지 섹션은 이미지를 중복하지 않는다(b64 1회만)
+        h = to_proposal_html(_PROPOSAL, "x", "y",
+                             site_context=_SITE_CONTEXT, site_image_b64="QUJD")
+        assert h.count("data:image/jpeg;base64,QUJD") == 1
+        # 필드는 여전히 대지 섹션에 나온다
+        assert "남측 20m 도로 접면" in h
+
+    def test_no_hero_without_image(self):
+        h = to_proposal_html(_PROPOSAL, "x", "y", site_context=_SITE_CONTEXT)
+        assert 'class="hero"' not in h
+
+
+class TestPhase1FactsBand:
+
+    def test_facts_band_renders_extracted_numbers(self):
+        h = to_proposal_html(_PROPOSAL, "x", "y", feasibility=_FEASIBILITY)
+        assert "사업 규모" in h
+        assert "지침서 추출 사실" in h
+        assert "43,000" in h and "부지면적" in h       # 천단위 콤마
+        assert "250" in h and "용적률" in h
+        assert "1,440" in h and "공사비" in h
+        assert "32" in h and "공사기간" in h
+        assert '<a href="#facts">규모</a>' in h         # nav 링크
+
+    def test_facts_band_absent_when_no_data(self):
+        h = to_proposal_html(_PROPOSAL, "x", "y")
+        # "사업 규모"는 CSS 주석에도 있으니 렌더된 섹션/라벨로 판정
+        assert 'id="facts"' not in h
+        assert "지침서 추출 사실" not in h
+        assert '<a href="#facts">' not in h
+
+    def test_facts_band_skips_missing_fields(self):
+        fe = {"sites": [{"site_area_sqm": 1000}]}  # 나머지 결측
+        h = to_proposal_html(_PROPOSAL, "x", "y", feasibility=fe)
+        assert "부지면적" in h
+        assert "용적률" not in h   # 결측 필드는 칸 자체가 없음
+
+    def test_multi_site_note(self):
+        fe = {"sites": [{"site_area_sqm": 1000}, {"site_area_sqm": 2000}]}
+        h = to_proposal_html(_PROPOSAL, "x", "y", feasibility=fe)
+        assert "부지 2곳 중 대표" in h
+
+
+_PROPOSAL_P2 = dict(
+    _PROPOSAL,
+    design_directions=[
+        {"direction": "코어 분리형",
+         "narrative": "동선을 두 코어로 나눠 감염·일반 흐름을 분리하는 안이다. 배치계획 배점이 1순위인 점에서 출발한다.",
+         "addresses": "동선 분리",
+         "scoring_play": "배치 10 + 조망 5", "tradeoffs": "면적 손실",
+         "site_rationale": "북측 산 조망축이 있어 가능", "basis": ["p.20"]},
+    ],
+    program_directions=[
+        {"claim": "저층부에 시민개방형 공유 프로그램 집중",
+         "detail": "시민개방에 배점이 쏠리므로 저층부를 도시에 내준다. 로비·공유홀을 가로에 면하게 두어 접근성을 높인다.",
+         "basis": ["배치계획", "p.20"]},
+    ],
+    massing_strategy=[
+        {"claim": "남측 조망축으로 판상 펼치고 코어를 북측에",
+         "detail": "북측 산 조망(위성 실측)을 거실축에 맞추는 판상 배치로, 일조와 조망 배점을 동시에 노린다.",
+         "basis": ["site_context.natural_assets"]},
+    ],
+    phasing=[
+        {"claim": "1단계 동선 골격 확정 후 입면 전개",
+         "detail": "배치가 1순위 배점이라 동선·코어 골격을 먼저 확정하고, 그 위에 입면 차별화를 얹는 순서가 안전하다.",
+         "basis": ["배치계획"]},
+    ],
+)
+
+
+class TestPhase2Interpretation:
+
+    def test_direction_card_has_new_fields(self):
+        h = to_proposal_html(_PROPOSAL_P2, "x", "y")
+        assert "득점" in h and "배치 10 + 조망 5" in h
+        assert "이 부지라서" in h and "북측 산 조망축이 있어 가능" in h
+
+    def test_interp_sections_render_with_badge_and_anchor(self):
+        h = to_proposal_html(_PROPOSAL_P2, "x", "y")
+        assert "프로그램 방향" in h and "매스 전략" in h and "단계 접근" in h
+        assert "저층부에 시민개방형 공유 프로그램 집중" in h
+        assert h.count("AI 해석") >= 4   # 범례 + directions + 3 interp 섹션
+        # 각 해석 항목은 근거 앵커를 단다
+        assert "site_context.natural_assets" in h
+
+    def test_interp_detail_and_direction_narrative_render(self):
+        # '읽을 만한 깊이' 보강 — claim 제목 + detail 본문, 방향 narrative 단락
+        h = to_proposal_html(_PROPOSAL_P2, "x", "y")
+        assert 'class="id"' in h
+        assert "로비·공유홀을 가로에 면하게 두어" in h          # program detail
+        assert 'class="dir-card-narr"' in h
+        assert "감염·일반 흐름을 분리하는 안이다" in h          # direction narrative
+
+    def test_legend_renders_when_interp_present(self):
+        h = to_proposal_html(_PROPOSAL_P2, "x", "y")
+        assert 'class="legend"' in h
+        assert "확인된" in h and "추론한" in h
+        assert '<a href="#program">프로그램</a>' in h
+
+    def test_legend_absent_when_no_directions_or_interp(self):
+        bare = {"executive_summary": "요약만", "caveats": ["x"]}
+        h = to_proposal_html(bare, "x", "y")
+        assert 'class="legend"' not in h
+        assert '<a href="#program">' not in h
+
+    def test_interp_skips_items_without_claim_or_basis(self):
+        p = dict(_PROPOSAL, program_directions=[{"basis": ["p.1"]}, {"claim": ""}])
+        h = to_proposal_html(p, "x", "y")
+        assert 'id="program"' not in h   # 유효 항목 0 → 섹션 생략
+
+    def test_interp_xss_escaped(self):
+        p = dict(_PROPOSAL, massing_strategy=[{"claim": "<script>x</script>", "basis": ["p.1"]}])
+        h = to_proposal_html(p, "x", "y")
+        assert "<script>x</script>" not in h
+        assert "&lt;script&gt;" in h
