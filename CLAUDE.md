@@ -321,7 +321,46 @@ npm run dev
 # http://localhost:5173 (proxies /api/* to 8000)
 ```
 
-**New Machine Setup:** `git clone` → `pip install -r requirements.txt` + `npm install` → 백엔드/프론트 실행 → 설정 탭에서 DB 경로 + API 키 입력. DB 경로 미입력 시 `~/CompetitionAnalyzerDB` 자동.
+## New Machine Setup (새 로컬 환경)
+
+### 1. 필수 소프트웨어 설치
+
+- Git, Python 3.10+, Node.js 18+
+
+### 2. 코드 가져오기
+
+```powershell
+git clone https://github.com/DaDaDiRaRa/competition_comparison.git
+cd competition_comparison
+```
+
+### 3. 백엔드 셋업
+
+```powershell
+cd backend
+python -m venv venv
+venv/Scripts/activate
+pip install -r requirements.txt
+```
+
+### 4. 프론트엔드 셋업
+
+```powershell
+cd ../frontend
+npm install
+```
+
+### 5. 민감 파일 복사 (git에 없음 — USB로 이동)
+
+- `service.yaml` — 프로젝트 루트에 복사 후 `ANTHROPIC_API_KEY` 값을 실제 키로 교체
+- `.env` — 프로젝트 루트에 복사 (또는 앱 설정 탭에서 직접 입력)
+
+### 6. 앱 실행 후 설정 탭에서 입력
+
+- **Anthropic API 키** — [console.anthropic.com](https://console.anthropic.com) 에서 확인
+- **DB 경로** — 로컬 개발이면 비워두면 `~/CompetitionAnalyzerDB` 자동 생성
+
+> DB 데이터는 GCS 버킷(`kunwon-competition-db`)에 있으므로 Cloud Run 배포 환경에서는 별도로 옮길 필요 없음.
 
 **PaddleOCR (선택):** `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision 으로 동작하므로 불필요.
 
