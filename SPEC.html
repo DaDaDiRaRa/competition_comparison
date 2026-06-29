@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>설계공모 경쟁분석 시스템 — SPEC</title>
+<style>
+  :root {
+    --red: #e60012;
+    --red-light: #fff0f0;
+    --red-dim: #b8000e;
+    --navy: #1a2233;
+    --text: #1f2937;
+    --text-muted: #6b7280;
+    --border: #e5e7eb;
+    --bg: #ffffff;
+    --bg-alt: #f9fafb;
+    --code-bg: #f3f4f6;
+    --green: #16a34a; --green-bg: #dcfce7;
+    --blue: #0891b2;  --blue-bg: #cffafe;
+    --yellow:#ca8a04; --yellow-bg:#fef3c7;
+    --orange:#ea580c; --orange-bg:#fed7aa;
+    --danger:#dc2626; --danger-bg:#fee2e2;
+    --nav-w: 260px;
+    --font: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--text);
+    background: var(--bg);
+    display: flex;
+  }
+
+  /* ── NAV ── */
+  #nav {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--nav-w);
+    height: 100vh;
+    background: var(--navy);
+    overflow-y: auto;
+    padding: 0 0 32px;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  #nav-header {
+    background: var(--red);
+    padding: 20px 18px 16px;
+    color: #fff;
+  }
+  #nav-header .logo { font-size: 11px; font-weight: 700; letter-spacing: .12em; opacity: .8; text-transform: uppercase; margin-bottom: 6px; }
+  #nav-header .title { font-size: 14px; font-weight: 700; line-height: 1.35; }
+  #nav-header .meta { font-size: 11px; opacity: .7; margin-top: 6px; }
+
+  #nav ul { list-style: none; padding: 10px 0; }
+  #nav li a {
+    display: block;
+    padding: 6px 18px 6px 18px;
+    font-size: 12.5px;
+    color: rgba(255,255,255,.7);
+    text-decoration: none;
+    line-height: 1.4;
+    transition: color .15s, background .15s;
+  }
+  #nav li a:hover, #nav li a.active { color: #fff; background: rgba(255,255,255,.08); }
+  #nav .nav-h1 > a { font-size: 13px; font-weight: 700; color: rgba(255,255,255,.9); padding-left: 18px; margin-top: 4px; }
+  #nav .nav-h2 > a { padding-left: 28px; }
+  #nav .nav-h3 > a { padding-left: 40px; font-size: 11.5px; color: rgba(255,255,255,.5); }
+  #nav .nav-divider { height: 1px; background: rgba(255,255,255,.08); margin: 8px 0; }
+
+  /* ── MAIN ── */
+  #main {
+    margin-left: var(--nav-w);
+    min-height: 100vh;
+    max-width: 900px;
+    width: 100%;
+    padding: 48px 56px 80px;
+  }
+
+  /* ── HERO ── */
+  #hero {
+    background: linear-gradient(135deg, var(--navy) 0%, #2d3f5a 100%);
+    color: #fff;
+    border-radius: 16px;
+    padding: 40px 44px;
+    margin-bottom: 48px;
+  }
+  #hero .badge {
+    display: inline-block;
+    background: var(--red);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+  #hero h1 { font-size: 26px; font-weight: 800; line-height: 1.3; margin-bottom: 10px; }
+  #hero .sub { font-size: 14px; opacity: .75; line-height: 1.6; max-width: 560px; }
+  #hero .meta-row { display: flex; gap: 24px; margin-top: 22px; flex-wrap: wrap; }
+  #hero .meta-item { font-size: 12px; opacity: .65; }
+  #hero .meta-item strong { opacity: 1; font-weight: 600; }
+
+  /* ── SECTION HEADINGS ── */
+  h2 {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--navy);
+    margin: 48px 0 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--red);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .sec-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    background: var(--red);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 32px 0 12px;
+    padding-left: 12px;
+    border-left: 3px solid var(--red);
+  }
+  h4 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 20px 0 8px;
+  }
+  h4::before { content: '▸ '; color: var(--red); }
+
+  p { margin-bottom: 14px; }
+
+  /* ── BLOCKQUOTE ── */
+  blockquote {
+    background: var(--bg-alt);
+    border-left: 4px solid var(--border);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 18px;
+    margin: 16px 0;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .note-inferred {
+    background: #fffbeb;
+    border-left-color: #f59e0b;
+    color: #92400e;
+  }
+
+  /* ── LISTS ── */
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 4px; line-height: 1.65; }
+  li > ul, li > ol { margin-top: 4px; margin-bottom: 4px; }
+
+  /* ── CODE ── */
+  code {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--code-bg);
+    color: #1e40af;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+  }
+  pre {
+    background: #1e2433;
+    color: #e2e8f0;
+    border-radius: 10px;
+    padding: 20px 22px;
+    overflow-x: auto;
+    margin: 16px 0 20px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+  }
+  pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+    border: none;
+    font-size: inherit;
+  }
+  .pre-label {
+    display: inline-block;
+    background: #374151;
+    color: #9ca3af;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 6px 6px 0 0;
+    margin-bottom: -6px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 16px 0 20px; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    background: var(--navy);
+    color: #fff;
+    font-weight: 600;
+    font-size: 12px;
+    text-align: left;
+    padding: 10px 14px;
+    letter-spacing: .03em;
+  }
+  td {
+    padding: 9px 14px;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  tr:nth-child(even) td { background: var(--bg-alt); }
+  tr:hover td { background: #f0f4ff; }
+  td code { font-size: 12px; }
+
+  /* ── BADGES ── */
+  .badge-a { background: var(--green-bg); color: var(--green); font-weight: 700; padding: 1px 7px; border-radius: 4px; font-size: 12px; }
+  .badge-b { background: var(--blue-bg); color: var(--blue); font-weight: 700; padding: 1px 7px; border-radius: 4px; font-size: 12px; }
+  .badge-c { background: var(--yellow-bg); color: var(--yellow); font-weight: 700; padding: 1px 7px; border-radius: 4px; font-size: 12px; }
+  .badge-d { background: var(--orange-bg); color: var(--orange); font-weight: 700; padding: 1px 7px; border-radius: 4px; font-size: 12px; }
+  .badge-e { background: var(--danger-bg); color: var(--danger); font-weight: 700; padding: 1px 7px; border-radius: 4px; font-size: 12px; }
+
+  /* ── CALLOUTS ── */
+  .callout {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout-warn  { background: #fffbeb; border: 1px solid #fcd34d; color: #78350f; }
+  .callout-info  { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+  .callout-danger{ background: var(--red-light); border: 1px solid #fca5a5; color: #7f1d1d; }
+  .callout-tip   { background: #f0fdf4; border: 1px solid #86efac; color: #14532d; }
+  .callout-title { font-weight: 700; margin-bottom: 4px; }
+
+  /* ── INFERRED TAG ── */
+  .inferred {
+    display: inline;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: .04em;
+    white-space: nowrap;
+  }
+
+  /* ── PIPELINE STEPS ── */
+  .steps { counter-reset: step; margin: 16px 0 20px; }
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 12px;
+    align-items: flex-start;
+  }
+  .step-num {
+    counter-increment: step;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px; height: 26px;
+    background: var(--red);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-body { flex: 1; }
+  .step-body strong { color: var(--navy); }
+
+  /* ── TWO-PASS DIAGRAM ── */
+  .pass-diagram {
+    display: flex;
+    gap: 0;
+    margin: 20px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .pass {
+    flex: 1;
+    padding: 18px 20px;
+  }
+  .pass-1 { background: #f0f4ff; border-right: 1px solid var(--border); }
+  .pass-2 { background: #f0fdf4; }
+  .pass-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .pass-1 .pass-label { color: #3730a3; }
+  .pass-2 .pass-label { color: #15803d; }
+  .pass-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; color: var(--navy); }
+  .pass ul { padding-left: 18px; margin: 0; }
+  .pass li { font-size: 13px; margin-bottom: 3px; }
+
+  /* ── TIER CARDS ── */
+  .tier-cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin: 16px 0; }
+  .tier-card {
+    border-radius: 10px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+  }
+  .tier-0 { background: #f0fdf4; border-color: #86efac; }
+  .tier-1 { background: #eff6ff; border-color: #93c5fd; }
+  .tier-2 { background: #faf5ff; border-color: #c4b5fd; }
+  .tier-label { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 6px; }
+  .tier-0 .tier-label { color: #15803d; }
+  .tier-1 .tier-label { color: #1d4ed8; }
+  .tier-2 .tier-label { color: #7c3aed; }
+  .tier-title { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+  .tier-card ul { padding-left: 16px; margin: 0; }
+  .tier-card li { font-size: 12.5px; line-height: 1.55; }
+
+  /* ── GRADE SWATCHES ── */
+  .grade-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+  .grade-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    border: 1px solid rgba(0,0,0,.08);
+  }
+  .grade-chip .letter { font-size: 20px; font-weight: 800; }
+
+  /* ── DIVIDER ── */
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+  /* ── PRINT ── */
+  @media print {
+    #nav { display: none; }
+    #main { margin-left: 0; max-width: none; padding: 24px 32px; }
+  }
+
+  /* ── SCROLLBAR ── */
+  #nav::-webkit-scrollbar { width: 4px; }
+  #nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.2); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ NAV ═══════════════════ -->
+<nav id="nav">
+  <div id="nav-header">
+    <div class="logo">Competition Analyzer</div>
+    <div class="title">시스템 스펙 문서</div>
+    <div class="meta">SPEC.md · 2026-06-29</div>
+  </div>
+  <ul>
+    <li class="nav-h1"><a href="#s1">1. 목적 및 배경</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s2">2. 시스템 아키텍처</a></li>
+    <li class="nav-h2"><a href="#s2-1">2.1 기술 스택</a></li>
+    <li class="nav-h2"><a href="#s2-2">2.2 배포 환경</a></li>
+    <li class="nav-h2"><a href="#s2-3">2.3 디렉터리 구조</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s3">3. 핵심 파이프라인</a></li>
+    <li class="nav-h2"><a href="#s3-1">3.1 제안서 축적</a></li>
+    <li class="nav-h2"><a href="#s3-2">3.2 비교분석 (2-pass)</a></li>
+    <li class="nav-h2"><a href="#s3-3">3.3 제안서 진단</a></li>
+    <li class="nav-h2"><a href="#s3-4">3.4 지침서 분석</a></li>
+    <li class="nav-h3"><a href="#s3-4-1">3.4.1 AI 종합 해설</a></li>
+    <li class="nav-h3"><a href="#s3-4-2">3.4.2 수주 제안서</a></li>
+    <li class="nav-h3"><a href="#s3-4-3">3.4.3 대지·맥락 분석</a></li>
+    <li class="nav-h2"><a href="#s3-5">3.5 교차 비교</a></li>
+    <li class="nav-h2"><a href="#s3-6">3.6 아카이브 검색</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s4">4. 데이터 모델</a></li>
+    <li class="nav-h2"><a href="#s4-1">4.1 DB 레이아웃</a></li>
+    <li class="nav-h2"><a href="#s4-2">4.2 JSON 스키마</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s5">5. AI 분류·추출 로직</a></li>
+    <li class="nav-h2"><a href="#s5-1">5.1 페이지/블록 분류</a></li>
+    <li class="nav-h2"><a href="#s5-2">5.2 추출 티어</a></li>
+    <li class="nav-h2"><a href="#s5-3">5.3 LLM 라우팅·비용</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s6">6. 품질 보증</a></li>
+    <li class="nav-h2"><a href="#s6-1">6.1 정량 검증</a></li>
+    <li class="nav-h2"><a href="#s6-2">6.2 지침서 검증</a></li>
+    <li class="nav-h2"><a href="#s6-3">6.3 테스트 커버리지</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s7">7. 프론트엔드</a></li>
+    <li class="nav-h2"><a href="#s7-1">7.1 탭 구성</a></li>
+    <li class="nav-h2"><a href="#s7-2">7.2 API 클라이언트</a></li>
+    <li class="nav-h2"><a href="#s7-3">7.3 스타일 시스템</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s8">8. 운영 규칙·제약</a></li>
+    <li class="nav-h2"><a href="#s8-1">8.1 파일 저장 규칙</a></li>
+    <li class="nav-h2"><a href="#s8-2">8.2 API 키·보안</a></li>
+    <li class="nav-h2"><a href="#s8-3">8.3 알려진 한계</a></li>
+    <li class="nav-divider"></li>
+    <li class="nav-h1"><a href="#s9">9. 미결·보류 사항</a></li>
+  </ul>
+</nav>
+
+<!-- ═══════════════════ MAIN ═══════════════════ -->
+<main id="main">
+
+  <!-- HERO -->
+  <div id="hero">
+    <div class="badge">SPEC · Reverse-Engineered</div>
+    <h1>설계공모 경쟁분석 시스템</h1>
+    <p class="sub">건축 설계 공모 제안서 PDF를 AI로 추출·분류·비교·진단하는 풀스택 내부 도구의 기술 명세서</p>
+    <div class="meta-row">
+      <div class="meta-item"><strong>작성 기준일</strong> 2026-06-29</div>
+      <div class="meta-item"><strong>분석 방법</strong> 소스 코드 직접 분석 (7개 병렬 에이전트) + CLAUDE.md</div>
+      <div class="meta-item"><strong>불확실 사항</strong> <span class="inferred">추정</span> 표시</div>
+    </div>
+  </div>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s1">
+    <h2><span class="sec-num">1</span>목적 및 배경</h2>
+
+    <p><strong>설계공모 경쟁분석 시스템(Competition Analyzer)</strong>은 건축 설계 공모전에서 제출된 제안서 PDF와 공모 지침서(PDF/DOCX/HWP/HWPX)를 자동으로 추출·분류·비교·진단하는 풀스택 웹 애플리케이션입니다. 핵심 목적은 대형 건축사사무소가 다수의 공모 제안서를 체계적으로 분석하고, 과거 당선/낙선 패턴을 축적하여 신규 공모 진단 및 수주 전략 수립에 활용하는 것입니다.</p>
+
+    <p>기존의 수작업 비교 방식을 대체하기 위해 Claude AI(Sonnet 4.6 / Opus 4.8)를 LLM 엔진으로 활용하며, 추출된 정량 데이터와 AI 분석 결과를 HTML 리포트로 자동 생성합니다. 평가 결과는 숫자 점수가 아닌 5단계 등급(A/B/C/D/E) 문자열로 표현하여 임원 검토 시 정밀도 논쟁을 최소화합니다.</p>
+
+    <p>모든 데이터는 관계형 DB 없이 JSON 파일 시스템으로 저장되며, 운영 환경에서는 GCS 버킷을 GCSFUSE로 마운트하여 사용합니다. <code>main</code> 브랜치 push 시 GitHub Actions를 통해 Cloud Run (gen2)에 자동 배포됩니다.</p>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s2">
+    <h2><span class="sec-num">2</span>시스템 아키텍처</h2>
+
+    <h3 id="s2-1">2.1 기술 스택</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>계층</th><th>기술</th></tr></thead>
+        <tbody>
+          <tr><td>백엔드 프레임워크</td><td>FastAPI (Python)</td></tr>
+          <tr><td>프론트엔드 프레임워크</td><td>React 18 + Vite</td></tr>
+          <tr><td>AI 모델 (추출·분류·비교·진단)</td><td><code>claude-sonnet-4-6</code></td></tr>
+          <tr><td>AI 모델 (지침서 종합 해설·수주 제안서)</td><td><code>claude-opus-4-8</code> (<code>settings.model_id_advisor</code>)</td></tr>
+          <tr><td>PDF 래스터화</td><td>PyMuPDF (fitz)</td></tr>
+          <tr><td>데이터 저장</td><td>JSON 파일 (flat file system, 관계형 DB 없음)</td></tr>
+          <tr><td>전문 검색</td><td>SQLite in-memory FTS5 (<code>archive_search.py</code>)</td></tr>
+          <tr><td>DOCX 파싱</td><td>python-docx (<code>docx_loader.py</code>)</td></tr>
+          <tr><td>HWP/HWPX 파싱</td><td>rhwp-python 0.7.0 (<code>hwpx_loader.py</code>)</td></tr>
+          <tr><td>OCR (선택적)</td><td>PaddleOCR (<code>requirements-ocr.txt</code>, Tier 1 경로)</td></tr>
+          <tr><td>공간 데이터</td><td>VWorld API (WMTS 위성 + WMS 지적도)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>API 호출에는 Anthropic SDK가 아닌 <code>httpx</code>를 직접 사용하며, 엔드포인트는 <code>https://api.anthropic.com/v1/messages</code> (anthropic-version: 2023-06-01)입니다. 타임아웃은 900초, 재시도는 HTTP 502/503/529 및 <code>httpx.TimeoutException</code>에 대해 지수 백오프(2→4→8초, 최대 3회) 적용입니다.</p>
+
+    <h3 id="s2-2">2.2 배포 환경</h3>
+    <ul>
+      <li><strong>운영:</strong> Google Cloud Run (gen2), 컨테이너 이미지 빌드 후 배포</li>
+      <li><strong>스토리지:</strong> GCS 버킷 <code>gs://kunwon-competition-db</code> (GCSFUSE 마운트, <code>/data</code> 경로)</li>
+      <li><strong>CI/CD:</strong> GitHub Actions (<code>.github/workflows/deploy.yml</code>), <code>main</code> push 시 자동 트리거</li>
+      <li><strong>로컬 개발:</strong> 백엔드 <code>uvicorn main:app --reload --port 8000</code>, 프론트 <code>npm run dev</code> (Vite, port 5173, <code>/api/*</code> 프록시)</li>
+      <li><strong>패키지 동기화 필수:</strong> <code>requirements.txt</code> (로컬) + <code>requirements-server.txt</code> (Docker) — 양쪽 항상 동기화</li>
+      <li><strong>Cloud Run 업로드 한도:</strong> 32MB 제한 우회를 위해 청크 업로드 라우터 (<code>/api/upload</code>) 사용</li>
+      <li><strong>CORS:</strong> <code>allow_origins=['*']</code>, <code>allow_credentials=False</code> — 전 오리진 허용 (의도적, per-browser API 키 모델)</li>
+    </ul>
+
+    <h3 id="s2-3">2.3 디렉터리 구조 (주요)</h3>
+<pre><code>competition_comparison/
+├── backend/
+│   ├── main.py                   # FastAPI 앱, 7개 라우터 마운트
+│   ├── config.py                 # FACILITY_TYPES, PAGE_TYPES_META, 모델 ID, DPI 상수
+│   ├── db_manager.py             # JSON DB CRUD, _atomic_write/_sync_write
+│   ├── app_settings.json         # 설정 파일 (API 키 제외, git 추적)
+│   ├── routers/
+│   │   ├── accumulate.py         # 제안서 추출 + 비교분석 라우터
+│   │   ├── diagnose.py           # 진단 라우터
+│   │   ├── patterns.py           # 시설유형 패턴 관리
+│   │   ├── settings.py           # 앱 설정 + /settings/meta 단일 소스
+│   │   ├── upload.py             # 청크 업로드 (/tmp/cc_uploads/)
+│   │   ├── archive.py            # FTS5 검색
+│   │   └── brief.py              # 지침서 분석
+│   ├── services/
+│   │   ├── page_classifier.py    # 페이지/블록 분류
+│   │   ├── data_extractor.py     # 3-tier 추출
+│   │   ├── comparator.py         # 2-pass 블라인드-리빌
+│   │   ├── pattern_builder.py    # 당선/낙선 패턴 집계
+│   │   ├── llm_client.py         # Claude API 래퍼
+│   │   ├── brief_advisor.py      # AI 종합 해설 (Opus)
+│   │   ├── brief_proposal.py     # 수주 제안서 (Opus)
+│   │   ├── vworld_analyzer.py    # VWorld 위성+지적도
+│   │   ├── quant_validator.py    # 정량 정합성 검증 (LLM 0)
+│   │   ├── feasibility_export.py # _brief.json → feasibility_export 블록
+│   │   ├── archive_search.py     # SQLite FTS5 인메모리
+│   │   ├── grade_helpers.py      # A-E 등급 단일 소스
+│   │   ├── docx_loader.py        # DOCX 블록 파싱
+│   │   └── hwpx_loader.py        # HWP/HWPX 블록 파싱
+│   └── tests/                    # 382 테스트 (13 모듈 + conftest)
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx               # 7탭 구조, MetaProvider/ApiKeyGate 래핑
+│   │   ├── api/client.js         # API 클라이언트 함수 전체
+│   │   ├── hooks/useMeta.jsx     # 시설유형·페이지타입·평가축 단일 소스
+│   │   ├── kunwon-tokens.css     # 디자인 토큰 단일 소스
+│   │   └── components/           # BriefMode, AccumulateMode, ...
+│   └── dist/                     # Vite 빌드 산출물 (백엔드가 SPA 서빙)
+└── tests/                        # repo-root (test_docx_extractor.py 10건, 별도 실행)</code></pre>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s3">
+    <h2><span class="sec-num">3</span>핵심 파이프라인</h2>
+
+    <h3 id="s3-1">3.1 제안서 축적 (Accumulate)</h3>
+    <p><strong>엔드포인트:</strong> <code>POST /api/accumulate/add-submission</code> (SSE 스트리밍)</p>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><strong>업로드:</strong> 25MB 미만은 FormData 직접 전송, 이상은 청크 업로드(<code>/api/upload</code>)로 <code>file_ref</code> 취득.</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><strong>분류(classify):</strong> <code>classify_all_pages_brief()</code>가 PDF 페이지를 배치 처리(BATCH_SIZE=5). DPI 72, <code>claude-sonnet-4-6</code>, <code>max_tokens=3000</code>, <code>temperature=0</code>.</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><strong>추출(extract):</strong> 3-tier 로직 적용 (§5.2). 제안서 결과에 <code>_quantitative</code> 자동 집계 + <code>quant_validator</code>로 <code>_quantitative_flags</code> 부착.</div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><strong>저장:</strong> <code>_atomic_write()</code> (JSON), <code>_sync_write()</code> (HTML). 개별 제출물 리포트 즉시 생성.</div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body"><strong>SSE 이벤트:</strong> <code>stage</code> / <code>progress</code> / <code>done</code> / <code>error</code>. 모든 이벤트에 <code>_timestamp</code> (epoch ms) 필수.</div></div>
+    </div>
+    <div class="callout callout-info">
+      <div class="callout-title">비교분석은 분리된 별도 호출</div>
+      <code>POST /api/accumulate/projects/{ft}/{cid}/rerun-compare</code>를 별도 호출해야 합니다. <code>rerender-report</code>는 LLM 없이 HTML만 재생성합니다.
+    </div>
+
+    <h3 id="s3-2">3.2 비교분석 (Compare) — 2-pass Blind-Reveal</h3>
+    <p><strong>엔드포인트:</strong> <code>POST /api/accumulate/projects/{ft}/{cid}/rerun-compare</code></p>
+
+    <div class="pass-diagram">
+      <div class="pass pass-1">
+        <div class="pass-label">Pass 1</div>
+        <div class="pass-title">블라인드 채점</div>
+        <ul>
+          <li>제출물을 A안/B안/...으로 익명화, 결과 라벨 제거</li>
+          <li>정적 프롬프트 + 동적 데이터 각각 <code>cache_control: ephemeral</code></li>
+          <li><code>max_tokens=32000</code>, <code>temperature=0</code></li>
+          <li>프롬프트 템플릿: <code>.replace()</code> 사용 (JSON 중괄호 충돌 회피)</li>
+        </ul>
+      </div>
+      <div class="pass pass-2">
+        <div class="pass-label">Pass 2</div>
+        <div class="pass-title">리빌 + 사후 분석</div>
+        <ul>
+          <li>Pass 1 결과 + 실제 결과 라벨만 재전송</li>
+          <li>원본 추출 데이터 미재전송 → <strong>토큰 ~80% 절감</strong></li>
+          <li><code>max_tokens=4096</code> (단문 출력)</li>
+          <li>Gap Analysis: 결정론 Python 로직</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>Gap Analysis 결정론 로직 (<code>_compute_gap_analysis()</code>)</h4>
+    <ul>
+      <li><code>blind_top1</code>: 블라인드 1위 제출물</li>
+      <li><code>actual_winners</code>: result가 <code>win</code> 또는 <code>contracted</code>인 제출물</li>
+      <li><code>alignment</code> 산출: 상위 절반 = <code>ceil((n+1)/2)</code> 항목. top1 일치 AND 당선작 90%↑ 상위 절반 → <code>"high"</code>; 50%↑ → <code>"partial"</code>; 그 외 → <code>"low"</code></li>
+    </ul>
+
+    <h3 id="s3-3">3.3 제안서 진단 (Diagnose)</h3>
+    <p><strong>엔드포인트:</strong> <code>POST /api/diagnose/run</code> (전체 패턴) | <code>POST /api/diagnose/run-vs-projects</code> (선택 제출물)</p>
+    <p>파이프라인: <code>load_patterns</code> → <code>classify_sub</code> → <code>extract_sub</code> → <code>diagnose</code> → <code>report</code> → <code>complete</code>. LLM 호출 시 2-블록 캐싱(static + dynamic), <code>max_tokens=8192</code>, <code>temperature=0</code>. 완료 시 진단 HTML 자동 생성 (LLM 0). <span class="inferred">추정</span>: diagnose SSE 이벤트에는 <code>_timestamp</code>가 없음 (brief SSE와 불일치).</p>
+
+    <h3 id="s3-4">3.4 지침서 분석 (Brief)</h3>
+    <p><strong>엔드포인트:</strong> <code>POST /api/brief/analyze</code> (SSE). 지원 포맷: PDF (≤200MB), DOCX/HWP/HWPX (각 ≤50MB).</p>
+
+    <h4>파일 검증 (<code>_validate_brief_file()</code>)</h4>
+    <ul>
+      <li>PDF: magic byte <code>b'%PDF'</code></li>
+      <li>DOCX/HWPX: <code>b'PK\x03\x04'</code> (ZIP 포맷)</li>
+      <li>HWP: <code>b'\xd0\xcf\x11\xe0'</code> (OLE2 포맷)</li>
+    </ul>
+
+    <h4>파이프라인 순서</h4>
+    <p><code>classify_brief</code> → <code>extract_brief</code> → <code>brief_reqs</code> → <code>validate</code> → (옵션) <code>insight</code> → (옵션) <code>site_analysis</code> → <code>save</code> → <code>complete</code></p>
+
+    <h4>저장</h4>
+    <p><code>_atomic_write(json)</code> → <code>_sync_write(md)</code> → <code>_sync_write(html)</code> → <code>_sync_write_bytes(xlsx)</code></p>
+    <p>저장 경로: <code>{db_path}/_briefs/{YYYYMMDD_HHMMSS}_{facility_type}_{slug}.{json|md|html|xlsx}</code> (최대 120자)</p>
+
+    <h3 id="s3-4-1">3.4.1 AI 종합 해설 (brief_advisor)</h3>
+    <p><code>POST /api/brief/{brief_id}/interpret</code> 또는 <code>/analyze</code>의 <code>include_insight=True</code>(기본값)로 실행.</p>
+    <div class="callout callout-tip">
+      <div class="callout-title">역할: "해설가" — 사실 triage만</div>
+      지침서가 무엇을 요구·강조·배점하는지 종합. 당락 예측·전략 처방·외부 지식 주입 금지.
+    </div>
+    <ul>
+      <li><strong>결정론 백본 <code>compute_scoring_focus()</code>:</strong> LLM 0. 배점이 가장 많은 페이지에서 카테고리별 points·weight_pct·rank 산출. LLM 출력의 <code>scoring_focus</code>는 이 값으로 <strong>항상 덮어씀</strong> (환각 차단).</li>
+      <li><strong>LLM 호출:</strong> <code>claude-opus-4-8</code>, <code>max_tokens=16000</code>, temperature=0 (Opus는 자동 생략).</li>
+      <li><strong>가드 4개:</strong> 근거 한정, 인용 필수(페이지 추측 금지), 예측 금지, 중립 탐지만.</li>
+      <li><strong>산출물:</strong> <code>_insight</code> → <code>_brief.json</code> 내 임베드. 체크리스트 HTML/MD/xlsx 3종 모두 렌더링.</li>
+    </ul>
+
+    <h3 id="s3-4-2">3.4.2 수주 제안서 (brief_proposal)</h3>
+    <p><code>POST /api/brief/{brief_id}/propose</code> 호출.</p>
+    <div class="callout callout-tip">
+      <div class="callout-title">역할: "전략가" — 처방형 전략 (brief_advisor와 별개 산출물)</div>
+      앞을 보는 처방 — 수주 핵심 테마·설계 접근 방향·착수 우선순위·리스크·체크리스트.
+    </div>
+    <ul>
+      <li><strong>결정론 백본 재사용:</strong> <code>brief_advisor._build_advisor_payload()</code> + <code>compute_scoring_focus()</code> 그대로 import (드리프트 차단).</li>
+      <li><strong>패턴 주입:</strong> <code>_pattern_signals(facility_type)</code>로 동일 시설유형 당선/낙선 경향 → <code>payload["pattern_context"]</code>.</li>
+      <li><strong>고정 설계:</strong> <code>win_themes</code> 1~2개 압축, <code>design_directions</code> 상호 배타 컨셉 5안 고정, <code>risks</code> 2층(명시 실격 + 반복 강조 추론).</li>
+      <li><strong>AI 해석 확장층 (Phase 2):</strong> <code>program_directions</code> / <code>massing_strategy</code> / <code>phasing</code> 신규 필드 (<code>{claim, basis}</code> 구조).</li>
+      <li><strong>수치 검산:</strong> <code>proposal_number_check.check_proposal_numbers()</code> (LLM 0) → <code>_number_flags</code> 부착 (숫자 수정 0, 비치명).</li>
+      <li><strong>산출물:</strong> <code>_proposal</code> → <code>_brief.json</code> 임베드 + <code>{brief_id}_proposal.html</code> 별도.</li>
+    </ul>
+
+    <h3 id="s3-4-3">3.4.3 대지·맥락 분석 (vworld_analyzer)</h3>
+    <p><code>POST /api/brief/{brief_id}/site-analyze</code> 또는 지침서 분석 완료 후 자동 실행 (<code>feasibility_export.sites[0].address</code> 비null 시).</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>단계</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td>지오코딩</td><td><code>GET /req/address</code> (ROAD → PARCEL 순서), EPSG:4326 반환</td></tr>
+          <tr><td>위성 이미지</td><td>WMTS 타일, zoom=16, 3×3 그리드 (~1.8km 범위)</td></tr>
+          <tr><td>지적도 오버레이</td><td>WMS GetMap, layers=<code>lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun</code>, 중앙 900m/768px 요청 (~1.2m/px) → 광역 위성 위 합성</td></tr>
+          <tr><td>병렬 취득</td><td><code>asyncio.gather</code>로 WMTS + WMS 동시 요청</td></tr>
+          <tr><td>Vision 분석</td><td><code>claude-sonnet-4-6</code>, <code>max_tokens=1500</code>, <code>temperature=0</code></td></tr>
+          <tr><td>폴백</td><td>alpha=0 / 오프셋 이탈 / PIL 오류 → 위성 단독 이미지 (비치명)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-warn">
+      <div class="callout-title">⚠️ 스케일 임계는 m/px (절대 span 아님)</div>
+      좁은 영역을 고해상으로 요청해야 렌더됨. 구 레이어명 <code>lp_pa_cn_A</code>는 오타(LayerNotDefined 발생).
+    </div>
+
+    <h3 id="s3-5">3.5 교차 비교 (Cross-Compare)</h3>
+    <p><strong>엔드포인트:</strong> <code>POST /api/accumulate/cross-compare</code> (SSE). 여러 프로젝트에서 선택한 제출물들을 교차 비교합니다. 결과는 <code>_cross_reports/*.html</code>로 저장됩니다.</p>
+
+    <h3 id="s3-6">3.6 아카이브 검색 (Archive)</h3>
+    <p><strong>엔드포인트:</strong> <code>GET /api/archive/list</code>, <code>POST /api/archive/search</code></p>
+    <ul>
+      <li><strong>FTS5 인덱스:</strong> 앱 시작 시 1회 구축 (in-memory SQLite). <code>rerun-compare</code> 후 <code>rebuild_index()</code>.</li>
+      <li><strong>토크나이저:</strong> trigram 시도 → OperationalError 시 unicode61 폴백.</li>
+      <li><strong>검색 흐름:</strong> 2자 이하 → 전체 리스트. 3자 이상 → Claude (<code>max_tokens=300</code>)가 2-5개 FTS 키워드 추출 → FTS5 OR 쿼리. LLM 실패 시 직접 키워드 검색 폴백.</li>
+    </ul>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s4">
+    <h2><span class="sec-num">4</span>데이터 모델</h2>
+
+    <h3 id="s4-1">4.1 DB 레이아웃 (파일 시스템)</h3>
+<pre><code>{db_path}/
+├── {facility_type}/{competition_id}/
+│   ├── _meta.json
+│   ├── _brief.json              # 지침서 추출 결과 + _insight + _proposal + _site_context
+│   ├── _comparison.json         # 비교분석 결과
+│   ├── _report.html             # 비교 리포트
+│   └── submissions/
+│       ├── {slug}_{result}.json
+│       ├── {slug}_{result}_report.html
+│       └── {slug}_{result}_deep.{json|html}   # MyProject only
+├── _patterns/{facility_type}.json
+├── _diagnosis_reports/{YYYYMMDD_HHMMSS}_{ft}_{name}.html
+├── _cross_reports/*.html
+├── _briefs/{brief_id}.{json|md|html|xlsx}
+├── _briefs/{brief_id}_proposal.html
+├── _briefs/{brief_id}_site.jpg
+└── _config/page_taxonomy.json</code></pre>
+    <p><code>competition_id</code> = <code>{slugify(project_number)}_{slugify(name)}</code>. <code>result</code> = <code>win</code> | <code>lose</code> | <code>contracted</code>.</p>
+
+    <h3 id="s4-2">4.2 주요 JSON 스키마</h3>
+
+    <h4><code>_comparison.json</code></h4>
+<pre><code>{
+  "submissions": {
+    "&lt;company&gt;": {
+      "&lt;axis&gt;": {
+        "grade": "A|B|C|D|E",
+        "strengths": [], "weaknesses": [],
+        "brief_compliance": "", "notes": "", "grade_justification": ""
+      }
+    }
+  },
+  "ranking": [], "blind_ranking": [],
+  "key_differentiators": [], "winner_strengths": [], "loser_weaknesses": [],
+  "gap_analysis": {
+    "blind_top1": "", "actual_winners": [],
+    "top1_matches_winner": true,
+    "alignment": "high|partial|low|unknown", "notes": ""
+  },
+  "rubric_version": "v1"
+}</code></pre>
+
+    <h4><code>_quantitative</code> 키 (제출물 JSON 내)</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>키</th><th>설명</th></tr></thead>
+        <tbody>
+          <tr><td><code>site_area_sqm</code></td><td>대지 면적 (㎡)</td></tr>
+          <tr><td><code>building_area_sqm</code></td><td>건축 면적 (㎡)</td></tr>
+          <tr><td><code>total_floor_area_sqm</code></td><td>총 연면적 (㎡)</td></tr>
+          <tr><td><code>area_above_ground_sqm</code></td><td>지상 연면적 (㎡)</td></tr>
+          <tr><td><code>area_below_ground_sqm</code></td><td>지하 연면적 (㎡)</td></tr>
+          <tr><td><code>floor_area_ratio_pct</code></td><td>용적률 (%)</td></tr>
+          <tr><td><code>building_coverage_ratio_pct</code></td><td>건폐율 (%)</td></tr>
+          <tr><td><code>floors_above</code></td><td>지상층수</td></tr>
+          <tr><td><code>floors_below</code></td><td>지하층수</td></tr>
+          <tr><td><code>parking_count</code></td><td>주차대수</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4><code>feasibility_export</code> (schema_version 2)</h4>
+<pre><code>{
+  "schema_version": 2,
+  "sites": [{
+    "site_id": "부지N", "address": "",
+    "building_law_uses": [],
+    "required_parking_count": null, "parking_note": null,
+    "zone_use": "준공업지역|null", "zone_use_raw": null,
+    "limits_determined_by": "심의|법정",
+    "site_area_sqm": null, "floor_area_ratio_pct": null,
+    "building_coverage_pct": null, "max_height_m": null
+  }],
+  "certifications": {
+    "green_building": "최우수|우수|null",
+    "zeb_grade": "1~5|null",
+    "renewable_pct": null, "bf_grade": "최우수|우수|null"
+  },
+  "construction_cost_100m_won": null,
+  "design_cost_100m_won": null,
+  "construction_period_months": null
+}</code></pre>
+    <div class="callout callout-warn">
+      <code>limits_determined_by="심의"</code> 시 법정 한계로 해석 금지.
+    </div>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s5">
+    <h2><span class="sec-num">5</span>AI 분류·추출 로직</h2>
+
+    <h3 id="s5-1">5.1 페이지/블록 분류</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>구분</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td>제안서 페이지 타입</td><td>총 27개 (일반 20 + 재건축 전용 7)</td></tr>
+          <tr><td>지침서 블록 타입</td><td>총 13개 (BRIEF_* 접두사)</td></tr>
+          <tr><td>분류 모델</td><td><code>claude-sonnet-4-6</code> (Haiku는 헤더 환각 문제로 배제)</td></tr>
+          <tr><td>배치 크기</td><td>BATCH_SIZE=5 페이지/콜</td></tr>
+          <tr><td>재건축 신뢰도 하한</td><td><code>REDEV_CONFIDENCE_FLOOR=0.65</code> 미만 시 안전 타입으로 강등</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>BRIEF_EVALUATION 환각 방어 5중</h4>
+    <ol>
+      <li><code>BRIEF_CLASSIFY_PROMPT</code> NOT 조건 (g)~(j)</li>
+      <li><code>_NOT_EVAL_HEADER_PATTERNS</code> 후처리 정규식 (결과 공고, 시상식, 상품 및 내용, 별첨 등)</li>
+      <li><code>MODEL_ID_CLASSIFY</code> Sonnet 고정 (Haiku 헤더 환각 차단)</li>
+      <li><code>FACILITY_CONFLICT_KEYWORDS</code> + <code>brief_validator._check_facility_keyword_conflict()</code></li>
+      <li>BRIEF_EVALUATION 추출 프롬프트 "CRITICAL 환각 금지" 블록</li>
+    </ol>
+
+    <h3 id="s5-2">5.2 추출 티어 (Tier 0 / OCR / Vision)</h3>
+    <div class="tier-cards">
+      <div class="tier-card tier-0">
+        <div class="tier-label">Tier 0</div>
+        <div class="tier-title">디지털 텍스트</div>
+        <ul>
+          <li><code>fitz.get_text()</code> 직접 추출</li>
+          <li>LLM 호출 없음</li>
+          <li>AREA_TABLE, BRIEF_EVALUATION 등 구조 붕괴 우려 타입은 제외</li>
+        </ul>
+      </div>
+      <div class="tier-card tier-1">
+        <div class="tier-label">Tier 1</div>
+        <div class="tier-title">OCR (선택 설치)</div>
+        <ul>
+          <li>PaddleOCR + Haiku 구조화</li>
+          <li>Sonnet+vision 대비 ~90% 절감</li>
+          <li>OCR 결과 80자 미만 시 Tier 2 폴백</li>
+          <li>대상: AREA_TABLE, TECHNICAL 등 7개 타입</li>
+        </ul>
+      </div>
+      <div class="tier-card tier-2">
+        <div class="tier-label">Tier 2</div>
+        <div class="tier-title">Full Vision</div>
+        <ul>
+          <li>Sonnet + 이미지 전송</li>
+          <li>DPI 120 (150에서 변경, 이미지 토큰 ~36% 절감)</li>
+          <li><code>max_tokens=4000</code> (BRIEF_DESIGN_*: 6000)</li>
+          <li>AREA_TABLE류: 2×2 타일 분할 추출</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout callout-info">
+      Claude API는 내부적으로 최장 변 ~1568px로 리사이즈하므로 DPI 150 이상은 비용만 증가하고 효과 없음.
+    </div>
+
+    <h3 id="s5-3">5.3 LLM 라우팅 및 비용 최적화</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>용도</th><th>모델</th><th>max_tokens</th><th>temperature</th></tr></thead>
+        <tbody>
+          <tr><td>페이지 분류</td><td>claude-sonnet-4-6</td><td>3,000</td><td>0</td></tr>
+          <tr><td>데이터 추출</td><td>claude-sonnet-4-6</td><td>4,000 (BRIEF_DESIGN: 6,000)</td><td>0</td></tr>
+          <tr><td>비교분석 Pass 1</td><td>claude-sonnet-4-6</td><td>32,000</td><td>0</td></tr>
+          <tr><td>비교분석 Pass 2</td><td>claude-sonnet-4-6</td><td>4,096</td><td>0</td></tr>
+          <tr><td>진단</td><td>claude-sonnet-4-6</td><td>8,192</td><td>0</td></tr>
+          <tr><td>VWorld vision 판독</td><td>claude-sonnet-4-6</td><td>1,500</td><td>0</td></tr>
+          <tr><td>FTS 키워드 추출</td><td>claude-sonnet-4-6</td><td>300</td><td>0</td></tr>
+          <tr><td>MyProject 심층 분석</td><td>claude-sonnet-4-6</td><td>16,000</td><td>0.3</td></tr>
+          <tr><td>AI 종합 해설</td><td><strong>claude-opus-4-8</strong></td><td>16,000</td><td>0 (자동 생략)</td></tr>
+          <tr><td>수주 제안서</td><td><strong>claude-opus-4-8</strong></td><td>16,000</td><td>0 (자동 생략)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Opus temperature 자동 생략</h4>
+    <p><code>llm_client._NO_SAMPLING_PREFIXES</code> = <code>('claude-opus-4-7', 'claude-opus-4-8', 'claude-fable', 'claude-mythos')</code>. 이 접두사로 시작하는 모델에 <code>temperature</code>/<code>top_p</code>/<code>top_k</code> 전송 시 HTTP 400 → <code>llm_client</code>가 request body에서 자동 제거.</p>
+
+    <h4>프롬프트 캐싱</h4>
+    <ul>
+      <li><code>cache_control={'type': 'ephemeral'}</code> (5분 TTL). 캐시 히트 시 입력 토큰 약 90% 할인, 쓰기 1.25×.</li>
+      <li>비교/진단: 정적 프롬프트 + 동적 데이터 블록 각각 ephemeral 마킹.</li>
+      <li>Pass 2: Pass 1 결과만 재전송 → 토큰 약 80% 절감.</li>
+      <li>Sonnet 캐싱 최소 1024 토큰.</li>
+    </ul>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s6">
+    <h2><span class="sec-num">6</span>품질 보증</h2>
+
+    <h3 id="s6-1">6.1 정량 검증 (quant_validator)</h3>
+    <p><code>quant_validator.validate_quantitative()</code> — LLM 0, 숫자 수정 0, 플래그만.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>규칙</th><th>severity</th><th>조건</th></tr></thead>
+        <tbody>
+          <tr><td><code>building_gt_site</code></td><td style="color:var(--danger);font-weight:700">error</td><td><code>building_area_sqm &gt; site_area_sqm × 1.02</code></td></tr>
+          <tr><td><code>coverage_mismatch</code></td><td style="color:var(--danger);font-weight:700">error</td><td><code>|100×건축/대지 - 건폐율| &gt; 3.0pp</code></td></tr>
+          <tr><td><code>far_above_ground_mismatch</code></td><td style="color:var(--danger);font-weight:700">error</td><td><code>|100×지상연면적/대지 - 용적률| &gt; 5.0pp</code></td></tr>
+          <tr><td><code>floor_area_below_far_implied</code></td><td style="color:var(--danger);font-weight:700">error</td><td><code>총연면적 &lt; (용적률/100 × 대지) × 0.9</code> (area_above_ground 없을 때)</td></tr>
+          <tr><td><code>out_of_bounds</code></td><td style="color:var(--danger);font-weight:700">error</td><td>건폐율 0-100%, 용적률 0-1500%, 지상층 0-120, 지하층 0-12, 주차 0-50000 벗어남</td></tr>
+          <tr><td><code>coverage_gt_far</code></td><td style="color:var(--orange);font-weight:700">warn</td><td><code>건폐율 &gt; 용적률 + 1</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-danger">
+      <div class="callout-title">패턴 오염 차단 2단</div>
+      (1) 추출 직후 <code>_quantitative_flags</code> 부착 (제안서만). (2) <code>pattern_builder._build_quant_stats</code>가 <strong>error</strong> 필드를 집계에서 제외. 실 사례: 하안주공(건폐율 27.46% vs 실제 81.6%), public-a 추출 오류가 패턴 오염 방지 검증에 사용됨.
+    </div>
+
+    <h3 id="s6-2">6.2 지침서 검증 (brief_validator)</h3>
+    <p><code>validate_brief()</code> — LLM 0.</p>
+    <ul>
+      <li><code>_check_points_mismatch</code>: <code>shared_with</code> 비어있지 않거나 numeric 합이 만점과 ±1 이내 일치 시 null 항목을 정성평가로 인정 (영등포 false positive 차단).</li>
+      <li><code>requirements</code>가 dict가 아니면 <code>{}</code>로 교체 (LLM 배열 반환 방어).</li>
+      <li><code>_form_area_pages()</code>가 <code>[서식 N] …면적표</code> 오분류 페이지를 면적 집계에서 제외.</li>
+    </ul>
+
+    <h3 id="s6-3">6.3 테스트 커버리지</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>테스트 파일</th><th>케이스</th><th>주요 커버리지</th></tr></thead>
+        <tbody>
+          <tr><td><code>test_quant_validator.py</code></td><td>19</td><td>6개 검증 규칙 + TestPatternBuilderExcludesFlagged</td></tr>
+          <tr><td><code>test_feasibility_export.py</code></td><td>46</td><td>feasibility_export schema_version 2 전체</td></tr>
+          <tr><td><code>test_hwpx_loader.py</code></td><td>22</td><td>HWP/HWPX 파싱, rhwp monkeypatch, recurse=False assert</td></tr>
+          <tr><td><code>test_brief_proposal_report.py</code></td><td>27</td><td>제안서 HTML 렌더 (대지 섹션, AI 해석 배지 포함)</td></tr>
+          <tr><td><code>test_normalize_design_grouped.py</code></td><td>13</td><td>design_guidelines_grouped 정규화</td></tr>
+          <tr><td><code>test_proposal_number_check.py</code></td><td>11</td><td>수치 검산 2-pass 로직</td></tr>
+          <tr><td><code>test_vworld_analyzer.py</code></td><td>8</td><td>bbox·sub-bbox·m/px 기하 (네트워크 0)</td></tr>
+          <tr><td><code>test_pure_functions.py</code></td><td>N/A</td><td>parse_json_response, gap_analysis, to_grade, validate_brief (15 케이스)</td></tr>
+          <tr><td><strong>전체 (backend/tests/)</strong></td><td><strong>382</strong></td><td>13 모듈 + conftest</td></tr>
+          <tr><td><code>tests/test_docx_extractor.py</code> (repo-root)</td><td>10</td><td>별도 실행 필요 (382에 미포함)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-warn">
+      <div class="callout-title">알려진 사전 실패</div>
+      <code>test_force_cut_31_paragraphs</code> — docx_loader F3 force-cut 미발동 (brief 전용, 원인 미규명, 미해결).
+    </div>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s7">
+    <h2><span class="sec-num">7</span>프론트엔드</h2>
+
+    <h3 id="s7-1">7.1 탭 구성</h3>
+    <p><code>App.jsx</code>의 <code>TABS</code> 배열 (총 7개, 이 순서 고정). 기본 활성 탭: <code>'myproject'</code>. 라우터 라이브러리 없음, 단순 조건부 렌더링.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>id</th><th>레이블</th><th>컴포넌트</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>myproject</code></td><td>내 프로젝트 등록</td><td>MyProjectMode</td></tr>
+          <tr><td>2</td><td><code>accumulate</code></td><td>경쟁 공모 등록</td><td>AccumulateMode</td></tr>
+          <tr><td>3</td><td><code>crosscompare</code></td><td>교차 비교</td><td>CrossCompareMode</td></tr>
+          <tr><td>4</td><td><code>diagnose</code></td><td>제안서 진단</td><td>DiagnoseMode</td></tr>
+          <tr><td>5</td><td><code>settings</code></td><td>설정</td><td>SettingsPanel</td></tr>
+          <tr><td>6</td><td><code>archive</code></td><td>아카이브 검색</td><td>ArchiveMode</td></tr>
+          <tr><td>7</td><td><code>brief</code></td><td>지침서 분석</td><td>BriefMode</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>전체 앱 트리 래핑 순서: <code>&lt;MetaProvider&gt;</code> → <code>&lt;ApiKeyGate&gt;</code> → 탭 콘텐츠. 도움말 모달: <code>&lt;iframe src='/api/readme'&gt;</code> (fixed 오버레이). <span class="inferred">추정</span>: PyWebView 통합 코드 존재 — PyInstaller 데스크톱 빌드 가능성.</p>
+
+    <h3 id="s7-2">7.2 API 클라이언트</h3>
+    <ul>
+      <li><strong>API 기반 URL:</strong> <code>BASE = '/api'</code> (상대 경로, Vite dev → localhost:8000 프록시)</li>
+      <li><strong>API 키:</strong> localStorage key <code>'anthropic_api_key'</code>. 요청 시 <code>X-Anthropic-Api-Key</code> 헤더로 전송.</li>
+      <li><strong>청크 업로드 임계:</strong> 25MB. 미만은 FormData 직접, 이상은 <code>chunkUpload(file)</code> → <code>file_ref</code>.</li>
+      <li><strong>SSE 스트리밍:</strong> <code>streamSSE(url, formData)</code> async generator. HTTP 401 시 사용자 친화적 API 키 오류 throw.</li>
+    </ul>
+
+    <h4>주요 API 함수 목록</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>그룹</th><th>함수</th></tr></thead>
+        <tbody>
+          <tr><td>프로젝트 관리</td><td><code>getProjects</code>, <code>getPattern</code>, <code>rebuildPattern</code>, <code>addSubmission</code>, <code>rerunCompare</code>, <code>rerenderReport</code></td></tr>
+          <tr><td>진단</td><td><code>runDiagnosePipeline</code>, <code>runDiagnoseVsProjects</code>, <code>listDiagnosisReports</code></td></tr>
+          <tr><td>지침서</td><td><code>runBriefAnalyze</code>, <code>listBriefs</code>, <code>getBriefExportUrl</code>, <code>reinterpretBrief</code>, <code>analyzeSite</code>, <code>getBriefSiteContext</code>, <code>proposeBrief</code></td></tr>
+          <tr><td>검색·교차</td><td><code>listArchive</code>, <code>searchArchive</code>, <code>getArchiveDetail</code>, <code>crossCompare</code></td></tr>
+          <tr><td>설정</td><td><code>getSettings</code>, <code>updateSettings</code>, <code>getMeta</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s7-3">7.3 스타일 시스템</h3>
+    <p><strong>단일 소스:</strong> <code>frontend/src/kunwon-tokens.css</code>. 컴포넌트는 <code>style={{ color: 'var(--color-accent)' }}</code> 패턴. hex 직접 사용 금지.</p>
+    <p><code>useMeta</code> 훅이 <code>GET /api/settings/meta</code> 1회 fetch → <code>facilityLabel()</code>, <code>axesFor()</code>, <code>pageTypeLabel()</code> 등 제공. 하드코딩 금지.</p>
+
+    <h4>등급 색상 (<code>grade_helpers.py::GRADE_COLORS</code>)</h4>
+    <div class="grade-row">
+      <div class="grade-chip" style="background:#dcfce7;border-color:#86efac">
+        <span class="letter" style="color:#16a34a">A</span>
+        <span style="font-size:12px;color:#15803d">#16a34a / #dcfce7</span>
+      </div>
+      <div class="grade-chip" style="background:#cffafe;border-color:#67e8f9">
+        <span class="letter" style="color:#0891b2">B</span>
+        <span style="font-size:12px;color:#0e7490">#0891b2 / #cffafe</span>
+      </div>
+      <div class="grade-chip" style="background:#fef3c7;border-color:#fcd34d">
+        <span class="letter" style="color:#ca8a04">C</span>
+        <span style="font-size:12px;color:#a16207">#ca8a04 / #fef3c7</span>
+      </div>
+      <div class="grade-chip" style="background:#fed7aa;border-color:#fdba74">
+        <span class="letter" style="color:#ea580c">D</span>
+        <span style="font-size:12px;color:#c2410c">#ea580c / #fed7aa</span>
+      </div>
+      <div class="grade-chip" style="background:#fee2e2;border-color:#fca5a5">
+        <span class="letter" style="color:#dc2626">E</span>
+        <span style="font-size:12px;color:#b91c1c">#dc2626 / #fee2e2</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s8">
+    <h2><span class="sec-num">8</span>운영 규칙 및 제약</h2>
+
+    <h3 id="s8-1">8.1 파일 저장 규칙 (GCSFUSE 대응)</h3>
+    <div class="callout callout-danger">
+      <div class="callout-title">⚠️ GCSFUSE fsync 필수</div>
+      운영 스토리지는 GCSFUSE이므로 Python 일반 파일 쓰기는 GCS 플러시를 보장하지 않습니다. <strong>모든 신규 파일 저장 함수는 반드시 아래 두 원시 함수 중 하나를 사용해야 합니다.</strong>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>함수</th><th>용도</th><th>특성</th></tr></thead>
+        <tbody>
+          <tr><td><code>_atomic_write(path, data)</code></td><td>JSON 저장</td><td><code>.tmp</code> 파일 → fsync → rename. 크래시 내성(partial write 없음)</td></tr>
+          <tr><td><code>_sync_write(path, text)</code></td><td>HTML/MD 저장</td><td>직접 쓰기 + fsync. <span class="inferred">추정</span>: rename 없어 크래시 시 부분 파일 가능성</td></tr>
+          <tr><td><code>_sync_write_bytes(path, bytes)</code></td><td>xlsx 저장</td><td>동일 패턴</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s8-2">8.2 API 키·보안</h3>
+    <ul>
+      <li><strong>API 키 전달:</strong> HTTP 헤더 <code>X-Anthropic-Api-Key</code>. 세션 쿠키/토큰 없음.</li>
+      <li><strong>우선순위:</strong> asyncio ContextVar (per-request) → 세션 메모리 → <code>ANTHROPIC_API_KEY</code> 환경변수.</li>
+      <li><strong>영속화 금지:</strong> <code>app_settings.json</code>에 API 키가 있어도 로드 시 자동 제거.</li>
+      <li><strong>정제 (<code>_sanitize_api_key()</code>):</strong> UTF-8 BOM(<code>﻿</code>), zero-width 문자, 선두 <code>-n </code> shell 아티팩트, 양쪽 따옴표 제거. 메모장/PowerShell <code>Set-Content -Encoding utf8</code> 저장 시 BOM이 붙어 httpx <code>UnicodeEncodeError</code> 발생.</li>
+      <li><strong>VWorld API 키:</strong> <code>VWORLD_API_KEY</code> 환경변수 전용.</li>
+      <li><strong>커밋 금지 파일:</strong> <code>service.yaml</code>, <code>gcp-sa-key.json</code>, <code>.env</code>, <code>env.yaml</code>.</li>
+      <li><strong>인증/접근 제어:</strong> 현재 로그인 시스템 없음 (의도적 보류). 재개 시 앱 비밀번호 vs Google IAP 검토.</li>
+    </ul>
+
+    <h3 id="s8-3">8.3 알려진 한계</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>한계</th><th>내용</th></tr></thead>
+        <tbody>
+          <tr><td>파일 크기 제한</td><td>PDF ≤200MB, DOCX/HWP/HWPX ≤50MB. 초과 시 HTTP 400.</td></tr>
+          <tr><td>DB 성능 <span class="inferred">추정</span></td><td>flat JSON 파일 순회. 프로젝트 수 증가에 따라 <code>list_projects()</code> 등 선형 저하.</td></tr>
+          <tr><td>경쟁 ID 충돌</td><td>동일 slugify 결과 생성 시 데이터 덮어씀.</td></tr>
+          <tr><td>MyProject deep 파일 고아</td><td>result 변경 시 <code>_deep.json</code>/<code>_deep.html</code>은 rename하지 않음.</td></tr>
+          <tr><td>page_taxonomy.json 갱신</td><td>파일 없을 때만 생성. 갱신 방법: 파일 삭제 후 백엔드 재시작.</td></tr>
+          <tr><td>FTS5 인덱스 휘발</td><td>in-memory — 프로세스 재시작 시 소실, 재구축 필요.</td></tr>
+          <tr><td>CORS 전 오리진 허용</td><td>의도적 설계이나 서버 측 접근 제어 없음.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ───────────────────────────────────────── -->
+  <section id="s9">
+    <h2><span class="sec-num">9</span>미결·보류 사항</h2>
+
+    <h4>당면 TODO (2026-06-29 기준)</h4>
+    <div class="callout callout-warn">
+      <strong>제안서 히어로 재설계</strong> — 시퀀스 E Phase 1의 히어로(위성+지적도 표현) 및 이미지 해석 로직 사용자 불만족. Phase 2 완료 후 재설계 예정. 후보: 도식화/주석 오버레이, 판독 텍스트 카드화, <code>_SITE_ANALYSIS_PROMPT</code> 개선.
+    </div>
+
+    <h4>보류 시퀀스</h4>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>시퀀스</th><th>내용</th><th>보류 사유</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>B</strong> — 추출 정확도 평가 하네스</td>
+            <td><code>tools/eval/</code> B-2까지 구현. 다음: B-3 CI 통합. <code>python tools/eval/run_harness.py</code></td>
+            <td>제안서 PDF 5건 + ground_truth JSON 미확보</td>
+          </tr>
+          <tr>
+            <td><strong>C</strong> — 멀티파일 지침서 업로드</td>
+            <td>접근 A(multi-file 동시 분석, <code>source_files: list</code>) 권장</td>
+            <td>충돌 우선순위 룰(지침서 vs 과업지시서 중복 시) 사용자 결정 필요</td>
+          </tr>
+          <tr>
+            <td><strong>D</strong> — 오프라인/제로-API 분석</td>
+            <td>Claude Code가 classify/extract 핸드오프 수행. DOCX/HWP/HWPX 최적.</td>
+            <td>배포 앱 불가(Cloud Run은 API만), PDF는 vision 필요, 소량 수동 전용</td>
+          </tr>
+          <tr>
+            <td><strong>E</strong> — 수주 제안서 비주얼 덱</td>
+            <td>PPT형 스크롤 덱(사용자 확정). 디자인: 단일 캔버스, 도식 치환, 5안 매트릭스+카드.</td>
+            <td>외부 피드백 후 추가 수정 예정</td>
+          </tr>
+          <tr>
+            <td><strong>F-③</strong> — SketchUp MCP 3D 매스</td>
+            <td>대지분석 통합의 3D 매스 시각화</td>
+            <td>사용자가 자료 줄 때 재개</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>미해결 시스템 결함</h4>
+    <ul>
+      <li><code>test_force_cut_31_paragraphs</code>: docx_loader F3 force-cut 미발동 (brief 전용, 원인 미규명).</li>
+      <li>하안주공·public-a 수치 추출 오류: 추출 시점 정합성 검증 미완 (<code>tools/data_health.py</code> HARD 결함 적발).</li>
+      <li><code>diagnose.py</code> SSE 이벤트의 <code>_timestamp</code> 누락 (brief SSE와 불일치, 수정 필요).</li>
+    </ul>
+
+    <hr>
+    <p style="font-size:13px;color:var(--text-muted);text-align:center">
+      소스 코드 직접 분석(7개 병렬 에이전트) + CLAUDE.md · 2026-06-29 · 불확실 사항은 <span class="inferred">추정</span> 표시
+    </p>
+  </section>
+
+</main>
+
+<script>
+  // Active nav highlight on scroll
+  const sections = document.querySelectorAll('section[id]')
+  const navLinks = document.querySelectorAll('#nav a[href^="#"]')
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'))
+        const id = e.target.id
+        const link = document.querySelector(`#nav a[href="#${id}"]`)
+        if (link) link.classList.add('active')
+      }
+    })
+  }, { rootMargin: '-20% 0px -70% 0px' })
+  sections.forEach(s => obs.observe(s))
+</script>
+</body>
+</html>
