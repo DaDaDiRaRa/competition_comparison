@@ -86,6 +86,19 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
 .summ{font-size:15.5px;line-height:1.75;color:var(--ink);
   border-left:3px solid var(--accent);padding:4px 0 4px 16px;margin:4px 0}
 
+/* ── 대지·맥락 분석 ──────────────── */
+.site-wrap{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.site-thumb{flex:0 0 auto;width:280px;max-width:100%}
+.site-thumb img{width:100%;border-radius:10px;border:1px solid var(--line);display:block}
+.site-thumb .cap{font-size:11px;color:var(--muted);margin-top:5px;text-align:center}
+.site-main{flex:1;min-width:280px}
+.site-summary{font-size:14.5px;line-height:1.7;color:var(--ink);
+  border-left:3px solid var(--accent);padding:4px 0 4px 14px;margin:0 0 12px}
+.site-fields{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.site-field .sfk{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;margin-bottom:2px}
+.site-field .sfv{font-size:13px;color:var(--text)}
+.site-note{margin-top:13px;font-size:11.5px;color:var(--muted);background:var(--soft);border-radius:6px;padding:8px 12px;line-height:1.55}
+
 /* ── 와플 차트 ───────────────────── */
 .waffle-wrap{display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap}
 .waffle-legend{display:flex;flex-direction:column;gap:7px;min-width:160px}
@@ -179,6 +192,8 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
   .dir-fields{grid-template-columns:1fr}
   .dir-card-svgbox{display:none}
   .waffle-wrap{flex-direction:column}
+  .site-fields{grid-template-columns:1fr}
+  .site-thumb{width:100%}
 }
 """
 
@@ -273,6 +288,80 @@ def _scoring_waffle(proposal: dict) -> str:
         + _waffle_svg(cells)
         + '<div class="waffle-legend">' + "".join(legend_items) + '</div>'
         '</div></section>'
+    )
+
+
+# ── 대지·맥락 분석 ───────────────────────────────────────────────────
+
+_SITE_FIELDS = [
+    ("orientation",      "향 · 형상"),
+    ("road_access",      "도로 접면"),
+    ("surrounding_uses", "주변 용도"),
+    ("natural_assets",   "자연 자원"),
+    ("special_context",  "특이사항"),
+]
+
+
+def _site_context_html(site_context: dict | None, image_b64: str = "") -> str:
+    """_site_context (VWorld 위성 + AI 판독) → 대지·맥락 섹션. 데이터 없으면 ''."""
+    sc = site_context or {}
+    analysis = sc.get("analysis")
+    if not isinstance(analysis, dict):
+        analysis = {}
+
+    summary = (analysis.get("overall_summary") or "").strip()
+    matched = (sc.get("matched_address") or sc.get("address_input") or "").strip()
+    has_fields = any((analysis.get(k) or "").strip() for k, _ in _SITE_FIELDS)
+    if not (summary or has_fields or image_b64):
+        return ""
+
+    thumb = ""
+    if image_b64:
+        src_lbl = "VWorld 위성 + 연속지적도" if sc.get("has_cadastral") else "VWorld 위성"
+        cap = (_esc(matched) + " · " if matched else "") + src_lbl
+        thumb = (
+            '<div class="site-thumb">'
+            f'<img src="data:image/jpeg;base64,{image_b64}" alt="대지 위성사진" />'
+            f'<div class="cap">{cap}</div>'
+            '</div>'
+        )
+
+    fields = ""
+    for k, label in _SITE_FIELDS:
+        v = (analysis.get(k) or "").strip()
+        if not v:
+            continue
+        fields += (
+            '<div class="site-field">'
+            f'<div class="sfk">{_esc(label)}</div>'
+            f'<div class="sfv">{_esc(v)}</div>'
+            '</div>'
+        )
+
+    conf = (analysis.get("confidence") or "").lower()
+    conf_lbl = _CONF_LABEL.get(conf, "")
+    caveats = [str(c).strip() for c in (analysis.get("caveats") or []) if str(c).strip()]
+    note_bits = ["위성 영상 AI 판독 기반 — 현장 답사·지적도로 확인 필요 (추론 포함)"]
+    if conf_lbl:
+        note_bits.append(f"판독 신뢰도 {conf_lbl}")
+    note = '<div class="site-note">⚠ ' + " · ".join(_esc(x) for x in note_bits)
+    if caveats:
+        note += "<br>" + " · ".join(_esc(c) for c in caveats)
+    note += "</div>"
+
+    main = (
+        '<div class="site-main">'
+        + (f'<div class="site-summary">{_esc(summary)}</div>' if summary else "")
+        + (f'<div class="site-fields">{fields}</div>' if fields else "")
+        + note
+        + '</div>'
+    )
+
+    return (
+        '<section id="site" class="sec">'
+        '<h2><span class="n">·</span>대지 · 맥락 분석</h2>'
+        '<div class="site-wrap">' + thumb + main + '</div>'
+        '</section>'
     )
 
 
@@ -464,8 +553,18 @@ def _checklist_html(proposal: dict, key: str, sec_id: str, n: str, title: str) -
 
 # ── 메인 렌더 ────────────────────────────────────────────────────────
 
-def to_proposal_html(proposal: dict, brief_name: str = "", facility_label: str = "") -> str:
-    """_proposal dict → 자체완결 HTML 문자열 (PPT형 스크롤 덱, LLM 호출 없음)."""
+def to_proposal_html(
+    proposal: dict,
+    brief_name: str = "",
+    facility_label: str = "",
+    site_context: dict | None = None,
+    site_image_b64: str = "",
+) -> str:
+    """_proposal dict → 자체완결 HTML 문자열 (PPT형 스크롤 덱, LLM 호출 없음).
+
+    site_context/site_image_b64 가 있으면 전략 요약 직후 '대지·맥락 분석' 섹션을
+    삽입 (VWorld 위성 썸네일 + AI 판독 — 어떤 대지 정보를 반영했나 투명성).
+    """
     proposal = proposal or {}
     title = (brief_name or "").strip() or "프로젝트 수주 제안서"
 
@@ -493,8 +592,11 @@ def to_proposal_html(proposal: dict, brief_name: str = "", facility_label: str =
     if proposal.get("model_id"):
         meta_bits.append(f'<span>모델 {_esc(proposal.get("model_id"))}</span>')
 
+    site_html = _site_context_html(site_context, site_image_b64)
+
     body = (
         summary_html
+        + site_html
         + _scoring_waffle(proposal)
         + _win_themes_html(proposal)
         + _directions_html(proposal)
@@ -514,7 +616,8 @@ def to_proposal_html(proposal: dict, brief_name: str = "", facility_label: str =
 
     nav_links = (
         '<a href="#summary">요약</a>'
-        '<a href="#themes">핵심 테마</a>'
+        + ('<a href="#site">대지</a>' if site_html else "")
+        + '<a href="#themes">핵심 테마</a>'
         '<a href="#directions">접근 방향</a>'
         '<a href="#priorities">우선순위</a>'
         '<a href="#risks">리스크</a>'

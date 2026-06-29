@@ -91,3 +91,57 @@ class TestToProposalHtml:
         assert "<script>alert(1)</script>" not in h
         assert "&lt;script&gt;" in h
         assert "<img src=x" not in h
+
+
+_SITE_CONTEXT = {
+    "matched_address": "서울특별시 영등포구 당산동 123",
+    "address_input": "당산동 123",
+    "lat": 37.52, "lng": 126.90, "radius_m": 500,
+    "analysis": {
+        "orientation": "장변 남북, 남향 양호",
+        "road_access": "남측 20m 도로 접면, 코너 필지",
+        "surrounding_uses": "북측 주거, 남측 상업",
+        "natural_assets": "동측 안양천 약 300m",
+        "special_context": "고도지구 인접",
+        "overall_summary": "남향·코너의 도심 부지로 가시성이 높다.",
+        "confidence": "medium",
+        "caveats": ["지적 경계는 위성으로 확정 불가"],
+    },
+}
+
+
+class TestSiteContextSection:
+
+    def test_renders_when_present(self):
+        h = to_proposal_html(_PROPOSAL, "영등포", "공공청사",
+                             site_context=_SITE_CONTEXT, site_image_b64="QUJD")
+        assert "대지 · 맥락 분석" in h
+        assert "남향·코너의 도심 부지로 가시성이 높다." in h   # overall_summary
+        assert "남측 20m 도로 접면" in h                        # 필드
+        assert 'data:image/jpeg;base64,QUJD' in h              # 위성 썸네일 임베드
+        assert "서울특별시 영등포구 당산동 123" in h            # matched_address 캡션
+        assert '<a href="#site">대지</a>' in h                  # nav 링크
+        assert "현장 답사" in h                                 # 추론/확인필요 라벨
+
+    def test_absent_by_default(self):
+        h = to_proposal_html(_PROPOSAL, "x", "y")
+        assert "대지 · 맥락 분석" not in h
+        assert '<a href="#site">' not in h
+
+    def test_summary_only_no_image(self):
+        sc = {"analysis": {"overall_summary": "요약만 있음"}}
+        h = to_proposal_html(_PROPOSAL, "x", "y", site_context=sc)
+        assert "대지 · 맥락 분석" in h
+        assert "요약만 있음" in h
+        assert "data:image/jpeg" not in h
+
+    def test_empty_analysis_skips_section(self):
+        h = to_proposal_html(_PROPOSAL, "x", "y", site_context={"analysis": {}})
+        assert "대지 · 맥락 분석" not in h
+
+    def test_site_xss_escaped(self):
+        sc = {"analysis": {"overall_summary": "<script>x</script>",
+                           "orientation": "<b>향</b>"}}
+        h = to_proposal_html(_PROPOSAL, "x", "y", site_context=sc)
+        assert "<script>x</script>" not in h
+        assert "&lt;script&gt;" in h

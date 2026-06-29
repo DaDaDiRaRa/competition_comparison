@@ -10,6 +10,7 @@ GET  /api/brief/list               : 저장된 지침서 목록 (최신순)
 기존 accumulate / diagnose 파이프라인은 건드리지 않음.
 """
 import asyncio
+import base64
 import json
 import logging
 import shutil
@@ -665,11 +666,27 @@ async def propose_brief(brief_id: str):
     proposal["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     brief_data["_proposal"] = proposal
     proposal_filename = f"{safe_id}_proposal.html"
+
+    # 대지·맥락 분석을 제안서 HTML 상단에 노출 (어떤 대지 정보를 반영했나 투명성).
+    # 위성 썸네일은 자체완결 HTML 유지 위해 base64 임베드.
+    site_context = brief_data.get("_site_context")
+    site_image_b64 = ""
+    if site_context:
+        site_img_path = briefs_dir / f"{safe_id}_site.jpg"
+        if site_img_path.exists():
+            try:
+                site_image_b64 = base64.standard_b64encode(site_img_path.read_bytes()).decode()
+            except Exception:
+                site_image_b64 = ""
+
     try:
         _atomic_write(json_path, brief_data)
         _sync_write(
             briefs_dir / proposal_filename,
-            to_proposal_html(proposal, brief_name, facility_label(facility_type)),
+            to_proposal_html(
+                proposal, brief_name, facility_label(facility_type),
+                site_context=site_context, site_image_b64=site_image_b64,
+            ),
         )
     except Exception as e:
         logger.error("propose save error: %s", traceback.format_exc())
@@ -749,6 +766,7 @@ async def analyze_site(brief_id: str, req: SiteAnalyzeRequest):
         "image_filename":  image_filename,
         "analyzed_at":     time.strftime("%Y-%m-%dT%H:%M:%S"),
         "analysis":        result["analysis"],
+        "has_cadastral":   result.get("has_cadastral", False),
     }
     brief_data["_site_context"] = site_ctx
     try:
@@ -765,6 +783,7 @@ async def analyze_site(brief_id: str, req: SiteAnalyzeRequest):
         "lng":             result["lng"],
         "image_filename":  image_filename,
         "analysis":        result["analysis"],
+        "has_cadastral":   result.get("has_cadastral", False),
         "image_jpeg_b64":  result.get("image_jpeg_b64", ""),
     }
 
