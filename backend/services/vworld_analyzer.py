@@ -113,8 +113,8 @@ async def _fetch_wmts_satellite(
     """VWorld WMTS 위성 타일 grid×grid 합성 → (RGB Image, bbox_3857).
 
     URL: https://api.vworld.kr/req/wmts/1.0.0/{key}/Satellite/{z}/{y}/{x}.jpeg
-    zoom 17 기준 타일 1장 ≈ 305m (위도 37°), 3×3 그리드 ≈ 917m 시야.
-    bbox_3857 은 지적도 WMS 오버레이 정렬용.
+    기본 zoom 16 (_DEFAULT_ZOOM): 타일 1장 ≈ 610m (위도 37°), 3×3 그리드 ≈ 1.8km 시야.
+    bbox_3857 은 지적도 WMS 오버레이 정렬용 (지적도는 중앙에만 합성).
     """
     cx, cy = _lat_lng_to_tile(lat, lng, zoom)
     half = grid // 2
@@ -187,39 +187,48 @@ async def _fetch_cadastral_overlay(
         return None
 
 
-async def _compose_cadastral_on_wide(
-    sat_img: "Image.Image", lat: float, lng: float, wide_bbox: tuple,
-    api_key: str, domain: str = "",
-) -> tuple:
-    """광역 위성(sat_img) **중앙**에 점(lat,lng) 기준 지적도를 합성 → (RGB Image, bool).
-
-    하이브리드 단일 이미지: 가장자리는 광역 맥락, 중앙 _CADASTRAL_SPAN_M 구간엔 필지
-    경계+지번. 좁은 sub-bbox 를 고해상 요청(스케일 임계 회피) 후 비례 축소해 정렬.
-    실패·블랭크 시 위성 원본 그대로 반환(has_cadastral=False).
-    """
-    wminx, wminy, wmaxx, wmaxy = wide_bbox
+def _cadastral_sub_bbox(lat: float, lng: float) -> tuple:
+    """점(lat,lng) 중심의 지적도 sub-bbox(EPSG:3857). 위성과 **병렬** 요청 가능하도록
+    이미지 없이 좌표만으로 계산 (Fix 4)."""
     px, py = _lat_lng_to_3857(lat, lng)
     s = _CADASTRAL_SPAN_M
-    sub = (px - s / 2, py - s / 2, px + s / 2, py + s / 2)
+    return (px - s / 2, py - s / 2, px + s / 2, py + s / 2)
 
-    overlay = await _fetch_cadastral_overlay(sub, _CADASTRAL_REQ_PX, api_key, domain)
+
+def _paste_cadastral(sat_img: "Image.Image", overlay, sub: tuple, wide_bbox: tuple) -> tuple:
+    """이미 받아온 지적도 overlay 를 광역 위성(sat_img) **중앙**에 합성 → (RGB Image, bool).
+
+    좁은 sub-bbox 를 광역 비율로 축소해 정렬. overlay None·정렬 불가·PIL 에러면 위성 단독
+    (has_cadastral=False) — 네트워크 없는 순수 픽셀 연산 (페치는 호출측이 병렬 수행).
+    """
     if overlay is None:
         return sat_img, False
-
+    wminx, wminy, wmaxx, wmaxy = wide_bbox
+    s = sub[2] - sub[0]
     wide_px = sat_img.size[0]
     ov_px = max(1, round(wide_px * s / (wmaxx - wminx)))
-    overlay = overlay.resize((ov_px, ov_px), Image.LANCZOS)
     # sub-bbox 좌상단(작은 x, 큰 y)을 광역 픽셀 좌표로 매핑
     ox = round((sub[0] - wminx) / (wmaxx - wminx) * wide_px)
     oy = round((wmaxy - sub[3]) / (wmaxy - wminy) * wide_px)
 
-    base = sat_img.convert("RGBA")
-    base.alpha_composite(overlay, (ox, oy))
-    # 지적 데이터 구간임을 명시하는 흰 프레임
-    ImageDraw.Draw(base).rectangle(
-        [ox, oy, ox + ov_px - 1, oy + ov_px - 1], outline=(255, 255, 255, 200), width=2,
-    )
-    return base.convert("RGB"), True
+    # 현재 상수(sub 900m < wide 1.8km, 점은 중앙 타일 내)면 항상 in-bounds 지만,
+    # 상수가 바뀌면 offset 이 범위를 벗어나 alpha_composite 가 ValueError 로 죽는다.
+    # docstring 의 '비치명' 약속을 지키도록 경계 가드 + try/except (실패 시 위성 단독).
+    if ox < 0 or oy < 0 or ox + ov_px > wide_px or oy + ov_px > wide_px:
+        logger.warning("지적도 sub-bbox 가 광역 범위 이탈 (off=%d,%d ov=%d). 위성 단독.", ox, oy, ov_px)
+        return sat_img, False
+    try:
+        overlay = overlay.resize((ov_px, ov_px), Image.LANCZOS)
+        base = sat_img.convert("RGBA")
+        base.alpha_composite(overlay, (ox, oy))
+        # 지적 데이터 구간임을 명시하는 흰 프레임
+        ImageDraw.Draw(base).rectangle(
+            [ox, oy, ox + ov_px - 1, oy + ov_px - 1], outline=(255, 255, 255, 200), width=2,
+        )
+        return base.convert("RGB"), True
+    except Exception as e:
+        logger.warning("지적도 합성 실패 (비치명): %s", e)
+        return sat_img, False
 
 
 # ── Claude vision 대지 분석 ───────────────────────────────────────────────────
@@ -317,16 +326,24 @@ async def run_site_analysis(
     lat, lng = geo["lat"], geo["lng"]
     logger.info("geocode OK: %s → (%.5f, %.5f)", geo["matched"], lat, lng)
 
-    # 2. 광역 위성 이미지 취득 (WMTS 타일, 3×3 그리드) + bbox(지적도 정렬용)
-    sat_img, bbox = await _fetch_wmts_satellite(lat, lng, vworld_key, vworld_domain)
-    logger.info("WMTS satellite OK: %dx%d", *sat_img.size)
+    # 2+3. 광역 위성(WMTS 9타일)과 지적도(WMS) 를 **동시 취득**(Fix 4) 후 중앙 합성.
+    #   지적도 sub-bbox 는 점 좌표만으로 계산 → 위성 페치와 병렬 가능(네트워크 왕복 절감).
+    sub = _cadastral_sub_bbox(lat, lng) if with_cadastral else None
+    fetches = [_fetch_wmts_satellite(lat, lng, vworld_key, vworld_domain)]
+    if sub is not None:
+        fetches.append(_fetch_cadastral_overlay(sub, _CADASTRAL_REQ_PX, vworld_key, vworld_domain))
+    results = await asyncio.gather(*fetches)
 
-    # 3. 하이브리드 합성: 광역 위성 중앙에 지적도(필지경계+지번). 비치명(블랭크 시 위성 단독)
+    sat_img, bbox = results[0]
+    logger.info("WMTS satellite OK: %dx%d", *sat_img.size)
+    # 실제 시야 반경 — 줌/그리드로 정해지므로 호출측 radius_m(기본 500)이 아니라 bbox 에서
+    # 산출 (Web Mercator 왜곡 보정: ground ≈ 3857거리 × cos(lat)). vision 프롬프트가 거리를
+    # 정확히 스케일하도록.
+    view_radius_m = round((bbox[2] - bbox[0]) / 2 * math.cos(math.radians(lat)))
+
     has_cadastral = False
-    if with_cadastral:
-        sat_img, has_cadastral = await _compose_cadastral_on_wide(
-            sat_img, lat, lng, bbox, vworld_key, vworld_domain,
-        )
+    if sub is not None:
+        sat_img, has_cadastral = _paste_cadastral(sat_img, results[1], sub, bbox)
         if has_cadastral:
             logger.info("지적도 중앙 합성 완료 (하이브리드 단일)")
 
@@ -341,7 +358,7 @@ async def run_site_analysis(
 
     # 5. Vision 분석 (지적도 있으면 선·지번 해석 안내 추가)
     analysis = await _vision_analyze(
-        composed, geo["matched"], lat, lng, radius_m, has_cadastral=has_cadastral,
+        composed, geo["matched"], lat, lng, view_radius_m, has_cadastral=has_cadastral,
     )
 
     return {
@@ -349,7 +366,7 @@ async def run_site_analysis(
         "matched_address": geo["matched"],
         "lat": lat,
         "lng": lng,
-        "radius_m": radius_m,
+        "radius_m": view_radius_m,
         "analysis": analysis,
         "has_cadastral": has_cadastral,
         "image_jpeg_b64": base64.standard_b64encode(composed).decode(),

@@ -258,6 +258,15 @@ def _basis_html(b) -> str:
     return f'<span class="cite">근거 {parts}</span>'
 
 
+# "AI 해석" 배지 — 사실/해석 2층 구분 (legend·directions·interp 섹션 공통 단일 소스)
+_AI_BADGE = '<span class="ai-badge">AI 해석</span>'
+
+
+def _sat_src_label(sc: dict | None) -> str:
+    """위성 이미지 출처 라벨 (지적도 합성 여부에 따라). hero·site 섹션 공통 단일 소스."""
+    return "VWorld 위성 + 연속지적도" if (sc or {}).get("has_cadastral") else "VWorld 위성"
+
+
 # ── 와플 차트 ────────────────────────────────────────────────────────
 
 def _waffle_cells(focus_ranked: list) -> list[tuple[str, str, int]]:
@@ -355,7 +364,7 @@ def _hero_html(site_context: dict | None, image_b64: str = "") -> str:
     analysis = sc.get("analysis") if isinstance(sc.get("analysis"), dict) else {}
     matched = (sc.get("matched_address") or sc.get("address_input") or "").strip()
     summary = (analysis.get("overall_summary") or "").strip()
-    src = "VWorld 위성 + 연속지적도" if sc.get("has_cadastral") else "VWorld 위성"
+    src = _sat_src_label(sc)
     src_line = " · ".join(x for x in [_esc(matched), _esc(src)] if x)
     return (
         '<div class="hero">'
@@ -439,7 +448,7 @@ def _site_context_html(site_context: dict | None, image_b64: str = "", compact: 
 
     thumb = ""
     if image_b64 and not compact:
-        src_lbl = "VWorld 위성 + 연속지적도" if sc.get("has_cadastral") else "VWorld 위성"
+        src_lbl = _sat_src_label(sc)
         cap = (_esc(matched) + " · " if matched else "") + src_lbl
         thumb = (
             '<div class="site-thumb">'
@@ -592,7 +601,7 @@ def _directions_html(proposal: dict) -> str:
     return (
         '<section id="directions" class="sec">'
         '<h2><span class="n">2</span>설계 접근 방향'
-        '<span class="ai-badge">AI 해석</span></h2>'
+        + _AI_BADGE + '</h2>'
         + _direction_matrix(dirs)
         + _direction_cards(dirs)
         + '</section>'
@@ -600,9 +609,6 @@ def _directions_html(proposal: dict) -> str:
 
 
 # ── AI 해석 확장층 (프로그램·매스·단계 — Phase 2) ──────────────────────
-
-_AI_BADGE = '<span class="ai-badge">AI 해석</span>'
-
 
 def _interp_section(proposal: dict, key: str, sec_id: str, title: str) -> str:
     """{claim, basis} 리스트 → 'AI 해석' 배지 단 확장 섹션. 각 항목에 근거 앵커.

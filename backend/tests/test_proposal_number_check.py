@@ -11,7 +11,8 @@ from services.proposal_number_check import check_proposal_numbers
 _BRIEF = {
     "_brief_meta": {"facility_type": "public"},
     "feasibility_export": {"sites": [{"site_area_sqm": 43000, "max_height_m": 95}]},
-    "raw_text": "가격평가 30점, 디자인 30점, 용적률 250% 이하, 규모 B2F~35F, 공사기간 32개월",
+    # '12층'은 bare 12 를 코퍼스에 넣지만 '12%' 쌍은 없음 → 단위 인식 테스트용
+    "raw_text": "가격평가 30점, 디자인 30점, 용적률 250% 이하, 규모 B2F~35F, 12층, 공사기간 32개월",
 }
 
 
@@ -21,8 +22,8 @@ class TestCheckProposalNumbers:
         p = {"executive_summary": "분양가 1,100만원/평에 ROI 15.3% 예상"}
         flags = check_proposal_numbers(p, _BRIEF)
         vals = {f["value"] for f in flags}
-        assert "1,100" in vals          # 지침서에 없는 발명 수치
-        assert "15.3" in vals
+        assert "1,100만원" in vals       # 위험 단위 쌍 — 값에 단위 포함
+        assert "15.3%" in vals
         assert all("field" in f and "context" in f for f in flags)
 
     def test_grounded_numbers_pass(self):
@@ -59,4 +60,32 @@ class TestCheckProposalNumbers:
     def test_program_detail_scanned(self):
         p = {"program_directions": [{"claim": "c", "detail": "세대수 864세대로 구성"}]}
         flags = check_proposal_numbers(p, _BRIEF)
-        assert any(f["value"] == "864" for f in flags)   # 지침서에 없는 864 flag
+        # 864세대 는 위험 단위 쌍으로 flag (value 에 단위 포함)
+        assert any("864" in f["value"] and "세대" in f["value"] for f in flags)
+
+    def test_unit_aware_catches_small_fabrication(self):
+        # 핵심: '12'는 브리프('12층')에 있어 bare 통과지만 '12%' 쌍은 없으니 flag
+        p = {"executive_summary": "공실률 12% 예상"}
+        flags = check_proposal_numbers(p, _BRIEF)
+        assert any(f["value"] == "12%" for f in flags)
+
+    def test_grounded_unit_pair_passes(self):
+        # '용적률 250%'는 브리프에 '250%' 쌍이 실재 → 통과
+        p = {"executive_summary": "용적률 250% 적용"}
+        flags = check_proposal_numbers(p, _BRIEF)
+        assert flags == []
+
+    def test_scoring_weight_percent_allowed(self):
+        # 배점 비중 'N%'는 scoring_focus weight_pct 로 허용 (오탐 방지)
+        p = {
+            "priorities": [{"focus": "x", "why": "y", "scoring_weight": "40%"}],
+            "scoring_focus": [{"category": "배치", "points": 40, "weight_pct": 40.0}],
+        }
+        flags = check_proposal_numbers(p, _BRIEF)
+        assert flags == []
+
+    def test_small_money_fabrication_flagged(self):
+        # 30억 같은 2자리 금액도 단위 쌍으로 잡힘 (이전엔 bare '30'이 통과해 놓쳤음)
+        p = {"risks": [{"risk": "r", "mitigation": "30억 절감 가능"}]}
+        flags = check_proposal_numbers(p, _BRIEF)
+        assert any(f["value"] == "30억" for f in flags)

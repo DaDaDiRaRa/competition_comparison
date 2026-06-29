@@ -22,6 +22,13 @@ import re
 
 _NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
+# 발명 위험이 높고 정당 변형이 적은 단위 — 이 단위에 붙은 수치는 (숫자,단위) **쌍**으로
+# 코퍼스 대조(자릿수 무관). '공실률 12%·30억·1,100만원·480세대' 류를 정조준.
+# 점/㎡/평/m/년/개월은 제외(배점은 결정론·면적/기간은 정당 변형이 잦아 오탐 위험).
+_RISKY_UNITS = ("만원", "억", "원", "%", "세대", "가구", "호")
+_PAIR = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(" + "|".join(_RISKY_UNITS) + r")")
+_RISKY_HEAD = re.compile(r"^\s*(" + "|".join(_RISKY_UNITS) + r")")
+
 
 def _norm(tok: str) -> str:
     """'1,440'→'1440', '30.0'→'30', '18.3'→'18.3' 로 정규화."""
@@ -75,27 +82,48 @@ def check_proposal_numbers(proposal: dict, brief_data: dict, min_digits: int = 2
     """
     proposal = proposal or {}
 
-    # 허용 코퍼스: 지침서 전체 + 결정론 scoring_focus 수치
-    corpus = _num_set(json.dumps(brief_data or {}, ensure_ascii=False))
+    corpus_text = json.dumps(brief_data or {}, ensure_ascii=False)
+    # 허용 bare 수치: 지침서 전체 + 결정론 scoring_focus 점수
+    corpus = _num_set(corpus_text)
+    # 허용 (숫자,단위) 쌍: 지침서 전체 + scoring_focus weight_pct → "N%"
+    pairs = {(_norm(n), u) for n, u in _PAIR.findall(corpus_text)}
     for f in proposal.get("scoring_focus") or []:
         if isinstance(f, dict):
-            for k in ("points", "weight_pct"):
-                v = f.get(k)
-                if isinstance(v, (int, float)):
-                    corpus.add(_norm(str(v)))
+            pts, wt = f.get("points"), f.get("weight_pct")
+            if isinstance(pts, (int, float)):
+                corpus.add(_norm(str(pts)))
+            if isinstance(wt, (int, float)):
+                corpus.add(_norm(str(wt)))
+                pairs.add((_norm(str(wt)), "%"))   # 배점 비중 'N%' 정당
 
     flags, seen = [], set()
     for field, text in _iter_prose(proposal):
         if not isinstance(text, str) or not text:
             continue
+
+        # Pass 1 — 위험 단위 쌍 (자릿수 무관, (숫자,단위) 가 지침서에 없으면 flag)
+        for m in _PAIR.finditer(text):
+            num, unit = m.group(1), m.group(2)
+            if (_norm(num), unit) in pairs:
+                continue
+            key = (field, "pair", _norm(num), unit)
+            if key in seen:
+                continue
+            seen.add(key)
+            ctx = text[max(0, m.start() - 18): m.end() + 12].strip()
+            flags.append({"value": f"{num}{unit}", "field": field, "context": ctx})
+
+        # Pass 2 — bare 다자리 수치 (위험 단위가 뒤따르면 Pass 1 담당이라 제외)
         for m in _NUM.finditer(text):
+            if _RISKY_HEAD.match(text[m.end(): m.end() + 5]):
+                continue
             raw = m.group()
             if len(re.sub(r"\D", "", raw)) < min_digits:
                 continue  # 한 자리 구조 숫자 제외
             val = _norm(raw)
             if val in corpus:
                 continue
-            key = (field, val)
+            key = (field, "bare", val)
             if key in seen:
                 continue
             seen.add(key)
