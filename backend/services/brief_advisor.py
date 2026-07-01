@@ -29,6 +29,7 @@ import re
 from config import settings
 from services.llm_client import call_messages
 from services.utils import parse_json_response, _first, _as_list
+from services.reference_cases import collect_reference_context
 
 
 SCHEMA_VERSION = 1   # _brief_insight 스키마 버전
@@ -239,6 +240,11 @@ _ADVISOR_INSTRUCTION = (
     "- emphasis_signals.category_weights: 지침서 자체 분류별 항목 수(분량). 단,\n"
     "  \"일반사항\"·\"(미분류)\"는 분류 안 된 잡동사니 버킷이므로 테마 신호로 쓰지 말 것.\n"
     "- design_overview / sites / special_conditions / validation_flags: 보조 근거.\n"
+    "- reference_cases: (있으면) 동일 시설유형 **다른 공모**의 참고자료(집계 통계 +\n"
+    "  과거 당선작 컨셉 발췌 + 과거 비교분석 서술). 반드시 이렇게만 사용: reading_guide 의\n"
+    "  배경 참고로만 활용 가능. key_emphases/must_not_miss/hidden_constraints/\n"
+    "  scoring_focus/data_confidence 등 **이 지침서에 대한 판단·근거로는 절대 사용 금지**\n"
+    "  (이 지침서 판단은 반드시 이 지침서 내부 신호만으로). basis 에도 절대 넣지 말 것.\n"
     "\n"
     "[출력 JSON — 정확히 이 키만, 다른 키 추가 금지]\n"
     "{\n"
@@ -314,7 +320,7 @@ def _build_advisor_payload(brief_data: dict, facility_type: str) -> dict:
         if isinstance(f, dict)
     ]
 
-    return {
+    payload = {
         "facility_type": facility_type,
         "scoring_focus": compute_scoring_focus(brief_data),
         "evaluation_detail": {
@@ -334,6 +340,12 @@ def _build_advisor_payload(brief_data: dict, facility_type: str) -> dict:
         "special_conditions": special,
         "validation_flags": flags,
     }
+    # 시설유형 기존 사례 참고자료 (집계 통계 + 실제 사례 발췌). brief_proposal 도 이 payload 를
+    # 재사용하므로 단일 소스 — 있을 때만 추가, 없으면 조용히 skip.
+    ref_ctx = collect_reference_context(facility_type)
+    if ref_ctx:
+        payload["reference_cases"] = ref_ctx
+    return payload
 
 
 def _interpret_sync(brief_data: dict, facility_type: str) -> dict:
@@ -364,6 +376,8 @@ def _interpret_sync(brief_data: dict, facility_type: str) -> dict:
     result["schema_version"] = SCHEMA_VERSION
     result["model_id"] = settings.model_id_advisor
     result["facility_type"] = facility_type
+    # 렌더러가 재조회 없이 "참고 사례" 섹션을 그릴 수 있게 원본 보존 (없으면 {} — graceful skip)
+    result["_reference_cases"] = payload.get("reference_cases", {})
     return result
 
 

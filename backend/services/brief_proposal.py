@@ -24,7 +24,6 @@ from config import settings
 from services.llm_client import call_messages
 from services.utils import parse_json_response
 from services.brief_advisor import _build_advisor_payload, compute_scoring_focus
-from services.db_manager import load_pattern
 
 
 logger = logging.getLogger(__name__)
@@ -73,11 +72,15 @@ _PROPOSAL_INSTRUCTION = (
     "- design_overview / sites / special_conditions / validation_flags: 보조 근거.\n"
     "- prior_insight: (있으면) 앞서 생성된 사실 triage 해설 — 제안의 토대로 삼되 그대로\n"
     "  복붙하지 말고 '그래서 어떻게 할지'로 발전시킨다.\n"
-    "- pattern_context: (있으면) 동일 시설유형 과거 공모 당선·낙선 분석 경향.\n"
-    "  규칙: (a) 전략·제안을 구체화하는 힌트로만 활용. (b) 이 공모의 사실 주장(지침서가\n"
-    "  요구·배점하는 것)으로 인용 절대 금지 — 다른 공모·다른 지침서의 통계임.\n"
-    "  (c) win_n ≤ 2 이면 신호가 약하니 단정 말고 '경향이 있다' 수준으로.\n"
-    "  (d) 패턴과 이 지침서 요구가 충돌하면 지침서가 우선.\n"
+    "- reference_cases: (있으면) 동일 시설유형 **다른 공모**의 참고자료 — 세 서브키:\n"
+    "  · pattern_summary: 당선·낙선 집계 통계(키워드·정성패턴). 경향 힌트로만.\n"
+    "  · case_excerpts: 과거 당선작의 실제 컨셉 서술(main_strategy 등).\n"
+    "  · concept_comparison_excerpts: 과거 비교분석의 축별 컨셉 비교 서술.\n"
+    "  규칙: (a) 전략·제안(win_themes/design_directions 등)을 구체화하는 아이디어 영감·경향\n"
+    "  힌트로만 활용. (b) 이 공모의 사실 주장(지침서가 요구·배점하는 것)으로 인용 절대 금지 —\n"
+    "  다른 공모·다른 지침서의 자료임. 각 항목의 basis 에는 절대 넣지 말 것(이 지침서 basis 는\n"
+    "  반드시 이 지침서 내부 근거만). (c) win_n ≤ 2 또는 발췌가 1~2건뿐이면 신호가 약하니\n"
+    "  단정 말고 '경향이 있다' 수준으로. (d) 참고자료와 이 지침서 요구가 충돌하면 지침서가 우선.\n"
     "- site_context: (있으면) VWorld 위성·지적도 이미지를 Claude vision으로 판독한 실제 대지 맥락.\n"
     "  analysis 하위 키: orientation(방위·형상) / road_access(접도) / surrounding_uses(주변용도) /\n"
     "  natural_assets(자연자산) / special_context(특이사항) / overall_summary(대지요약).\n"
@@ -178,36 +181,6 @@ def _compact(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
 
 
-def _pattern_signals(facility_type: str) -> dict:
-    """시설유형 패턴에서 제안서 참고용 신호 추출. 없거나 N=0이면 {} 반환."""
-    try:
-        pattern = load_pattern(facility_type)
-        if not isinstance(pattern, dict):
-            return {}
-        win_n = pattern.get("win_count") or 0
-        if win_n == 0:
-            return {}
-        qi  = pattern.get("qualitative_insights") or {}
-        ls  = pattern.get("loser_stats") or {}
-        lqi = ls.get("qualitative_insights") or {}
-        lose_n = ls.get("lose_count") or 0
-        return {
-            "note": (
-                f"동일 시설유형 과거 공모 당선 {win_n}건·낙선 {lose_n}건 집계 경향. "
-                "직접 인용 금지 — 전략·제안 힌트로만 사용."
-            ),
-            "win_n": win_n,
-            "lose_n": lose_n,
-            "winner_keywords":     (pattern.get("concept_keywords") or [])[:8],
-            "winner_patterns":     (qi.get("winner_patterns") or [])[:5],
-            "loser_patterns":      (qi.get("loser_patterns") or [])[:5],
-            "key_differentiators": (qi.get("key_differentiators") or [])[:4],
-            "loser_keywords":      (ls.get("concept_keywords") or [])[:8],
-        }
-    except Exception:
-        return {}
-
-
 def _prior_insight_digest(brief_data: dict) -> dict:
     """기존 _insight(사실 triage)에서 제안의 토대로 쓸 부분만 요약 전달.
 
@@ -229,14 +202,11 @@ def _prior_insight_digest(brief_data: dict) -> dict:
 
 
 def _propose_sync(brief_data: dict, facility_type: str) -> dict:
-    # advisor 와 동일한 결정론 백본 신호 — 단일 소스 재사용 (드리프트 차단)
+    # advisor 와 동일한 결정론 백본 신호 — 단일 소스 재사용 (드리프트 차단). reference_cases
+    # (시설유형 기존 사례 참고자료) 도 _build_advisor_payload 가 이미 채워서 넘겨준다.
     payload = _build_advisor_payload(brief_data, facility_type)
     payload["prior_insight"] = _prior_insight_digest(brief_data)
-
-    # 시설유형 당선·낙선 패턴 (있을 때만, 없으면 조용히 skip)
-    ps = _pattern_signals(facility_type)
-    if ps:
-        payload["pattern_context"] = ps
+    ref_ctx = payload.get("reference_cases", {})
 
     # VWorld 대지 맥락 (사전에 site-analyze 엔드포인트가 실행됐을 때만, 없으면 skip)
     sc = brief_data.get("_site_context")
@@ -276,6 +246,8 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     result["model_id"] = settings.model_id_advisor
     result["facility_type"] = facility_type
     result["brief_id"] = (brief_data.get("_brief_meta") or {}).get("brief_id", "")
+    # 렌더러가 재조회 없이 "참고 사례" 섹션을 그릴 수 있게 원본 보존 (없으면 {} — graceful skip)
+    result["_reference_cases"] = ref_ctx
 
     # 근거 없는 수치 검산 (LLM 0, 숫자 수정 0). 비치명 — 실패해도 제안서는 유지.
     try:

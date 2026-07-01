@@ -1091,8 +1091,54 @@ def _insight_section_html(insight: dict) -> str:
     if caveats:
         parts.append(f'<div class="caveat muted">한계: {_esc(" / ".join(caveats))}</div>')
 
+    parts.append(_reference_cases_section_html(insight.get("_reference_cases")))
     parts.append('</section>')
     return "".join(parts)
+
+
+def _reference_cases_section_html(ref: Any) -> str:
+    """참고한 기존 사례(_reference_cases) → '참고 사례' 서브섹션. 없으면 ''.
+
+    다른 공모의 자료임을 명확히 라벨링 — 이 지침서의 사실 근거와 혼동되지 않게.
+    brief_proposal_report_generator._reference_cases_html 과 동일한 데이터 소스,
+    카드 대신 이 문서 톤에 맞춘 리스트로 렌더.
+    """
+    if not isinstance(ref, dict) or not ref:
+        return ""
+
+    items_html = []
+    for c in (ref.get("case_excerpts") or [])[:6]:
+        if not isinstance(c, dict):
+            continue
+        strategy = (c.get("main_strategy") or "").strip()
+        if not strategy:
+            continue
+        name = _esc(c.get("competition_name") or c.get("competition_id") or "")
+        company = _esc(c.get("company") or "")
+        label = f' ({company})' if company else ""
+        items_html.append(f'<div class="note"><b>{name}{label}</b> {_esc(strategy)}</div>')
+    for c in (ref.get("concept_comparison_excerpts") or [])[:6]:
+        if not isinstance(c, dict):
+            continue
+        text = (c.get("text") or "").strip()
+        if not text:
+            continue
+        name = _esc(c.get("competition_name") or c.get("competition_id") or "")
+        axis = _esc(c.get("axis") or "")
+        items_html.append(f'<div class="note"><b>{name} · {axis}</b> {_esc(text)}</div>')
+
+    ps = ref.get("pattern_summary") or {}
+    note = (ps.get("note") or "").strip()
+    if not items_html and not note:
+        return ""
+
+    return (
+        '<h3 class="sub">참고 사례</h3>'
+        '<div class="ai-disclaimer">아래는 동일 시설유형의 다른 공모 사례입니다 — '
+        '이 지침서의 사실 근거가 아니라 배경 참고용입니다.</div>'
+        + (f'<div class="caveat muted">{_esc(note)}</div>' if note else "")
+        + "".join(items_html)
+    )
 
 
 def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> str:

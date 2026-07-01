@@ -213,6 +213,15 @@ ul.list li{margin:5px 0;font-size:13.5px}
 .numcheck li{font-size:12.5px;color:var(--text);padding:4px 0;line-height:1.55}
 .numcheck li .nv{font-weight:800;color:var(--accent);font-family:'Montserrat',monospace}
 .numcheck li .nctx{color:var(--muted)}
+
+/* ── 참고 사례 (다른 공모) ─────────── */
+.refcase{border:1px solid var(--line);background:var(--soft);border-radius:10px;padding:13px 16px;margin:6px 0}
+.refcase .rc-h{font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:10px}
+.refcase .rc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.refcase .rc-card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.refcase .rc-src{font-size:11px;color:var(--accent);font-weight:700;margin-bottom:3px}
+.refcase .rc-name{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.refcase .rc-body{font-size:12px;color:var(--text);line-height:1.6}
 footer.doc{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);color:#c0c0c0;font-size:11.5px;text-align:center}
 
 /* ── 상단 nav ────────────────────── */
@@ -668,6 +677,63 @@ def _number_flags_html(proposal: dict) -> str:
     )
 
 
+def _reference_cases_html(proposal: dict) -> str:
+    """참고한 기존 사례(_reference_cases) 를 별도 섹션으로 노출. 없으면 ''.
+
+    다른 공모의 자료임을 명확히 라벨링 — 이 지침서의 사실 근거와 혼동되지 않게.
+    """
+    ref = proposal.get("_reference_cases")
+    if not isinstance(ref, dict) or not ref:
+        return ""
+
+    cards = []
+    for c in (ref.get("case_excerpts") or [])[:6]:
+        if not isinstance(c, dict):
+            continue
+        strategy = _esc((c.get("main_strategy") or "").strip())
+        if not strategy:
+            continue
+        name = _esc(c.get("competition_name") or c.get("competition_id") or "")
+        company = _esc(c.get("company") or "")
+        concept = _esc(c.get("concept_name_ko") or "")
+        label = " · ".join(x for x in [company, concept] if x)
+        cards.append(
+            '<div class="rc-card"><div class="rc-src">당선 사례</div>'
+            f'<div class="rc-name">{name}' + (f' <span style="font-weight:400">({label})</span>' if label else "") + '</div>'
+            f'<div class="rc-body">{strategy}</div></div>'
+        )
+    for c in (ref.get("concept_comparison_excerpts") or [])[:6]:
+        if not isinstance(c, dict):
+            continue
+        text = _esc((c.get("text") or "").strip())
+        if not text:
+            continue
+        name = _esc(c.get("competition_name") or c.get("competition_id") or "")
+        axis = _esc(c.get("axis") or "")
+        cards.append(
+            '<div class="rc-card"><div class="rc-src">비교분석 사례</div>'
+            f'<div class="rc-name">{name}' + (f' · {axis}' if axis else "") + '</div>'
+            f'<div class="rc-body">{text}</div></div>'
+        )
+
+    ps = ref.get("pattern_summary") or {}
+    note = _esc((ps.get("note") or "").strip())
+    note_html = f'<div class="rc-h">{note}</div>' if note else ""
+
+    if not cards and not note_html:
+        return ""
+    return (
+        '<section id="refcases" class="sec">'
+        '<h2><span class="n">·</span>참고 사례</h2>'
+        '<div class="refcase">'
+        '<div class="rc-h">ⓘ 아래는 동일 시설유형의 <b>다른 공모</b> 사례입니다 — '
+        '이 지침서의 사실 근거가 아니라 아이디어 참고용입니다.</div>'
+        + note_html
+        + (f'<div class="rc-grid">{"".join(cards)}</div>' if cards else "")
+        + '</div></section>'
+    )
+
+
 def _legend_html() -> str:
     """2층 범례 — 사실(근거 인용) vs AI 해석(추론·제안). 차별화 선언."""
     return (
@@ -816,6 +882,7 @@ def to_proposal_html(
     )
     # 해석 마커가 실제로 쓰일 때만 범례 노출
     legend_html = _legend_html() if (interp_html or directions_html) else ""
+    refcases_html = _reference_cases_html(proposal)
 
     body = (
         legend_html
@@ -831,6 +898,7 @@ def to_proposal_html(
         + _checklist_html(proposal, "kickoff_checklist", "kickoff", "5", "착수 체크리스트")
         + _checklist_html(proposal, "open_questions",    "questions", "6", "발주처 확인 필요")
         + _number_flags_html(proposal)
+        + refcases_html
     )
 
     caveats = [str(c).strip() for c in (proposal.get("caveats") or []) if str(c).strip()]
@@ -851,6 +919,7 @@ def to_proposal_html(
         + '<a href="#priorities">우선순위</a>'
         '<a href="#risks">리스크</a>'
         '<a href="#kickoff">체크리스트</a>'
+        + ('<a href="#refcases">참고 사례</a>' if refcases_html else "")
     )
 
     return (
