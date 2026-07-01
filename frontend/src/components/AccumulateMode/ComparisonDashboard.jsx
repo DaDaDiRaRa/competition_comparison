@@ -1,26 +1,21 @@
 import { useState, useMemo } from 'react'
 import { GRADE_COLOR, GRADE_BG, toGrade } from '../../constants'
+import { useMeta } from '../../hooks/useMeta'
 
 /**
  * Dynamic comparison dashboard — light theme
  *
  * comparison: {
  *   submissions: { company: { concept:{grade,strengths,weaknesses,notes}, ... } },
- *   ranking: [company, ...],
- *   key_differentiators: [...]
+ *   concept_comparison: { axisId: "<Korean paragraph comparing every company's approach>" }
  * }
- * submissionMeta: [{ company, result, total_pages, page_distribution }]
+ * facilityType: facility_type key — axis labels/icons come from useMeta().axesFor(facilityType),
+ * the single source of truth (per-facility-type axis keys differ, e.g. general vs redev groups).
+ *
+ * 종합 순위(ranking/blind_ranking)는 의도적으로 노출하지 않는다 — "누가 1등이냐"보다
+ * 각 회사가 무엇을 어떻게 풀었는지 비교하는 쪽이 더 유용하다는 결정(2026-07-01).
+ * ranking은 백엔드 comparison.json에는 gap_analysis 계산용으로 계속 보존된다.
  */
-
-const AXIS_LABEL = {
-  concept: { label: '설계 컨셉', icon: '◈' },
-  mass:    { label: '매스 전략', icon: '◼' },
-  landscape: { label: '공원·조경 연계', icon: '◉' },
-  program: { label: '프로그램 구성', icon: '▲' },
-  facade:  { label: '파사드·외관', icon: '◧' },
-  technical: { label: '구조·기술', icon: '⚙' },
-  quantitative: { label: '정량 데이터', icon: '≡' },
-}
 
 const PALETTE = [
   'var(--color-danger)', 'var(--color-accent-hover)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-accent)',
@@ -148,8 +143,10 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
   )
 }
 
-function CategoryRow({ axisId, axisData, companies, colors, selected, expanded, onToggle }) {
-  const { label, icon } = AXIS_LABEL[axisId] || { label: axisId, icon: '•' }
+function CategoryRow({ axisId, axisMeta, axisData, companies, colors, selected, expanded, onToggle }) {
+  const meta = axisMeta[axisId] || {}
+  const label = meta.label_ko || axisId
+  const icon = meta.icon || '•'
   return (
     <div style={{
       background: 'var(--color-bg-surface)',
@@ -176,10 +173,10 @@ function CategoryRow({ axisId, axisData, companies, colors, selected, expanded, 
   )
 }
 
-function RankingBlock({ ranking, companies, colors, submissionMeta }) {
-  const metaMap = {}
-  submissionMeta?.forEach(s => { metaMap[s.company] = s })
-  const medals = ['🥇', '🥈', '🥉']
+function ConceptComparisonBlock({ conceptComparison, axisMeta }) {
+  const axisIds = Object.keys(conceptComparison || {})
+    .filter(id => (conceptComparison[id] || '').trim())
+  if (axisIds.length === 0) return null
 
   return (
     <div style={{
@@ -187,24 +184,21 @@ function RankingBlock({ ranking, companies, colors, submissionMeta }) {
       borderRadius: 2, padding: 20, marginBottom: 20,
     }}>
       <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-bold)', color: 'var(--color-text-muted)', letterSpacing: '0.1em', marginBottom: 12 }}>
-        종합 순위
+        축별 컨셉·설계 방향 비교
       </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {ranking.map((company, i) => {
-          const color = colors[company]
-          const meta = metaMap[company]
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {axisIds.map(axisId => {
+          const meta = axisMeta[axisId] || {}
+          const label = meta.label_ko || axisId
+          const icon = meta.icon || '•'
           return (
-            <div key={company} style={{
-              background: `${color}15`, border: `1px solid ${color}`,
-              borderRadius: 4, padding: '10px 16px', minWidth: 140,
-            }}>
-              <div style={{ fontSize: 'var(--font-size-xl)', marginBottom: 4 }}>{medals[i] || `${i + 1}.`}</div>
-              <div style={{ fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-bold)', color }}>{company}</div>
-              {meta && (
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-faint)', marginTop: 2 }}>
-                  {meta.result === 'win' ? '✓ 당선' : '낙선'} · {meta.total_pages}p
-                </div>
-              )}
+            <div key={axisId} style={{ borderLeft: '3px solid var(--color-accent)', paddingLeft: 14 }}>
+              <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', marginBottom: 4 }}>
+                {icon} {label}
+              </div>
+              <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
+                {conceptComparison[axisId]}
+              </div>
             </div>
           )
         })}
@@ -213,19 +207,19 @@ function RankingBlock({ ranking, companies, colors, submissionMeta }) {
   )
 }
 
-export default function ComparisonDashboard({ comparison, submissionMeta = [] }) {
+export default function ComparisonDashboard({ comparison, facilityType }) {
+  const { axesFor } = useMeta()
   const [selected, setSelected] = useState([])
-  const [expandedAxes, setExpandedAxes] = useState(new Set(['concept']))
+  const [expandedAxes, setExpandedAxes] = useState(new Set())
+
+  const axisMeta = axesFor(facilityType)
 
   const companies = useMemo(
     () => comparison?.submissions ? Object.keys(comparison.submissions) : [],
     [comparison?.submissions]
   )
   const colors = useMemo(() => buildCompanyColors(companies), [companies])
-  const axes = useMemo(
-    () => Object.keys(AXIS_LABEL).filter(ax => companies.some(c => comparison.submissions[c]?.[ax])),
-    [companies, comparison?.submissions]
-  )
+  const axes = Object.keys(axisMeta).filter(ax => companies.some(c => comparison.submissions[c]?.[ax]))
   const allExpanded = expandedAxes.size === axes.length && axes.length > 0
 
   if (!comparison?.submissions) return null
@@ -261,21 +255,7 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
         </div>
       </div>
 
-      {comparison.ranking?.length > 0 && (
-        <RankingBlock ranking={comparison.ranking} companies={companies}
-          colors={colors} submissionMeta={submissionMeta} />
-      )}
-
-      {comparison.key_differentiators?.length > 0 && (
-        <div style={{
-          background: 'var(--color-accent-soft)', border: '1px solid var(--color-accent-border)',
-          borderRadius: 2, padding: '12px 16px', marginBottom: 20,
-          fontSize: 'var(--font-size-sm)', color: 'var(--color-warning)',
-        }}>
-          <strong style={{ color: 'var(--color-danger)' }}>핵심 차별화 요소: </strong>
-          {comparison.key_differentiators.join(' · ')}
-        </div>
-      )}
+      <ConceptComparisonBlock conceptComparison={comparison.concept_comparison} axisMeta={axisMeta} />
 
       <CompanyFilterBar
         companies={companies} colors={colors} selected={selected}
@@ -286,6 +266,7 @@ export default function ComparisonDashboard({ comparison, submissionMeta = [] })
         <CategoryRow
           key={axisId}
           axisId={axisId}
+          axisMeta={axisMeta}
           axisData={
             Object.fromEntries(
               companies.map(c => [c, comparison.submissions[c]?.[axisId]])

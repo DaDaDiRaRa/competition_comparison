@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from config import settings, axes_for, build_axis_rubric_block, RUBRIC_VERSION
+from config import settings, axes_for, axes_keys_for, build_axis_rubric_block, RUBRIC_VERSION
 from services.llm_client import call_messages
 from services.utils import parse_json_response
 
@@ -24,12 +24,17 @@ def _build_axes_strings(facility_type: str) -> dict:
     brief_compliance_block = ",\n".join(
         f'    "{k}":"yes|partial|no|unclear"' for k in axes_keys
     )
+    concept_comparison_block = ",\n".join(
+        f'    "{k}": "<Korean ~150-250chars with (p.N) citations — or empty string if fewer than 2 submissions have data for this axis>"'
+        for k in axes_keys
+    )
     return {
         "axes_key_str": axes_key_str,
         "axis_definitions": axis_definitions,
         "null_axes_block": null_axes_block,
         "null_axes_diagnose": null_axes_diagnose,
         "brief_compliance_block": brief_compliance_block,
+        "concept_comparison_block": concept_comparison_block,
     }
 
 
@@ -96,6 +101,7 @@ def _make_reveal_static(facility_type: str) -> str:
     """Pass 2 (결과 공개 후 사유 분석) 정적 prefix.
     Pass 1의 블라인드 점수 + 실제 당선/낙선만 받아 사후 해석 수행.
     원본 extracted_data를 재전송하지 않으므로 Pass 1 결과 내부의 strengths/weaknesses/notes를 인용 근거로 사용."""
+    ax = _build_axes_strings(facility_type)
     return (
         "TASK: post_hoc_outcome_analysis\n"
         "OUTPUT_FORMAT: json_only\n"
@@ -117,18 +123,32 @@ def _make_reveal_static(facility_type: str) -> str:
         "4. gap_notes: brief reflection on whether the blind ranking matched the actual outcome\n"
         "   - If aligned (blind top == actual winner): note that design quality likely drove the decision\n"
         "   - If diverged: hypothesize undocumented external factors (정무적·발주처 선호·시공사 관계 등)\n"
+        "5. concept_comparison: for EACH axis below, write ONE Korean paragraph that compares how EVERY\n"
+        "   submission approached that axis — concept, design direction, concrete content (NOT just grades).\n"
+        "   This is independent of win/lose framing: describe what each company actually proposed and how\n"
+        "   they differ, e.g. '<회사A>는 ~한 배치(p.N), <회사B>는 ~한 접근(p.M)으로 ...'.\n"
+        "   Base every claim strictly on BLIND_GRADES.submissions[company][axis].strengths/weaknesses/notes —\n"
+        "   reuse their (p.N) citations verbatim, never invent new facts or pages.\n"
+        "   Always include every axis_key below. If an axis has fewer than 2 submissions with actual data,\n"
+        "   set its value to an empty string \"\" instead — never fabricate a paragraph just to fill the key.\n"
+        "\n"
+        f"axis_keys: {ax['axes_key_str']}\n"
         "\n"
         "key_differentiators: max_{max_global} sentences (~{global_chars} chars each)\n"
         "winner_strengths: max_{max_global} sentences (~{global_chars} chars each)\n"
         "loser_weaknesses: max_{max_global} sentences (~{global_chars} chars each)\n"
         "gap_notes: 1-2 sentences (~80 chars total) in Korean\n"
+        "concept_comparison: one entry per axis_key, each ~150-250 chars Korean, citing every submission that has data\n"
         "\n"
         "OUTPUT_ONLY_JSON:\n"
         "{\n"
         '  "key_differentiators": ["<max_3>"],\n'
         '  "winner_strengths": ["<max_3>"],\n'
         '  "loser_weaknesses": ["<max_3>"],\n'
-        '  "gap_notes": "<Korean ~80chars>"\n'
+        '  "gap_notes": "<Korean ~80chars>",\n'
+        '  "concept_comparison": {\n'
+        f"{ax['concept_comparison_block']}\n"
+        "  }\n"
         "}"
     )
 
@@ -367,9 +387,16 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
     reveal_static, reveal_dynamic = _build_reveal_prompt_parts(
         submissions, blind_result, ft
     )
+    # concept_comparison은 축마다 "모든 제출물을 인용하는 문단 하나"라 축 개수·제출물 개수에
+    # 비례해 커진다 — 고정값 대신 두 값 기반으로 여유 있게 산정 (한글은 문자당 토큰 소모가 커서
+    # 보수적으로 2.5 토큰/자 가정). 축소 방향 회귀 방지를 위해 8192를 하한으로 유지.
+    axis_count = len(axes_keys_for(ft))
+    sub_count = len(submissions)
+    concept_chars_estimate = axis_count * (250 + 60 * sub_count)
+    reveal_max_tokens = min(32000, max(8192, int(concept_chars_estimate * 2.5) + 1500))
     reveal_raw = call_messages(
         model=settings.model_id,
-        max_tokens=4096,  # Pass 2 출력 짧음 (점수 재산출 안함)
+        max_tokens=reveal_max_tokens,
         temperature=0,
         system=_ANALYST_SYSTEM,
         messages=[{
@@ -394,9 +421,13 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
 
     return {
         "submissions": blind_result.get("submissions", {}),
-        "ranking": blind_ranking,            # 분석적 순위 (블라인드 기준)
-        "blind_ranking": blind_ranking,      # 명시적 별칭
+        # ranking/blind_ranking: 결과 화면에는 더 이상 노출하지 않음(2026-07-01) —
+        # gap_analysis 계산용으로만 내부 유지. archive_search/pattern_builder 등
+        # 기존 소비자가 있어 필드 자체는 보존.
+        "ranking": blind_ranking,
+        "blind_ranking": blind_ranking,
         "key_differentiators": reveal_result.get("key_differentiators", []),
+        "concept_comparison": reveal_result.get("concept_comparison", {}) or {},
         "winner_strengths": reveal_result.get("winner_strengths", []),
         "loser_weaknesses": reveal_result.get("loser_weaknesses", []),
         "gap_analysis": gap_analysis,

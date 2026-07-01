@@ -638,18 +638,14 @@ body {
 .tag-unclear   { background: var(--tag-unclear-bg);  color: var(--tag-unclear); }
 .notes { font-size: 11px; color: var(--text-faint); margin-top: 6px; line-height: 1.6; }
 
-/* Ranking */
-.rank-list { display: flex; gap: 10px; flex-wrap: wrap; }
-.rank-item {
+/* Concept comparison (per-axis narrative) */
+.concept-block-list { display: flex; flex-direction: column; gap: 14px; }
+.concept-block {
   background: var(--bg-card); border-radius: 6px;
-  padding: 12px 18px; display: flex; align-items: center; gap: 12px;
-  border: 1px solid var(--border-subtle);
+  padding: 14px 18px; border-left: 3px solid var(--accent-blue);
 }
-.rank-no { font-size: 24px; font-weight: 900; color: var(--border-strong); }
-.rank-no.r1 { color: var(--accent-gold); }
-.rank-no.r2 { color: var(--text-muted); }
-.rank-no.r3 { color: #9a3412; }
-.rank-co { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.concept-block-label { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; }
+.concept-block-text { font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
 
 /* Differentiator / win-loss */
 .diff-list { display: flex; flex-direction: column; gap: 8px; }
@@ -689,27 +685,6 @@ body {
   letter-spacing: -0.015em; color: var(--text-primary);
 }
 .db-count { font-size: 12px; color: var(--text-faint); margin-top: 8px; margin-bottom: 22px; }
-
-.db-rank-block {
-  background: var(--bg-card); border: 1px solid var(--border-subtle);
-  border-radius: 6px; padding: 18px 20px; margin-bottom: 18px;
-}
-.db-rank-label {
-  font-size: 11px; font-weight: 700; color: var(--text-muted);
-  letter-spacing: 0.12em; margin-bottom: 12px; text-transform: uppercase;
-}
-.db-rank-cards { display: flex; gap: 10px; flex-wrap: wrap; }
-.db-rank-card { border-radius: 5px; padding: 10px 16px; min-width: 140px; }
-.db-rank-medal { font-size: 20px; margin-bottom: 4px; }
-.db-rank-name { font-size: 14px; font-weight: 700; }
-.db-rank-meta { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
-
-.db-keydiff {
-  background: var(--accent-gold-soft);
-  border: 1px solid rgba(212,175,55,0.25);
-  border-radius: 4px; padding: 12px 16px; margin-bottom: 18px;
-  font-size: 13px; color: var(--accent-gold);
-}
 
 .db-filter-bar {
   display: flex; gap: 8px; margin-bottom: 22px;
@@ -834,10 +809,6 @@ body {
 
 def _generate_dashboard_section(
     comp_subs: dict,
-    ranking: list,
-    key_diff: list,
-    winners: list,
-    submissions: list,
     axes: list,
     section_num: int = 1,
     axis_label_dash: dict | None = None,
@@ -847,31 +818,6 @@ def _generate_dashboard_section(
     companies = list(comp_subs.keys())
     n = len(companies)
     colors = {c: PALETTE[i % len(PALETTE)] for i, c in enumerate(companies)}
-    meta_map = {s['company']: s for s in submissions}
-    medals = ['🥇', '🥈', '🥉']
-
-    # Ranking block
-    rank_html = ''
-    for i, company in enumerate(ranking):
-        color = colors.get(company, '#aaa')
-        meta = meta_map.get(company, {})
-        result_txt = {'win': '✓ 당선', 'contracted': '수의계약'}.get(meta.get('result', ''), '낙선')
-        rank_html += (
-            f'<div class="db-rank-card" style="background:{_hex_to_rgba(color, 0.08)};border:1px solid {color}">'
-            f'<div class="db-rank-medal">{medals[i] if i < 3 else str(i + 1) + "."}</div>'
-            f'<div class="db-rank-name" style="color:{color}">{company}</div>'
-            f'<div class="db-rank-meta">{result_txt} · {meta.get("total_pages", 0)}p</div>'
-            f'</div>'
-        )
-    rank_section = (
-        f'<div class="db-rank-block"><div class="db-rank-label">종합 순위</div>'
-        f'<div class="db-rank-cards">{rank_html}</div></div>'
-    ) if ranking else ''
-
-    keydiff_section = (
-        f'<div class="db-keydiff"><strong style="color:#dc2626">핵심 차별화 요소: </strong>'
-        f'{" · ".join(key_diff)}</div>'
-    ) if key_diff else ''
 
     # Filter bar
     filter_btns = '<span class="db-filter-label">FILTER</span>'
@@ -970,7 +916,7 @@ def _generate_dashboard_section(
         f'<div class="db-sub-label">COMPETITION ANALYSIS · 비교 분석 대시보드</div>'
         f'<div class="db-title"><span class="db-num">{_fmt_num(section_num)}</span>경쟁사 제안서 비교 분석</div>'
         f'<div class="db-count">{n}개 출품사 · {len(axes)}개 분석 카테고리</div>'
-        f'{rank_section}{keydiff_section}{filter_section}{axis_rows}'
+        f'{filter_section}{axis_rows}'
         f'</div>'
     )
 
@@ -1071,11 +1017,9 @@ def generate_comparison_report(
     project_label  = project_number or (f"{year}년" if year else "")
 
     comp_subs        = comparison.get("submissions", {})
-    ranking          = comparison.get("ranking", [])
-    key_diff         = comparison.get("key_differentiators", [])
+    concept_comparison = comparison.get("concept_comparison", {}) or {}
     winner_strengths = comparison.get("winner_strengths", [])
     loser_weaknesses = comparison.get("loser_weaknesses", [])
-    gap_analysis     = comparison.get("gap_analysis", {}) or {}
     winners          = [s["company"] for s in submissions if s.get("result") in ("win", "contracted")]
 
     _axes_meta      = axes_for(facility_type)
@@ -1111,10 +1055,6 @@ def generate_comparison_report(
     # ── 아코디언 대시보드 ─────────────────────────────────
     dashboard_section = _generate_dashboard_section(
         comp_subs=comp_subs,
-        ranking=ranking,
-        key_diff=key_diff,
-        winners=winners,
-        submissions=submissions,
         axes=axes_with_data,
         section_num=_next_n(),
         axis_label_dash=_axis_label_dash,
@@ -1205,55 +1145,22 @@ def generate_comparison_report(
         if _has_quant_data(submissions) else ""
     )
 
-    # ── 종합 순위 ─────────────────────────────────────────
-    rank_cls   = {0: "r1", 1: "r2", 2: "r3"}
-    rank_items = "".join(
-        f'<div class="rank-item"><span class="rank-no {rank_cls.get(i, "")}">{i+1}</span>'
-        f'<span class="rank-co">{c}{"  ★" if c in winners else ""}</span></div>'
-        for i, c in enumerate(ranking)
+    # ── 축별 컨셉·설계 방향 비교 ──────────────────────────
+    # 종합 순위(ranking/blind_ranking)는 화면에서 노출하지 않는다 — gap_analysis 계산용으로만
+    # comparison.json에 내부 보존(comparator.py 참조). 대신 각 회사가 축마다 실제 어떤
+    # 컨셉·설계 방향을 제시했는지 나란히 서술하는 비교를 보여준다.
+    concept_blocks = "".join(
+        f'<div class="concept-block">'
+        f'<div class="concept-block-label">{_axis_labels_ko.get(axis, axis)}</div>'
+        f'<div class="concept-block-text">{text}</div>'
+        f'</div>'
+        for axis in _axis_list
+        if (text := (concept_comparison.get(axis) or "").strip())
     )
-    ranking_section = (
-        f'<div class="sec">{_sec_title(_next_n(), "종합 순위")}<div class="rank-list">{rank_items}</div></div>'
-        if ranking else ""
-    )
-
-    # ── 블라인드 vs 실제 결과 정렬 분석 ──────────────────
-    gap_section = ""
-    if gap_analysis:
-        alignment    = gap_analysis.get("alignment", "unknown")
-        blind_top1   = gap_analysis.get("blind_top1") or "—"
-        actual_wins  = gap_analysis.get("actual_winners") or []
-        top1_match   = gap_analysis.get("top1_matches_winner", False)
-        gap_notes    = gap_analysis.get("notes", "")
-        align_color  = {"high": "#16a34a", "partial": "#ea580c", "low": "#dc2626"}.get(alignment, "#6b7280")
-        align_kr     = {"high": "일치도 높음", "partial": "부분 일치", "low": "낮은 일치", "unknown": "—"}.get(alignment, "—")
-        match_badge  = (
-            f'<span style="background:#dcfce7;color:#16a34a;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">✓ AI 1위 = 실제 당선</span>'
-            if top1_match
-            else f'<span style="background:#fee2e2;color:#dc2626;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:600">⚠ AI 1위 ≠ 실제 당선</span>'
-        )
-        actual_str = " · ".join(actual_wins) if actual_wins else "—"
-        gap_section = f'''<div class="sec">{_sec_title(_next_n(), "블라인드 분석 vs 실제 결과")}
-<div style="background:#f9fafb;border-left:4px solid {align_color};border-radius:8px;padding:14px 18px;margin-bottom:12px">
-  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-    <span style="font-size:13px;font-weight:700;color:{align_color}">정렬 상태: {align_kr}</span>
-    {match_badge}
-  </div>
-  <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:8px;font-size:13px">
-    <div><span style="color:#6b7280">AI 블라인드 1위:</span> <strong style="color:#1f2937">{blind_top1}</strong></div>
-    <div><span style="color:#6b7280">실제 당선:</span> <strong style="color:#1f2937">{actual_str}</strong></div>
-  </div>
-  {f'<div style="font-size:13px;color:#374151;line-height:1.6;margin-top:6px;padding-top:8px;border-top:1px solid #f9fafb">{gap_notes}</div>' if gap_notes else ""}
-  <div style="font-size:11px;color:#6b7280;margin-top:8px;font-style:italic">
-    * 블라인드 분석: 결과 정보 없이 익명 채점 → 분석 결과를 사후 결과와 비교
-  </div>
-</div></div>'''
-
-    # ── 주요 차별화 요소 ──────────────────────────────────
-    diff_items  = "".join(f'<div class="diff-item">{d}</div>' for d in key_diff)
-    diff_section = (
-        f'<div class="sec">{_sec_title(_next_n(), "주요 차별화 요소")}<div class="diff-list">{diff_items}</div></div>'
-        if key_diff else ""
+    concept_section = (
+        f'<div class="sec">{_sec_title(_next_n(), "축별 컨셉·설계 방향 비교")}'
+        f'<div class="concept-block-list">{concept_blocks}</div></div>'
+        if concept_blocks else ""
     )
 
     # ── 당선/낙선 요약 ────────────────────────────────────
@@ -1337,9 +1244,7 @@ document.getElementById('btn-dl-html').addEventListener('click', function() {{
 {table_section}
 {floor_matrix_section}
 {quant_table_section}
-{ranking_section}
-{gap_section}
-{diff_section}
+{concept_section}
 {ws_section}
 {lw_section}
 {winner_section}

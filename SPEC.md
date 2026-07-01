@@ -128,7 +128,8 @@ competition_comparison/
 
 **Pass 2 (리빌 + 사후 분석):**
 - Pass 1 출력(블라인드 등급)과 실제 결과 라벨만 전송. 원본 추출 데이터·brief JSON은 재전송하지 않음 → 토큰 약 80% 절감.
-- `max_tokens=4096` (Pass 2 출력은 단문).
+- `max_tokens=8192`.
+- `concept_comparison` 산출: 시설유형 축마다, Pass 1 결과의 strengths/weaknesses/notes(이미 (p.N) 인용 포함)만 근거로 모든 제출물의 컨셉·설계방향을 한 문단으로 나란히 비교(승/패 프레이밍 아님). 원본 데이터 재전송 없이 Pass 1 산출물만 재가공하므로 토큰 절감 구조를 깨지 않음.
 
 **Gap Analysis (결정론):** `_compute_gap_analysis()`가 순수 Python으로 산출.
 - `blind_top1`: 블라인드 1위 제출물
@@ -274,12 +275,15 @@ competition_comparison/
   "ranking": [],
   "blind_ranking": [],
   "key_differentiators": [],
+  "concept_comparison": {"<axis>": "<Korean paragraph comparing every submission's concept/design approach with (p.N) citations>"},
   "winner_strengths": [],
   "loser_weaknesses": [],
   "gap_analysis": {"blind_top1": "", "actual_winners": [], "top1_matches_winner": true, "alignment": "high|partial|low|unknown", "notes": ""},
   "rubric_version": "v1"
 }
 ```
+
+`ranking`/`blind_ranking`/`gap_analysis`는 archive_search·pattern_builder 등 기존 소비자를 위해 계속 산출되지만, 비교 결과 화면(`report_generator.py`, `ComparisonDashboard.jsx`)에는 더 이상 렌더링하지 않는다(2026-07-01) — "누가 1등이냐"보다 `concept_comparison`(축별 컨셉·설계방향 비교)이 더 유용하다는 결정. `gap_analysis`는 내부 QA(블라인드 채점이 실제 결과와 정렬되는지) 용도로만 보존.
 
 **`_quantitative` 키 (제출물 JSON 내):**
 `site_area_sqm`, `building_area_sqm`, `total_floor_area_sqm`, `area_above_ground_sqm`, `area_below_ground_sqm`, `floor_area_ratio_pct`, `building_coverage_ratio_pct`, `floors_above`, `floors_below`, `parking_count`

@@ -30,9 +30,9 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `quant_validator.py` | `_quantitative` 내부 정합성 결정론 검증 (LLM 0 · 숫자 수정 0). 건폐율=건축/대지, 총연면적≥용적률×대지 등 항등식으로 추출 오류(필드 오결합·환각)를 flag 로만 표시 (`severity: error\|warn`). **단일 소스** — `merge_extracted_data`(추출 직후 `_quantitative_flags` 부착, 제안서만) · `pattern_builder`(error flag 필드 집계 제외) · `tools/data_health.py`(무료 감사) 가 공유. 관대(false positive 회피 — 영등포 교훈). 회귀: `tests/test_quant_validator.py`. |
 | `feasibility_export.py` | `_brief.json` → `feasibility_export` 정규화 블록 (연동 앱 arch-law-diagnose 용, schema_version 2). **새 vision 추출 없음 · 기존 키 수정 없음 · 추가만.** 이미 추출된 값을 재배치·파싱: site_id 통일, brief_site "(부지N)" 주소 분해+접두 상속, 인증 코드화, facilities 괄호 건축법 용도, 사업 규모 노출(1차); 주차 서술→required_parking_count(부지N 마커 귀속), zoning→표준 용도지역명(불확실 시 raw), special_conditions 심의 문구→limits_determined_by(2차). 모두 후처리 파싱이라 BRIEF_* 추출 회귀 없음. 회귀: `tests/test_feasibility_export.py` (46). 무료 검증: `tools/feasibility_verify.py`. |
 | `llm_client.py` | Claude API 래퍼 `call_messages()`. `system` 은 `str \| list` 모두 지원. 캐시 토큰 로깅. `_NO_SAMPLING_PREFIXES`(opus-4.7/4.8·fable·mythos) 로 시작하는 모델엔 `temperature`/`top_p`/`top_k` 를 body 에서 자동 생략 — 이 모델군은 샘플링 파라미터 전송 시 **400** (Sonnet/Haiku/Opus4.6 은 유지). |
-| `comparator.py` | **2-pass blind-reveal.** Pass 1: 익명화 채점, Pass 2: 리빌 후 차별화·gap 분석 (Pass 1 결과만 재전송, 80%+ 토큰 절감). `_compute_gap_analysis()` 결정적 로직으로 alignment 산출. Prompt caching ephemeral. `.replace()` 사용 (`.format()` 은 JSON 중괄호 충돌). |
+| `comparator.py` | **2-pass blind-reveal.** Pass 1: 익명화 채점, Pass 2: 리빌 후 차별화·gap 분석 + `concept_comparison`(축별로 각 회사의 컨셉·설계방향을 (p.N) 인용과 함께 나란히 서술하는 비교 — Pass 1 결과의 strengths/weaknesses/notes 만 근거로 사용, 원본 재전송 없음) (Pass 1 결과만 재전송, 80%+ 토큰 절감). `_compute_gap_analysis()` 결정적 로직으로 alignment 산출 — **결과 화면엔 더 이상 렌더하지 않고 내부 QA 용으로만 comparison.json 에 보존**(2026-07-01, "누가 1등이냐"보다 컨텐츠 비교가 더 유용하다는 사용자 결정). Prompt caching ephemeral. `.replace()` 사용 (`.format()` 은 JSON 중괄호 충돌). |
 | `pattern_builder.py` | 당선 패턴 + `loser_stats` (lose_count, page_distribution, quantitative, concept_keywords). `_build_quant_stats()` 는 `quant_validator` 가 error 로 지목한 필드를 **제출물별** 집계에서 제외 (환각 수치 패턴 유입 차단; warn 은 유지). 저장 `_quantitative_flags` 우선, 없으면(플래그 훅 이전 추출된 구 레코드) 집계 시점 `validate_quantitative()` 재검증. 회귀: `tests/test_quant_validator.py::TestPatternBuilderExcludesFlagged`. |
-| `report_generator.py` | 비교 HTML 리포트 (LLM 호출 없음). `axes_for(facility_type)` 로 시설별 평가축. `gap_section` 블록이 ranking 과 diff 사이 삽입. |
+| `report_generator.py` | 비교 HTML 리포트 (LLM 호출 없음). `axes_for(facility_type)` 로 시설별 평가축. 종합 순위(`ranking`)·블라인드 정렬 분석(`gap_analysis`) 섹션은 미렌더 — `concept_comparison` 기반 "축별 컨셉·설계 방향 비교" 섹션이 그 자리를 대체(2026-07-01). |
 | `submission_report_generator.py` | 개별 제출물 리포트. LLM 호출 없음. |
 | `diagnosis_report_generator.py` | 진단 리포트. LLM 호출 없음. 종합점수 링 → 페이지바 → 패턴편차 → 충족도 → 요구사항 매핑 → 평가축 상세. |
 | `myproject_analyzer.py` | MyProject 멀티패스 deep-analysis. narrative + deep evidence + 정량 + 키워드 + auto_meta. |
@@ -41,12 +41,55 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `brief_validator.py` | 지침서 검증. LLM 호출 없음. `requirements` 가 dict 아니면 `{}` 교체 (LLM 배열 반환 방어). `_check_points_mismatch` 는 `shared_with` non-empty 또는 합계가 만점과 일치 시 null 항목을 정성평가로 인정 (영등포 false positive 차단). |
 | `brief_checklist_exporter.py` | 지침서 체크리스트 MD/xlsx/HTML. LLM 호출 금지. openpyxl lazy import. xlsx 시트: (`_insight` 있으면 맨 앞 "AI 종합 해설") / 1.면적·프로그램(사업개요 서브섹션 포함) / 2.심사기준 / 3.요구사항 / 4.검증경고 (+ area_rows 있으면 5.면적표상세). `to_markdown` 도 `_insight` 있으면 헤더 직후 `## 0. AI 종합 해설` 섹션 삽입(`_md_insight_block`). xlsx·md·html **3종 모두** insight 임베드(없으면 graceful skip). `to_html()` 은 `to_markdown` 과 동일한 `_extract_sections()` 데이터로 미니멀 자체완결 HTML (화이트 + 건원 RED, 5섹션, 상단 고정 nav + 핵심수치 카드 + 시설별 접기). 데이터는 `html.escape`. `_form_area_pages()` 가 '[서식 N] …면적표' 제출양식 오분류 페이지를 면적 집계에서 제외 (본문 면적표 중복 차단, 영등포 사례). 회귀: `tests/test_brief_pipeline.py::TestToHtml`. |
 | `brief_advisor.py` | 지침서 "AI 종합 해설" (안전한 ②: 종합·번역 + 강조점 탐지, **외부 당락 예측 없음**). 결정론 백본 `compute_scoring_focus()`(배점 랭킹, null/shared_with 시맨틱=`brief_validator._check_points_mismatch` 와 동일) + `extract_emphasis_signals()`(강조어휘 문장 + category_weights, 강조문장 dedup) → 이 신호 위에서 `interpret_brief()`(LLM 1콜, comparator 패턴) 가 종합. **모델 = `settings.model_id_advisor`(기본 Opus `claude-opus-4-8`), `max_tokens=16000`** (해설은 지침서당 1콜뿐이라 Opus 비용 부담 작음; 추출·비교·진단은 Sonnet 유지). temperature=0 전송하나 Opus 는 `llm_client` 가 자동 생략. 가드 4: 근거한정·인용필수(페이지 추측 금지)·예측금지·중립탐지. LLM 의 scoring_focus 환각은 결정론 값으로 덮어씀. 연료=`brief_evaluation`+`design_guidelines_grouped`. 회귀: `tests/test_brief_advisor.py`. |
-| `brief_proposal.py` | 지침서 "프로젝트 수주 제안서" (**전략가**: `brief_advisor` 가 사실 triage(해설가)라면 이쪽은 앞을 보는 처방 — 수주 핵심 테마·설계 접근 방향·착수 우선순위·리스크/대응·착수 체크리스트). `propose_project()` (LLM 1콜, Opus `settings.model_id_advisor`, `max_tokens=16000`, comparator 패턴). 결정론 백본 **단일 소스 재사용** — `brief_advisor._build_advisor_payload()` + `compute_scoring_focus()` 그대로(드리프트 차단), 기존 `_insight` 는 `_prior_insight_digest()` 로 토대 요약 주입. **사실/제안 2층 분리**: 사실 주장(지침서가 요구·강조·배점하는 것)엔 근거 인용 강제, 전략·접근은 제안으로 명시. 가드: 사실근거한정·인용형식(페이지 추측 금지)·당선 보장 금지·약하면 약하다고. 배점은 결정론 `scoring_focus` 로 덮어씀(LLM 환각 차단). caveats 에 "실제 심사 결과 보장 못 함" 강제. **설계 계약(사용자 결정 2026-06-25/2026-06-26 갱신):** `executive_summary` 첫 줄 = "발주처가 진짜 원하는 것"(배점 쏠림으로 읽은 parti) · `win_themes` **1~2개로 압축**(좁힘) · `design_directions` **상호 배타 컨셉 5안 고정**(펼침, 변주 아닌 전제가 다른 5개; 이 필드만 triage 예외) · `risks` 2층(명시 실격/제약 + 반복강조→'흔한 감점 함정' 추론, 단정 금지). **패턴 결합(2026-06-26 추가):** `_pattern_signals(facility_type)` 가 `load_pattern()` 으로 동일 시설유형 당선·낙선 경향을 `payload["pattern_context"]` 로 주입. 사실 근거 인용 금지·전략 힌트 전용·N≤2 는 약신호 명시 — 지침서 우선 원칙 유지. **AI 해석 확장층(시퀀스 E Phase 2, 2026-06-29):** `design_directions` 에 `scoring_play`(득점)·`site_rationale`(이 부지라서) + 신규 `program_directions`/`massing_strategy`/`phasing`(각 `{claim, basis}`). 1층 사실 위 추론을 펼치되 **각 claim 에 basis 앵커 강제**(앵커 못 달면 제외), **새 숫자를 사실로 만들기 금지**(가정은 open_questions/caveats). |
-| `brief_proposal_report_generator.py` | `_proposal` → 자체완결 HTML (LLM 0, Report Generation Rule). 화이트 + 건원 RED, 상단 nav. **시퀀스 E Phase 1(2026-06-29, 밀도 업그레이드):** 덱 최상단 **히어로**(위성+지적도 실측 이미지 + 대지 요약 — "상상 아닌 실측" 첫인상, `_hero_html`) + **사업 규모 팩트 밴드**(`feasibility_export` 실추출 수치 대형 숫자, `_facts_band_html` — 첨부물의 날조 분양가/ROI 정반대로 지침서 사실 숫자만). 히어로가 이미지 보이면 대지 섹션은 compact(필드·주의만, b64 중복 0). `to_proposal_html(site_image_b64=, feasibility=)`. brief.py propose 가 주입. **시퀀스 E Phase 2(2026-06-29, AI 해석 확장층):** 상단 **명시적 범례**(근거 칩=사실 vs "AI 해석" 배지=추론, `_legend_html`) + 설계 5안 카드에 득점·이 부지라서 필드 + 신규 해석 섹션 **프로그램 방향·매스 전략·단계 접근**(`_interp_section`, 각 항목 근거 앵커 + "AI 해석" 배지) + 하단 **근거 미확인 수치** 경고 밴드(`_number_flags_html`, `_number_flags` 있을 때만). 섹션: 전략요약 → **사업 규모**(옵션) → **대지·맥락 분석**(옵션, `_site_context` 있을 때만) → 배점 무게중심 카드(결정론 scoring_focus 상위) → 수주 핵심 테마 → 설계 접근 방향 → 착수 우선순위(rank 정렬) → 리스크·대응(severity 정렬) → 착수 체크리스트 → 발주처 확인 → 한계. **대지 섹션:** `to_proposal_html(site_context=, site_image_b64=)` 받으면 전략요약 직후 삽입 — VWorld 위성 썸네일(base64 임베드, 자체완결 유지) + overall_summary + 5개 판독 필드(향/도로/주변/자연/특이) + "위성 AI 판독 기반·현장 확인 필요(추론 포함)" 라벨 고정. brief.py propose 가 `_brief.json._site_context` + `{brief_id}_site.jpg` 로 주입. 데이터 `html.escape`. 빈 섹션 graceful skip. 상단에 "수주 전략 가설 · 당락 예측 아님" 디스클레이머 고정. 회귀: `tests/test_brief_proposal_report.py` (27). |
+| `brief_proposal.py` | 지침서 "프로젝트 수주 제안서" (**전략가**: `brief_advisor`가 사실 triage(해설가)라면 이쪽은 앞을 보는 처방). `propose_project()` (LLM 1콜, Opus `settings.model_id_advisor`, `max_tokens=16000`, comparator 패턴). 결정론 백본은 `brief_advisor`와 단일 소스 재사용. 설계 계약·패턴 결합·AI 해석 확장층 상세는 표 아래 [파일별 상세](#core-services-상세-표에-담기엔-긴-항목) 참조. |
+| `brief_proposal_report_generator.py` | `_proposal` → 자체완결 HTML (LLM 0, Report Generation Rule). 화이트 + 건원 RED, 상단 nav. 히어로·팩트밴드·대지 섹션·AI 해석 확장층 등 상세는 표 아래 [파일별 상세](#core-services-상세-표에-담기엔-긴-항목) 참조. |
 | `proposal_number_check.py` | 제안서 prose **근거 없는 수치 검산** (LLM 0 · 숫자 수정 0, `quant_validator` 의 제안서판). `check_proposal_numbers(proposal, brief_data)` — `_proposal` 의 LLM 작성 서술에 나온 수치를 코퍼스(brief_data 전체 + 결정론 scoring_focus)와 대조해 원천에 없는 숫자만 flag (분양가·ROI 등 발명/일반지식 수치가 사실처럼 새는 것 차단). basis(근거 인용)·메타 제외. **2-pass:** ① **위험 단위 쌍**(억/만원/원/%/세대/가구/호)에 붙은 수치는 `(숫자,단위)` 쌍으로 대조 — 자릿수 무관, 소액 발명(공실률 12%·30억·480세대)까지 포착 ② 그 외 **bare 다자리** 수치는 코퍼스 막대조(한 자리 구조 숫자 1순위·5안 제외). 코퍼스는 over-permissive(false positive 회피), 단 위험 단위만 쌍 정밀도. 배점 비중 'N%'는 scoring_focus weight_pct 로 허용(오탐 방지). `_propose_sync` 가 `result["_number_flags"]` 부착(비치명), 렌더러가 "근거 미확인 수치" 경고 밴드로 노출. 회귀: `tests/test_proposal_number_check.py` (11). |
 | `grade_helpers.py` | 등급 단일 소스. `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade()`. 모든 리포트 generator 가 공통 import. |
 | `utils.py` | PDF rasterizer (`rasterize_pdf` PyMuPDF), SSE helper, `parse_json_response()` 3단계 복구, 공유 dict 헬퍼 `_first()` / `_as_list()`, `user_error_msg()`, `normalize_design_guidelines_grouped()`. |
 | `readme_renderer.py` | 도움말(`/api/readme`) 단일 소스. `README.md` 원문 → 화이트+건원RED 자체완결 HTML. LLM 호출 없음. `markdown`(tables/fenced_code/sane_lists/toc + `slugify_unicode` 로 한글 목차 앵커 동작) 사용, 렌더 실패 시 `<pre>` 폴백. 외부 링크는 새 탭, 로컬 문서 링크(DEVELOPER.md 등 미서빙)는 클라이언트 스크립트가 비활성화. 별도 `README.html` 미유지 → 드리프트 없음. |
+
+### Core Services 상세 (표에 담기엔 긴 항목)
+
+표 셀 하나에 담기엔 너무 긴 두 파일의 전체 내용. 표에는 요약만 남겨두었다.
+
+#### `brief_proposal.py`
+
+지침서 "프로젝트 수주 제안서" (**전략가**: `brief_advisor` 가 사실 triage(해설가)라면 이쪽은 앞을 보는 처방 — 수주 핵심 테마·설계 접근 방향·착수 우선순위·리스크/대응·착수 체크리스트).
+`propose_project()` (LLM 1콜, Opus `settings.model_id_advisor`, `max_tokens=16000`, comparator 패턴).
+결정론 백본 **단일 소스 재사용** — `brief_advisor._build_advisor_payload()` + `compute_scoring_focus()` 그대로(드리프트 차단), 기존 `_insight` 는 `_prior_insight_digest()` 로 토대 요약 주입.
+**사실/제안 2층 분리**: 사실 주장(지침서가 요구·강조·배점하는 것)엔 근거 인용 강제, 전략·접근은 제안으로 명시.
+가드: 사실근거한정·인용형식(페이지 추측 금지)·당선 보장 금지·약하면 약하다고.
+배점은 결정론 `scoring_focus` 로 덮어씀(LLM 환각 차단).
+caveats 에 "실제 심사 결과 보장 못 함" 강제.
+
+**설계 계약(사용자 결정 2026-06-25/2026-06-26 갱신):**
+
+- `executive_summary` 첫 줄 = "발주처가 진짜 원하는 것"(배점 쏠림으로 읽은 parti)
+- `win_themes` **1~2개로 압축**(좁힘)
+- `design_directions` **상호 배타 컨셉 5안 고정**(펼침, 변주 아닌 전제가 다른 5개; 이 필드만 triage 예외)
+- `risks` 2층(명시 실격/제약 + 반복강조→'흔한 감점 함정' 추론, 단정 금지)
+
+**패턴 결합(2026-06-26 추가):** `_pattern_signals(facility_type)` 가 `load_pattern()` 으로 동일 시설유형 당선·낙선 경향을 `payload["pattern_context"]` 로 주입.
+사실 근거 인용 금지·전략 힌트 전용·N≤2 는 약신호 명시 — 지침서 우선 원칙 유지.
+
+**AI 해석 확장층(시퀀스 E Phase 2, 2026-06-29):** `design_directions` 에 `scoring_play`(득점)·`site_rationale`(이 부지라서) + 신규 `program_directions`/`massing_strategy`/`phasing`(각 `{claim, basis}`).
+1층 사실 위 추론을 펼치되 **각 claim 에 basis 앵커 강제**(앵커 못 달면 제외), **새 숫자를 사실로 만들기 금지**(가정은 open_questions/caveats).
+
+#### `brief_proposal_report_generator.py`
+
+`_proposal` → 자체완결 HTML (LLM 0, Report Generation Rule). 화이트 + 건원 RED, 상단 nav.
+
+**시퀀스 E Phase 1(2026-06-29, 밀도 업그레이드):** 덱 최상단 **히어로**(위성+지적도 실측 이미지 + 대지 요약 — "상상 아닌 실측" 첫인상, `_hero_html`) + **사업 규모 팩트 밴드**(`feasibility_export` 실추출 수치 대형 숫자, `_facts_band_html` — 첨부물의 날조 분양가/ROI 정반대로 지침서 사실 숫자만).
+히어로가 이미지 보이면 대지 섹션은 compact(필드·주의만, b64 중복 0). `to_proposal_html(site_image_b64=, feasibility=)`. brief.py propose 가 주입.
+
+**시퀀스 E Phase 2(2026-06-29, AI 해석 확장층):** 상단 **명시적 범례**(근거 칩=사실 vs "AI 해석" 배지=추론, `_legend_html`) + 설계 5안 카드에 득점·이 부지라서 필드 + 신규 해석 섹션 **프로그램 방향·매스 전략·단계 접근**(`_interp_section`, 각 항목 근거 앵커 + "AI 해석" 배지) + 하단 **근거 미확인 수치** 경고 밴드(`_number_flags_html`, `_number_flags` 있을 때만).
+
+섹션 순서: 전략요약 → **사업 규모**(옵션) → **대지·맥락 분석**(옵션, `_site_context` 있을 때만) → 배점 무게중심 카드(결정론 scoring_focus 상위) → 수주 핵심 테마 → 설계 접근 방향 → 착수 우선순위(rank 정렬) → 리스크·대응(severity 정렬) → 착수 체크리스트 → 발주처 확인 → 한계.
+
+**대지 섹션:** `to_proposal_html(site_context=, site_image_b64=)` 받으면 전략요약 직후 삽입 — VWorld 위성 썸네일(base64 임베드, 자체완결 유지) + overall_summary + 5개 판독 필드(향/도로/주변/자연/특이) + "위성 AI 판독 기반·현장 확인 필요(추론 포함)" 라벨 고정.
+brief.py propose 가 `_brief.json._site_context` + `{brief_id}_site.jpg` 로 주입. 데이터 `html.escape`. 빈 섹션 graceful skip.
+
+상단에 "수주 전략 가설 · 당락 예측 아님" 디스클레이머 고정. 회귀: `tests/test_brief_proposal_report.py` (27).
 
 **Report Generation Rule:** `report_generator.py`, `submission_report_generator.py`, `diagnosis_report_generator.py`, `myproject_report_generator.py`, `brief_proposal_report_generator.py` 는 모두 Claude API 호출 금지. 기존 데이터를 HTML 로 렌더링만.
 
@@ -164,9 +207,10 @@ feasibility_export: {
 ```text
 {
   submissions: {company: {axis: {grade, strengths, weaknesses, brief_compliance, notes, grade_justification}}},
-  ranking, blind_ranking,        # ranking = blind_ranking 호환용
+  ranking, blind_ranking,        # ranking = blind_ranking 호환용. gap_analysis 계산용으로만 내부 보존 — 비교 결과 화면엔 미노출(2026-07-01)
   key_differentiators, winner_strengths, loser_weaknesses,
-  gap_analysis: {blind_top1, actual_winners, top1_matches_winner, alignment, notes},
+  concept_comparison: {axis: "<Korean paragraph — 각 회사가 이 축에서 채택한 컨셉·설계방향을 (p.N) 인용과 함께 나란히 서술>"},
+  gap_analysis: {blind_top1, actual_winners, top1_matches_winner, alignment, notes},  # 내부 QA 전용, 화면 미렌더
   rubric_version: "v1"
 }
 ```

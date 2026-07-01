@@ -321,10 +321,7 @@ export default function CrossCompareMode() {
               </a>
             )}
           </div>
-          <ComparisonDashboard
-            comparison={result.comparison}
-            submissionMeta={selected.map(s => ({ company: s.company, result: s.result }))}
-          />
+          <ComparisonDashboard comparison={result.comparison} facilityType={selected[0]?.facility_type} />
         </div>
       )}
     </div>

@@ -327,10 +327,7 @@ export default function AccumulateMode() {
             </div>
           ))}
           {result.comparison && (
-            <ComparisonDashboard
-              comparison={result.comparison}
-              submissionMeta={result.submissions}
-            />
+            <ComparisonDashboard comparison={result.comparison} facilityType={result.facility_type} />
           )}
         </div>
       )}
