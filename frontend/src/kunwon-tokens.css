@@ -3,6 +3,8 @@
    건원건축 통합 디자인 시스템 (라이트 전용)
    ============================================================ */
 
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+
 /* ──────────────────────────────────────────────────────────
    1. 브랜드 색상 (CI 고정값 — 변경 금지)
 ────────────────────────────────────────────────────────── */
@@ -17,52 +19,52 @@
 ────────────────────────────────────────────────────────── */
 :root {
   /* 배경 */
-  --color-bg-page:           #f5f5f5;
+  --color-bg-page:           #fafafa;
   --color-bg-surface:        #ffffff;
-  --color-bg-surface-alt:    #f9fafb;
+  --color-bg-surface-alt:    #f2f2f2;
   --color-bg-input:          #ffffff;
-  --color-bg-input-disabled: #f3f4f6;
+  --color-bg-input-disabled: #f2f2f2;
 
   /* 테두리 */
-  --color-border:             #e2e2e2;
-  --color-border-strong:      #cccccc;
+  --color-border:             #ebebeb;
+  --color-border-strong:      #d4d4d4;
 
   /* 텍스트 */
-  --color-text-primary:   #001623;
-  --color-text-body:      #1f2937;
-  --color-text-muted:     #4b5563;
-  --color-text-faint:     #6b7280;
-  --color-text-subtle:    #9ca3af;
+  --color-text-primary:   #171717;
+  --color-text-body:      #4d4d4d;
+  --color-text-muted:     #6b7280;
+  --color-text-faint:     #8f8f8f;
+  --color-text-subtle:    #a1a1a1;
   --color-text-on-accent: #ffffff;
 
   /* 액센트 (건원 RED) */
   --color-accent:         #e60012;
-  --color-accent-hover:   #c8000f;
+  --color-accent-hover:   #c5000f;
   --color-accent-soft:    #fff0f0;
   --color-accent-border:  #fca5a5;
 
   /* 시그널 — 성공 */
-  --color-success:        #16a34a;
+  --color-success:        #2ea043;
   --color-success-bg:     #dcfce7;
   --color-success-border: #86efac;
 
   /* 시그널 — 경고 */
-  --color-warning:        #ca8a04;
-  --color-warning-bg:     #fef9c3;
-  --color-warning-border: #fde047;
+  --color-warning:        #f5a623;
+  --color-warning-bg:     #ffefcf;
+  --color-warning-border: #fcd34d;
 
   /* 시그널 — 오류 */
-  --color-danger:         #dc2626;
-  --color-danger-bg:      #fee2e2;
+  --color-danger:         #ee0000;
+  --color-danger-bg:      #fff0f0;
   --color-danger-border:  #fca5a5;
 
   /* 시그널 — 정보 */
-  --color-info:           #0891b2;
-  --color-info-bg:        #cffafe;
-  --color-info-border:    #67e8f9;
+  --color-info:           #0070f3;
+  --color-info-bg:        #d3e5ff;
+  --color-info-border:    #93c5fd;
 
   /* 모달 오버레이 */
-  --color-overlay: rgba(0, 22, 35, 0.45);
+  --color-overlay: rgba(0, 0, 0, 0.4);
 
   /* 특수 기능 색상 (등급·상태·UI 악센트) */
   --color-grade-d:    #ea580c;   /* D등급 주황 */
@@ -77,9 +79,8 @@
 ────────────────────────────────────────────────────────── */
 :root {
   /* 폰트 패밀리 */
-  --font-primary: 'Pretendard', 'Apple SD Gothic Neo', -apple-system,
-                  BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono:    'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  --font-primary: 'Geist', 'Inter', Arial, sans-serif;
+  --font-mono:    'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
 
   /* 크기 */
   --font-size-xs:   11px;   /* 배지·태그·각주 */
@@ -128,7 +129,7 @@
   /* 카드 */
   --card-padding:    20px;
   --card-padding-sm: 14px;
-  --card-radius:     10px;
+  --card-radius:     12px;
   --card-radius-sm:  6px;
 
   /* 간격 */
@@ -145,7 +146,7 @@
   --input-border: 1px solid var(--color-border);
 
   /* 배지 */
-  --badge-radius: 20px;
+  --badge-radius: 4px;
   --badge-px:     8px;
   --badge-py:     3px;
 }
@@ -171,9 +172,9 @@
    6. 그림자
 ────────────────────────────────────────────────────────── */
 :root {
-  --shadow-sm: 0 1px 3px rgba(0, 22, 35, 0.08);
-  --shadow-md: 0 4px 12px rgba(0, 22, 35, 0.10);
-  --shadow-lg: 0 8px 24px rgba(0, 22, 35, 0.14);
+  --shadow-sm: 0px 1px 1px rgba(0,0,0,0.04);
+  --shadow-md: 0px 2px 4px rgba(0,0,0,0.06);
+  --shadow-lg: 0px 4px 16px rgba(0,0,0,0.08);
 }
 
 /* ──────────────────────────────────────────────────────────

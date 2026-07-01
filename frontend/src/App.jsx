@@ -10,13 +10,13 @@ import ApiKeyGate from './components/common/ApiKeyGate'
 import { MetaProvider } from './hooks/useMeta'
 
 const TABS = [
-  { id: 'myproject', label: '내 프로젝트 등록', icon: '📁' },
-  { id: 'accumulate', label: '경쟁 공모 등록', icon: '🗄' },
-  { id: 'crosscompare', label: '교차 비교', icon: '⚖' },
-  { id: 'diagnose', label: '제안서 진단', icon: '🔍' },
-  { id: 'settings', label: '설정', icon: '⚙' },
-  { id: 'archive', label: '아카이브 검색', icon: '🔎' },
-  { id: 'brief', label: '지침서 분석', icon: '📋' },
+  { id: 'myproject', label: '내 프로젝트 등록' },
+  { id: 'accumulate', label: '경쟁 공모 등록' },
+  { id: 'crosscompare', label: '교차 비교' },
+  { id: 'diagnose', label: '제안서 진단' },
+  { id: 'settings', label: '설정' },
+  { id: 'archive', label: '아카이브 검색' },
+  { id: 'brief', label: '지침서 분석' },
 ]
 
 const s = {
@@ -25,7 +25,7 @@ const s = {
     background: 'var(--color-bg-surface)', borderBottom: '1px solid var(--color-border)',
     padding: '0 24px', display: 'flex', alignItems: 'center', gap: 24,
   },
-  logo: { fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-bold)', color: 'var(--color-accent)', padding: '16px 0', flexShrink: 0 },
+  logo: { fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-bold)', color: 'var(--color-text-primary)', padding: '16px 0', flexShrink: 0 },
   nav: { display: 'flex', gap: 'var(--gap-xs)', flex: 1 },
   tab: (active) => ({
     padding: '16px 18px', cursor: 'pointer', fontSize: 'var(--font-size-base)', fontWeight: active ? 600 : 400,
@@ -93,6 +93,15 @@ export default function App() {
     <div style={s.app}>
       <header style={s.header}>
         <div style={s.logo}>
+          <span style={{
+            width: 22, height: 22,
+            borderRadius: 6,
+            background: 'var(--color-accent)',
+            display: 'inline-block',
+            marginRight: 8,
+            flexShrink: 0,
+            verticalAlign: 'middle',
+          }} />
           설계공모 경쟁분석
         </div>
         <nav style={s.nav}>
@@ -102,12 +111,22 @@ export default function App() {
               style={s.tab(activeTab === t.id)}
               onClick={() => setActiveTab(t.id)}
             >
-              {t.icon} {t.label}
+              {t.label}
             </button>
           ))}
         </nav>
         <button style={s.helpBtn} onClick={() => setShowReadme(true)}>
-          ? 도움말
+          <span style={{
+            width: 18, height: 18,
+            border: '1px solid var(--color-border)',
+            borderRadius: '50%',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 11,
+            color: 'var(--color-text-faint)',
+          }}>?</span>
+          도움말
         </button>
       </header>
 
