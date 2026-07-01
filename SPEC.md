@@ -1,7 +1,7 @@
 # 설계공모 경쟁분석 시스템 — SPEC.md
 
-> **작성 기준일:** 2026-06-29  
-> 이 문서는 소스 코드 직접 분석(7개 병렬 에이전트)과 CLAUDE.md(ground truth)를 근거로 작성됩니다. 코드에서 직접 확인되지 않은 사항은 **(추정)** 으로 표시합니다.
+> **작성 기준일:** 2026-07-01  
+> 이 문서는 소스 코드 직접 분석과 CLAUDE.md(ground truth)를 근거로 작성됩니다. 코드에서 직접 확인되지 않은 사항은 **(추정)** 으로 표시합니다.
 
 ---
 
@@ -70,6 +70,7 @@ competition_comparison/
 │   │   ├── llm_client.py         # Claude API 래퍼
 │   │   ├── brief_advisor.py      # AI 종합 해설 (Opus)
 │   │   ├── brief_proposal.py     # 수주 제안서 (Opus)
+│   │   ├── reference_cases.py    # 시설유형별 기존 사례 참고자료 (LLM 0)
 │   │   ├── vworld_analyzer.py    # VWorld 위성+지적도
 │   │   ├── quant_validator.py    # 정량 정합성 검증 (LLM 0)
 │   │   ├── feasibility_export.py # _brief.json → feasibility_export 블록
@@ -83,7 +84,7 @@ competition_comparison/
 │   │   ├── myproject_analyzer.py          # MyProject deep analysis (LLM 1콜)
 │   │   ├── myproject_report_generator.py  # deep HTML (LLM 0)
 │   │   └── brief_proposal_report_generator.py  # 제안서 HTML (LLM 0)
-│   └── tests/                    # 382 테스트 (13 모듈 + conftest)
+│   └── tests/                    # 393 테스트 (12 모듈 + conftest)
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx               # 7탭 구조, MetaProvider/ApiKeyGate 래핑
@@ -190,16 +191,17 @@ competition_comparison/
 
 - **역할 ("해설가"):** 사실 triage만. 지침서가 무엇을 요구·강조·배점하는지 종합. 당락 예측, 전략 처방, 외부 지식 주입 금지.
 - **결정론 백본 `compute_scoring_focus()`:** LLM 0. 배점이 가장 많은 페이지(`max(key=_eval_pts)`)의 `evaluation_categories`에서 각 카테고리 점수·weight_pct·rank 산출. 분모는 `total_points` 또는 합산값. LLM 출력의 `scoring_focus`는 이 결정론 값으로 **항상 덮어씀** (환각 차단).
+- **참고 사례 (`reference_cases.collect_reference_context()`):** 있을 때만, 동일 시설유형 기존 사례를 배경 참고로 payload 에 추가. `reading_guide` 배경 참고로만 쓰이고 `key_emphases`/`must_not_miss`/`hidden_constraints`/`scoring_focus` 판단 근거로는 사용 금지 (가드). 결과에 `_reference_cases` 로 부착되어 렌더러의 "참고 사례" 섹션에 노출.
 - **LLM 호출:** `interpret_brief()`, `claude-opus-4-8` (settings.model_id_advisor), `max_tokens=16000`, temperature=0 (Opus는 `llm_client._NO_SAMPLING_PREFIXES`에 의해 자동 생략).
 - **가드 4개:** 근거 한정, 인용 필수 (페이지 추측 금지), 예측 금지, 중립 탐지만.
-- **산출물 `_insight`:** `_brief.json` 내 임베드 (별도 파일 아님). `brief_checklist_exporter`의 HTML/MD/xlsx 3종 모두 `_insight` 렌더링 (graceful skip).
+- **산출물 `_insight`:** `_brief.json` 내 임베드 (별도 파일 아님). `brief_checklist_exporter`의 HTML/MD/xlsx 3종 모두 `_insight` 렌더링 (graceful skip; "참고 사례" 서브섹션은 HTML 전용).
 
 #### 3.4.2 수주 제안서 (brief_proposal)
 
 `POST /api/brief/{brief_id}/propose` 호출.
 
 - **역할 ("전략가"):** 처방형 전략. `brief_advisor`(해설가)와 별개 산출물.
-- **결정론 백본 재사용:** `brief_advisor._build_advisor_payload()` + `compute_scoring_focus()` 그대로 import (드리프트 차단). 기존 `_insight`는 `_prior_insight_digest()`로 요약 주입. `_pattern_signals(facility_type)`로 동일 시설유형 당선/낙선 경향을 `payload["pattern_context"]`에 주입.
+- **결정론 백본 재사용:** `brief_advisor._build_advisor_payload()` + `compute_scoring_focus()` 그대로 import (드리프트 차단) — `reference_cases`(시설유형 기존 사례)도 이 payload 를 통해 공유. 기존 `_insight`는 `_prior_insight_digest()`로 요약 주입. `_pattern_signals(facility_type)`로 동일 시설유형 당선/낙선 경향을 `payload["pattern_context"]`에 주입.
 - **사실/제안 2층 분리:** 사실 주장(지침서가 요구하는 것)에는 basis 인용 강제, 전략·접근은 제안 명시.
 - **고정 설계 계약:** `win_themes` 1~2개로 압축, `design_directions` 상호 배타 컨셉 5안 고정 (이 필드만 triage 예외), `risks` 2층 (명시 실격 + 반복 강조 → '흔한 감점 함정' 추론).
 - **AI 해석 확장층 (Phase 2):** `program_directions` / `massing_strategy` / `phasing` 신규 필드 (각 `{claim, basis}` 구조, basis 앵커 없으면 제외).
@@ -318,9 +320,12 @@ Brief 결과에는 미부착. `error` 필드는 `pattern_builder._build_quant_st
   "hidden_constraints": [{"issue": "", "basis": "", "note": ""}],
   "reading_guide": [],
   "data_confidence": "high|medium|low",
-  "caveats": []
+  "caveats": [],
+  "_reference_cases": {}
 }
 ```
+
+`_reference_cases`는 `reference_cases.collect_reference_context()` 원본 (없으면 `{}`) — 동일 시설유형 다른 공모 참고자료, 이 지침서 사실 판단 근거로는 미사용 (렌더러 "참고 사례" 섹션용).
 
 **`_proposal` (schema_version 1, `_brief.json` 내):**
 ```json
@@ -338,9 +343,12 @@ Brief 결과에는 미부착. `error` 필드는 `pattern_builder._build_quant_st
   "open_questions": [],
   "scoring_focus": [],
   "caveats": [],
-  "_number_flags": [{"value": "", "field": "", "context": ""}]
+  "_number_flags": [{"value": "", "field": "", "context": ""}],
+  "_reference_cases": {}
 }
 ```
+
+`_reference_cases`는 `_insight`와 동일하게 `reference_cases.collect_reference_context()` 원본 (없으면 `{}`) — `brief_proposal_report_generator`가 있을 때만 "참고 사례" 섹션 렌더.
 
 ---
 
@@ -469,7 +477,7 @@ Brief 결과에는 미부착. `error` 필드는 `pattern_builder._build_quant_st
 
 ### 6.3 테스트 커버리지
 
-**백엔드 테스트 스위트:** `backend/tests/` (13 모듈 + conftest), 총 382건 (pytest 확인).
+**백엔드 테스트 스위트:** `backend/tests/` (12 모듈 + conftest), 총 393건 (pytest 확인, 2026-07-01).
 
 | 테스트 파일 | 케이스 수 | 주요 커버리지 |
 |------------|----------|-------------|
@@ -481,11 +489,12 @@ Brief 결과에는 미부착. `error` 필드는 `pattern_builder._build_quant_st
 | `test_normalize_design_grouped.py` | 13 | design_guidelines_grouped 정규화 |
 | `test_proposal_number_check.py` | 11 | 수치 검산 |
 | `test_vworld_analyzer.py` | 8 | 기하/bbox 수학 (네트워크 0) |
+| `test_reference_cases.py` | N/A | reference_cases 참고 사례 조회 |
 | `test_brief_advisor.py` | N/A | brief_advisor |
 | `test_brief_pipeline.py` | N/A | TestToHtml 포함 |
 | `test_tier0_routing.py` | N/A | Tier 0 라우팅 |
 
-**별도 실행 (repo-root):** `tests/test_docx_extractor.py` (10건, backend 382에 미포함). 실행: `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`.
+**별도 실행 (repo-root):** `tests/test_docx_extractor.py` (10건, backend 393에 미포함). 실행: `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`.
 
 **알려진 사전 실패:** `test_force_cut_31_paragraphs` (docx_loader F3 force-cut 미발동, brief 전용, 미해결).
 
@@ -603,8 +612,7 @@ PyWebView 통합: `target='_blank'` 링크 클릭 시 `window.pywebview.api.open
 
 ## 9. 미결·보류 사항
 
-**당면 TODO (2026-06-29 기준):**
-- 제안서 히어로 재설계: 시퀀스 E Phase 1의 히어로(위성+지적도 표현) 및 이미지 해석 로직에 대한 사용자 불만족. Phase 2 완료 후 재설계 예정. 후보: 도식화/주석 오버레이, 판독 텍스트 카드화, `_SITE_ANALYSIS_PROMPT` 개선.
+**당면 TODO (2026-07-01 기준):** VWorld 실동작 확인·제안서 대지분석 섹션·지적도 오버레이는 완료(시퀀스 F). 남은 항목은 시퀀스 E Phase 3 하나.
 
 **보류 시퀀스:**
 
@@ -613,8 +621,8 @@ PyWebView 통합: `target='_blank'` 링크 클릭 시 `window.pywebview.api.open
 | B — 추출 정확도 평가 하네스 | `tools/eval/` B-2까지 구현. 다음: B-3 CI 통합. | 제안서 PDF 5건 + ground_truth JSON 미확보 |
 | C — 멀티파일 지침서 업로드 | 1파일 안정화 완료. 접근 A(multi-file 동시 분석) 권장. | 충돌 우선순위 룰(지침서 vs 과업지시서 중복 시 우선순위) 사용자 결정 필요 |
 | D — 오프라인/제로-API 지침서 분석 | Claude Code가 classify/extract 핸드오프 수행. DOCX/HWP/HWPX 텍스트 기반이라 최적. | 배포 앱 불가(Cloud Run은 API만 가능), PDF는 vision 필요, 소량 수동 전용 |
-| E — 수주 제안서 비주얼 덱 출력 | PPT형 스크롤 덱으로 전환(사용자 확정). 디자인 계약: 단일 캔버스, 도식·아이콘 치환, 5안 매트릭스+상세카드. | 외부 피드백 후 추가 수정 예정 |
-| F-③ — SketchUp MCP 3D 매스 | 시퀀스 F 대지분석 통합의 3D 매스 시각화. | 사용자가 자료 줄 때 재개 |
+| E Phase 3 — 수주 제안서 PPT형 스크롤 덱 재설계 | Phase 1(히어로+팩트밴드)·Phase 2(AI 해석 확장층·범례·수치 검산 밴드) 완료. Phase 3: 단일 캔버스·SVG 도식·5안 매트릭스+상세카드로 `to_proposal_html()` 전면 재작성. | 디자인 계약 확정, 착수 전 |
+| F-③ — SketchUp MCP 3D 매스 | 시퀀스 F 대지분석 통합의 3D 매스 시각화. 위성+지적도 하이브리드 이미지는 이미 완료. | 사용자가 자료 줄 때 재개 |
 
 **시스템 제약 미해결:**
 - `test_force_cut_31_paragraphs`: docx_loader F3 force-cut 미발동 (brief 전용, 원인 미규명).
