@@ -481,12 +481,15 @@ async def analyze_brief(
                         "message": _user_error_msg(ie), "_timestamp": ts,
                     })
 
-            # ── 4.7 대지·맥락 분석 (자동, VWorld 키 있을 때만) ──────────────
+            # ── 4.7 대지·맥락 분석 (VWorld vision + 터읽기 실측, 자동) ──────
+            #   (a) vision = 형상·접도·조망 등 위성/지적도 시각 판독 (기존, VWorld 키 있을 때)
+            #   (b) measured = 터읽기 실측(인구지수·수급진단·재해·설계드라이버) — 형제앱, 키 무관·graceful
             brief_data["_site_context"] = None
-            if settings.has_vworld_key():
-                fe_sites = (brief_data.get("feasibility_export") or {}).get("sites") or []
-                site_address = next((s.get("address") for s in fe_sites if s.get("address")), None)
-                if site_address:
+            fe_sites = (brief_data.get("feasibility_export") or {}).get("sites") or []
+            site_address = next((s.get("address") for s in fe_sites if s.get("address")), None)
+            if site_address:
+                sc: dict = {}
+                if settings.has_vworld_key():
                     yield sse({
                         "type": "stage", "stage": "site_analysis",
                         "msg": f"대지·맥락 분석 중 ({site_address})", "_timestamp": ts,
@@ -499,7 +502,7 @@ async def analyze_brief(
                             vworld_domain=settings.vworld_domain,
                             save_image_path=briefs_dir / f"{brief_id}_site.jpg",
                         )
-                        brief_data["_site_context"] = {k: v for k, v in site_result.items() if k != "image_jpeg_b64"}
+                        sc.update({k: v for k, v in site_result.items() if k != "image_jpeg_b64"})
                         yield sse({"type": "done", "step": "site_analysis", "_timestamp": ts})
                     except Exception as se:
                         logger.warning("대지 분석 자동 실행 실패 (비치명): %s", se)
@@ -507,6 +510,26 @@ async def analyze_brief(
                             "type": "site_analysis_error",
                             "message": str(se)[:300], "_timestamp": ts,
                         })
+                # 터읽기 실측 대지 맥락 (형제앱 /board — 상상 아닌 실측)
+                try:
+                    from services.teoilgi_client import fetch_board_context, use_type_for
+                    yield sse({
+                        "type": "stage", "stage": "measured_context",
+                        "msg": f"실측 대지 맥락 조회 중 ({site_address})", "_timestamp": ts,
+                    })
+                    measured = await fetch_board_context(site_address, use_type=use_type_for(facility_type))
+                    if measured:
+                        sc["measured"] = measured
+                        yield sse({"type": "done", "step": "measured_context", "_timestamp": ts})
+                    else:
+                        yield sse({
+                            "type": "measured_context_error",
+                            "message": "터읽기 실측 맥락 미확보 (형제앱 응답 없음) — vision 만으로 진행",
+                            "_timestamp": ts,
+                        })
+                except Exception as me:
+                    logger.warning("터읽기 실측 맥락 실패 (비치명): %s", me)
+                brief_data["_site_context"] = sc or None
 
             # ── 5. 저장 — JSON · MD · xlsx · html ──────────────────────────
             yield sse({

@@ -87,6 +87,14 @@ _PROPOSAL_INSTRUCTION = (
     "  규칙: (a) 대지 맥락을 설계 방향에 연결할 때 반드시 이 데이터를 우선 참고.\n"
     "  (b) design_directions 5안에 대지 형상·접도·조망 조건을 직접 반영 (이 부지라서 가능한 안).\n"
     "  (c) 불확실(confidence=low)이면 '위성 분석 기준, 현장 확인 필요' 단서를 붙여라.\n"
+    "  site_context.measured (있으면): 터읽기 형제앱의 **실측** 대지 맥락 — 하위 키:\n"
+    "    region(기준 지역) / key_facts(인구통계: 각 index=전국100 지수·index_band 상회|비슷|하회·proximity 근접도·source 출처) /\n"
+    "    design_drivers(★지배 설계 드라이버 2~3개: name·response(설계 검토신호)·strength·evidence(근거·근접도)) /\n"
+    "    cross_implications(도메인 횡단 참고 시사점) / hazards(홍수·산사태 영향범위·폭염 이력) / coverage.\n"
+    "  measured 규칙: (1) **정량·사실은 measured 를 우선**(출처 있는 실측) — vision(analysis)은 형상·접도·조망 등 시각 판독 보완용.\n"
+    "    (2) measured.design_drivers 를 design_directions·site_rationale 에 직접 연결하라 (이 대지가 설계에 요구하는 것).\n"
+    "    (3) basis 에 measured.key_facts.<항목> / measured.design_drivers.<이름> / measured.hazards 를 근거로 표기 가능.\n"
+    "    (4) measured 수치는 인용 OK(실측·출처 있음), 단 measured 에 **없는** 새 숫자는 여전히 금지. proximity 가 '시군구'면 '구 평균(대지 고유값 아님)'임을 밝혀라.\n"
     "\n"
     "[출력 JSON — 정확히 이 키만, 다른 키 추가 금지]\n"
     "{\n"
@@ -201,6 +209,46 @@ def _prior_insight_digest(brief_data: dict) -> dict:
     }
 
 
+def _measured_digest(brief) -> dict | None:
+    """터읽기 board_brief → 프롬프트용 압축 다이제스트 (실측 사실·설계 드라이버만).
+
+    synthesize=false 로 받았으므로 ②AI판단은 애초에 없음(경계). 원시 seed·notes 도 제외해 경량화.
+    """
+    if not isinstance(brief, dict):
+        return None
+    drivers = [
+        {"rank": d.get("rank"), "name": d.get("name"), "response": d.get("response"),
+         "strength": d.get("strength"),
+         "evidence": [{"key": e.get("key"), "detail": e.get("detail"), "proximity": e.get("proximity")}
+                      for e in (d.get("evidence") or [])]}
+        for d in (brief.get("design_drivers") or [])
+    ]
+    key_facts = [
+        {"item": f.get("item"), "value": f.get("value"), "unit": f.get("unit"),
+         "national_avg": f.get("national_avg"), "index": f.get("index"),
+         "index_band": f.get("index_band"), "proximity": f.get("proximity"),
+         "source": f.get("source"), "year": f.get("year")}
+        for f in (brief.get("key_facts") or [])
+    ]
+    return {
+        "source": "터읽기(arch-site-context) /board — 실측 board_brief",
+        "region": brief.get("region"),
+        "use_type": brief.get("use_type"),
+        "radius_m": brief.get("radius"),
+        "coverage": brief.get("coverage"),
+        "design_drivers": drivers,
+        "cross_implications": [
+            {"name": c.get("name"), "text": c.get("text"), "domains": c.get("domains")}
+            for c in (brief.get("cross_implications") or [])
+        ],
+        "key_facts": key_facts,
+        "hazards": brief.get("hazards"),
+        "land_price": brief.get("land_price"),
+        "building": brief.get("building"),
+        "base_date": brief.get("base_date"),
+    }
+
+
 def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     # advisor 와 동일한 결정론 백본 신호 — 단일 소스 재사용 (드리프트 차단). reference_cases
     # (시설유형 기존 사례 참고자료) 도 _build_advisor_payload 가 이미 채워서 넘겨준다.
@@ -208,16 +256,21 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     payload["prior_insight"] = _prior_insight_digest(brief_data)
     ref_ctx = payload.get("reference_cases", {})
 
-    # VWorld 대지 맥락 (사전에 site-analyze 엔드포인트가 실행됐을 때만, 없으면 skip)
+    # 대지 맥락 — vision(VWorld 위성·지적도 판독) + measured(터읽기 실측 board_brief). 둘 중 하나만 있어도 실음.
     sc = brief_data.get("_site_context")
-    if sc and isinstance(sc, dict) and sc.get("analysis"):
-        payload["site_context"] = {
+    if sc and isinstance(sc, dict) and (sc.get("analysis") or sc.get("measured")):
+        site_ctx = {
             "matched_address": sc.get("matched_address", ""),
             "lat":             sc.get("lat"),
             "lng":             sc.get("lng"),
             "radius_m":        sc.get("radius_m", 500),
-            "analysis":        sc["analysis"],
         }
+        if sc.get("analysis"):
+            site_ctx["analysis"] = sc["analysis"]
+        measured = _measured_digest(sc.get("measured"))
+        if measured:
+            site_ctx["measured"] = measured
+        payload["site_context"] = site_ctx
 
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)
     raw = call_messages(
