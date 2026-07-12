@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, listBriefs, analyzeSite, getBriefSiteImageUrl, getBriefSiteContext } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, buildBriefPlaybook, listBriefs, analyzeSite, getBriefSiteImageUrl, getBriefSiteContext } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -118,6 +118,8 @@ export default function BriefMode() {
   const [regenErr, setRegenErr] = useState('')
   const [proposing, setProposing] = useState(false)           // 수주 제안서 생성 진행 중
   const [proposeErr, setProposeErr] = useState('')
+  const [playbooking, setPlaybooking] = useState(false)       // 경험 기반 처방 생성 진행 중
+  const [playbookErr, setPlaybookErr] = useState('')
   const [siteAddr, setSiteAddr] = useState('')                 // 대지 분석 주소 입력
   const [siteAnalyzing, setSiteAnalyzing] = useState(false)
   const [siteResult, setSiteResult] = useState(null)          // 대지 분석 결과
@@ -300,6 +302,29 @@ export default function BriefMode() {
       setProposeErr(e.message || '수주 제안서 생성 실패')
     }
     setProposing(false)
+  }
+
+  // 경험 기반 처방 생성 (과거 축적 데이터 → 이 지침서 적용). 과거 데이터 없으면 안내.
+  const handlePlaybook = async (briefId) => {
+    const id = briefId || result?.brief_id
+    if (!id || playbooking) return
+    setPlaybooking(true)
+    setPlaybookErr('')
+    try {
+      const res = await buildBriefPlaybook(id)
+      if (!res.has_playbook) {
+        setPlaybookErr(res.reason || '이 시설유형에 축적된 과거 데이터가 없어 처방을 만들 수 없습니다.')
+      } else {
+        if (result?.brief_id === id) {
+          setResult(prev => ({ ...prev, has_playbook: true }))
+        }
+        loadHistory()
+        handleHtml(res.playbook_filename || `${id}_playbook.html`)
+      }
+    } catch (e) {
+      setPlaybookErr(e.message || '경험 기반 처방 생성 실패')
+    }
+    setPlaybooking(false)
   }
 
   return (
@@ -621,6 +646,39 @@ export default function BriefMode() {
             </div>
           </div>
 
+          <div style={{
+            border: '1px solid var(--color-border)', borderRadius: 10, padding: '16px 18px',
+            marginBottom: 24, background: 'var(--color-bg-surface-alt)',
+          }}>
+            <div style={{ fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-text-body)', marginBottom: 4 }}>
+              🧭 경험 기반 처방
+            </div>
+            <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              같은 시설유형의 우리 회사 과거 당선·낙선 데이터를 읽어, 이 지침서에 어떻게 적용할지 처방합니다
+              (과거 교훈 × 이 지침서 · 축적 데이터 필요 · 당락 예측 아님 · API 토큰 사용).
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                style={{ ...s.dlBtn(true), ...(playbooking ? s.btnDisabled : {}) }}
+                onClick={() => handlePlaybook()}
+                disabled={playbooking}
+              >
+                {playbooking ? '처방 생성 중...' : (result.has_playbook ? '🔄 처방 다시 생성' : '✦ 처방 생성')}
+              </button>
+              {result.has_playbook && (
+                <button
+                  style={s.dlBtn(false)}
+                  onClick={() => handleHtml(`${result.brief_id}_playbook.html`)}
+                >
+                  📄 처방 열기
+                </button>
+              )}
+              {playbookErr && (
+                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{playbookErr}</span>
+              )}
+            </div>
+          </div>
+
           <div style={s.sectionTitle}>검증 결과</div>
 
           <div style={s.summaryRow}>
@@ -686,6 +744,7 @@ export default function BriefMode() {
                     {item.has_proposal && (
                       <span style={{ ...s.insightBadge, background: 'var(--color-accent-bg, #fdecee)', borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}>제안서</span>
                     )}
+                    {item.has_playbook && <span style={s.insightBadge}>경험 처방</span>}
                     {(['high', 'medium', 'low']).map(sev =>
                       sv[sev] ? (
                         <span key={sev} style={s.badge(sev)}>{SEV[sev].label} {sv[sev]}</span>
@@ -710,6 +769,19 @@ export default function BriefMode() {
                       disabled={proposing}
                     >
                       {proposing ? '생성 중...' : '제안서 생성'}
+                    </button>
+                  )}
+                  {item.has_playbook ? (
+                    <button style={s.historyBtn(false)} onClick={() => handleHtml(`${item.brief_id}_playbook.html`)}>
+                      처방 열기
+                    </button>
+                  ) : (
+                    <button
+                      style={{ ...s.historyBtn(false), ...(playbooking ? s.btnDisabled : {}) }}
+                      onClick={() => handlePlaybook(item.brief_id)}
+                      disabled={playbooking}
+                    >
+                      {playbooking ? '생성 중...' : '경험 처방'}
                     </button>
                   )}
                   {item.has_xlsx && (

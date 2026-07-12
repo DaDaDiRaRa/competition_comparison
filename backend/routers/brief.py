@@ -35,6 +35,9 @@ from services.brief_checklist_exporter import to_markdown, to_xlsx, to_html
 from services.brief_advisor import interpret_brief
 from services.brief_proposal import propose_project
 from services.brief_proposal_report_generator import to_proposal_html
+from services.brief_playbook import build_playbook
+from services.brief_playbook_report_generator import to_playbook_html
+from services.reference_cases import collect_reference_context
 from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count, normalize_design_guidelines_grouped
 
 logger = logging.getLogger(__name__)
@@ -178,6 +181,7 @@ def list_briefs():
                 "has_html":           (briefs_dir / f"{p.stem}.html").exists(),
                 "has_insight":        bool(meta.get("_insight")),
                 "has_proposal":       (briefs_dir / f"{p.stem}_proposal.html").exists(),
+                "has_playbook":       (briefs_dir / f"{p.stem}_playbook.html").exists(),
                 "has_site_context":   bool(meta.get("_site_context")),
                 "validation_summary": (meta.get("validation") or {}).get("summary", {}),
             })
@@ -721,6 +725,87 @@ async def propose_brief(brief_id: str):
         "has_proposal":      True,
         "data_confidence":   proposal.get("data_confidence"),
         "proposal_filename": proposal_filename,
+    }
+
+
+# ── 경험 기반 처방 생성 (과거 축적 데이터 → 이 지침서 적용, 추출 재처리 없음) ──
+
+@router.post("/{brief_id}/playbook")
+async def build_brief_playbook(brief_id: str):
+    """저장된 지침서로 '경험 기반 처방'을 생성 (최대 LLM 1콜, PDF 재처리 없음).
+
+    같은 시설유형의 과거 당선·낙선 축적 데이터(reference_cases)를 읽어, 이 지침서에
+    어떻게 적용할지 처방한다. interpret(해설가)·propose(전략가)와 별개인 세 번째 산출물.
+
+    과거 데이터가 없으면 LLM 호출 없이 `has_playbook=False` 를 반환한다 (무료 게이트).
+    있으면 `_brief.json` 의 `_playbook` 갱신 + 별도 `{brief_id}_playbook.html` 렌더.
+    """
+    if not settings.has_api_key():
+        raise HTTPException(401, "API 키가 설정되지 않았습니다. 설정 탭에서 입력해주세요.")
+
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+
+    briefs_dir = settings.db_path / "_briefs"
+    json_path  = briefs_dir / f"{safe_id}.json"
+    if not json_path.exists():
+        raise HTTPException(404, "지침서 분석을 찾을 수 없습니다.")
+
+    try:
+        brief_data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"지침서 JSON 로드 실패: {type(e).__name__}")
+
+    bm            = brief_data.get("_brief_meta") or {}
+    facility_type = bm.get("facility_type", "")
+    brief_name    = bm.get("brief_name", "") or safe_id
+
+    # 무료 게이트 — 과거 축적 데이터 없으면 LLM 호출 전에 중단 (API 안 쓰는 단계 우선).
+    if not collect_reference_context(facility_type):
+        return {
+            "brief_id":     safe_id,
+            "has_playbook": False,
+            "reason": (
+                "이 시설유형에 축적된 과거 당선·낙선 데이터가 없어 경험 기반 처방을 만들 수 "
+                "없습니다. '경쟁 공모 등록' 탭에서 같은 시설유형의 과거 공모(당락 라벨 포함)를 "
+                "등록하고 비교분석을 실행해 데이터를 쌓으면 사용할 수 있습니다."
+            ),
+        }
+
+    try:
+        playbook = await build_playbook(brief_data, facility_type)
+    except Exception as e:
+        logger.error("playbook error: %s", traceback.format_exc())
+        raise HTTPException(500, f"경험 기반 처방 생성 실패: {_user_error_msg(e)}")
+
+    # build_playbook 내부 게이트가 sentinel 을 반환한 경우 (경합/캐시 등) — 저장 안 함.
+    if not playbook.get("has_accumulated_data", False):
+        return {
+            "brief_id":     safe_id,
+            "has_playbook": False,
+            "reason":       (playbook.get("caveats") or ["축적된 과거 데이터가 없습니다."])[0],
+        }
+
+    playbook["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    brief_data["_playbook"] = playbook
+    playbook_filename = f"{safe_id}_playbook.html"
+
+    try:
+        _atomic_write(json_path, brief_data)
+        _sync_write(
+            briefs_dir / playbook_filename,
+            to_playbook_html(playbook, brief_name, facility_label(facility_type)),
+        )
+    except Exception as e:
+        logger.error("playbook save error: %s", traceback.format_exc())
+        raise HTTPException(500, f"저장 실패: {type(e).__name__}")
+
+    return {
+        "brief_id":          safe_id,
+        "has_playbook":      True,
+        "data_confidence":   playbook.get("data_confidence"),
+        "playbook_filename": playbook_filename,
     }
 
 

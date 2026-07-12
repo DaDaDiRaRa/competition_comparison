@@ -14,7 +14,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 4. **`routers/settings.py`** — `app_settings.json` 관리. `GET /settings/meta` 가 프론트 `useMeta()` 단일 소스.
 5. **`routers/upload.py`** — 청크 업로드 (Cloud Run 32MB 한도 우회). 25MB 청크 / 600MB 상한 / `/tmp/cc_uploads/` 누적.
 6. **`routers/archive.py`** — FTS5 in-memory SQLite 자연어 검색.
-7. **`routers/brief.py`** — 지침서 단독 분석 (PDF + DOCX + HWP/HWPX). 분류 → 추출 → 요구사항 → 검증 → (옵션) AI 종합 해설 → JSON/MD/xlsx/HTML 저장. HTML 은 `/exports/{name}.html` 에서 인라인(text/html, 보기용), md/xlsx 는 attachment. `analyze` 폼 `include_insight`(기본 ON) 가 같은 run 에서 종합 해설까지 한 방. `POST /{brief_id}/interpret` 는 해설만 재생성(추출 재처리 0, 분석 시 껐거나 프롬프트 개선 후 재적용용) 후 **파생 3종(html·md·xlsx) 모두 재렌더** — 셋 다 새 `_insight` 반영. `POST /{brief_id}/propose` 는 **프로젝트 수주 제안서** 생성(추출 재처리 0, LLM 1콜) → `_proposal` 임베드 + 별도 `{brief_id}_proposal.html` 렌더(`/exports` 인라인 서빙, `has_proposal` 노출). `interpret`=사실 triage(해설가), `propose`=수주 전략 처방(전략가) — 별개 산출물.
+7. **`routers/brief.py`** — 지침서 단독 분석 (PDF + DOCX + HWP/HWPX). 분류 → 추출 → 요구사항 → 검증 → (옵션) AI 종합 해설 → JSON/MD/xlsx/HTML 저장. HTML 은 `/exports/{name}.html` 에서 인라인(text/html, 보기용), md/xlsx 는 attachment. `analyze` 폼 `include_insight`(기본 ON) 가 같은 run 에서 종합 해설까지 한 방. `POST /{brief_id}/interpret` 는 해설만 재생성(추출 재처리 0, 분석 시 껐거나 프롬프트 개선 후 재적용용) 후 **파생 3종(html·md·xlsx) 모두 재렌더** — 셋 다 새 `_insight` 반영. `POST /{brief_id}/propose` 는 **프로젝트 수주 제안서** 생성(추출 재처리 0, LLM 1콜) → `_proposal` 임베드 + 별도 `{brief_id}_proposal.html` 렌더(`/exports` 인라인 서빙, `has_proposal` 노출). `POST /{brief_id}/playbook` 는 **경험 기반 처방** 생성(추출 재처리 0, LLM 최대 1콜) → `_playbook` 임베드 + 별도 `{brief_id}_playbook.html` 렌더(`has_playbook` 노출) — 같은 시설유형 과거 축적 데이터(`reference_cases`) 없으면 **LLM 미호출·`has_playbook:false`+`reason`** 반환(무료 게이트). `interpret`=사실 triage(해설가), `propose`=수주 전략 처방(전략가), `playbook`=과거 경험 기반 처방(과거 당락→이 지침서 적용) — **셋 다 별개 산출물**. 멀티파일: `analyze` 는 지침서+과업지시서 등 **복수 파일 동시 분석** 지원(`brief_pdf_refs` JSON 배열, `_merge_multi_brief_data` first_wins — 충돌해소는 업로드 순서뿐, 도메인 규칙 없음).
 
 **MyProject 심층 분석:** 별도 라우터 없음. `accumulate.py` 가 단일 등록 시 `myproject_analyzer.deep_analyze()` 호출 → `_deep.json` + `_deep.html`. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report` 로 서빙.
 
@@ -44,6 +44,8 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `brief_proposal.py` | 지침서 "프로젝트 수주 제안서" (**전략가**: `brief_advisor`가 사실 triage(해설가)라면 이쪽은 앞을 보는 처방). `propose_project()` (LLM 1콜, Opus `settings.model_id_advisor`, `max_tokens=16000`, comparator 패턴). 결정론 백본은 `brief_advisor._build_advisor_payload()`와 단일 소스 재사용 — `reference_cases`(시설유형 기존 사례 참고자료) 도 이 payload 를 통해 공유. 설계 계약·패턴 결합·AI 해석 확장층 상세는 표 아래 [파일별 상세](#core-services-상세-표에-담기엔-긴-항목) 참조. |
 | `reference_cases.py` | 시설유형별 "기존 사례 참고자료" 결정론 조회(LLM 0) — `brief_advisor`·`brief_proposal` 공유 단일 소스. `collect_reference_context(facility_type)` 가 세 서브키 반환: `pattern_summary`(기존 `pattern_builder` 집계 통계 이관), `case_excerpts`(당선 제출물 `concept.main_strategy` 실제 서술, 최근순 최대 3건, `get_winning_submissions`), `concept_comparison_excerpts`(과거 비교분석 `concept_comparison` 축별 서술, 최대 4건, `load_comparison`). 셋 다 비면 전체 `{}` 반환. 실패해도 `{}` (본 파이프라인 비차단). 소비 측이 반드시 "다른 공모 자료 — 이 지침서 사실 근거 아님" 가드레일을 프롬프트에 명시(브리프 자체 `basis` 에 섞이지 않게). 결과 리포트에 "참고 사례" 섹션으로 노출(2026-07-01 사용자 결정) — `brief_proposal_report_generator._reference_cases_html()` / `brief_checklist_exporter._reference_cases_section_html()`. 회귀: `tests/test_reference_cases.py`. |
 | `brief_proposal_report_generator.py` | `_proposal` → 자체완결 HTML (LLM 0, Report Generation Rule). 화이트 + 건원 RED, 상단 nav. 히어로·팩트밴드·대지 섹션·AI 해석 확장층·"참고 사례"(`_reference_cases_html`, `_proposal._reference_cases` 있을 때만) 등 상세는 표 아래 [파일별 상세](#core-services-상세-표에-담기엔-긴-항목) 참조. |
+| `brief_playbook.py` | 지침서 "경험 기반 처방"(experiential playbook, **세 번째 산출물** — `interpret`=해설가, `propose`=전략가에 이은 것). `build_playbook()` (LLM 최대 1콜, Opus `settings.model_id_advisor`, `max_tokens=16000`, comparator 패턴). **advisor/propose 와 정반대**: 저 둘은 `reference_cases`(같은 시설유형 과거 당선/낙선 축적)를 *배경 참고로만* 쓰고 이 지침서 판단 근거로는 못 쓰게 가드가 걸려 있음 — playbook 은 그 관계를 **뒤집어** reference_cases 를 *주연료*로 삼아 "과거엔 이래서 됐고/떨어졌으니 이 지침서에선 이걸 이렇게" 능동 처방. `_build_advisor_payload` 재사용. **무료 게이트: `collect_reference_context` 가 비면 LLM 미호출 sentinel(`has_accumulated_data=False`)** (연료 없는데 과금 방지). **오염 방지 — 교차 앵커**: `applications` 각 항목은 과거 교훈(`rooted_in`)+이 지침서 실제 사실(`basis`, p.N/항목명) **둘 다** 앵커, 못 달면 제외. 과거 공모 수치를 이 지침서 사실로 옮기기 금지·당락 예측 금지. 결정론 덮어씀: `data_basis`(표본 규모)·`scoring_focus`. 전제조건=DB에 같은 시설유형 과거 데이터 축적. 회귀: `tests/test_brief_playbook.py` (7). |
+| `brief_playbook_report_generator.py` | `_playbook` → 자체완결 HTML (LLM 0, Report Generation Rule). 화이트 + 건원 RED. 2층 시각 분리: **과거·사실**(당선 교훈·낙선 함정·당락 축, 파란 `source` 칩=과거 공모명) vs **AI 해석**(`applications`, "AI 해석" 배지 + `rooted_in` 과거 앵커 + `basis` 이 지침서 앵커 동시 노출). 상단 표본 근거 밴드(win/lose/발췌 수)·범례·디스클레이머. `has_accumulated_data=False` 면 안내 카드만(graceful). `to_playbook_html()`. 데이터 `html.escape`. |
 | `teoilgi_client.py` | **터읽기(arch-site-context) 형제앱 연동** (2026-07-09) — `POST /board {brief:true,synthesize:false}` 로 **실측** 대지 맥락(전국=100 인구지수·근접도·수급진단·재해·★지배 설계 드라이버) 취득. vision(vworld_analyzer)을 대체 않고 **보강**: 정량·사실은 measured 우선, vision 은 형상·조망 시각판독. `FACILITY_TO_USE_TYPE`(14종→주거/상업/의료), env `TEOILGI_BOARD_URL`(기본 Cloud Run). graceful(실패→None, 제안서는 vision 만으로). `routers/brief.py` 가 `_site_context.measured` 로 병합, `brief_proposal._measured_digest`가 프롬프트 주입(터읽기 ②AI판단·notes 제외 = 경계: 우리는 제안서 컨셉안 소유, 터읽기는 사실+드라이버까지). 회귀: `tests/test_teoilgi_client.py` (6). |
 | `vworld_analyzer.py` | 지침서 "대지·맥락 분석" — 주소→지오코딩→VWorld 위성(WMTS)+지적도(WMS) 합성→Claude Sonnet vision 판독. 지침서 분석 완료 후 `feasibility_export.sites[0].address` 로 자동 실행 (키 있을 때만, 실패해도 비치명). 위성은 **WMTS 전용**(WMS GetMap 미지원), 지적도는 **WMS 전용**(WMTS 미제공) — 레이어명 `lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun` (구 `lp_pa_cn_A` 는 오타, 확인은 GetCapabilities로). 광역 위성(zoom16, 3×3≈1.8km) **중앙**에 지적도를 고해상(900m@768px≈1.2m/px) 요청 후 비례 축소·합성 — 스케일 임계는 **절대 span 아닌 m/px**. `has_cadastral` 플래그가 `_site_context`·vision 프롬프트·제안서 썸네일 캡션까지 전파. 빈 타일·오프셋 이탈·PIL 에러는 위성 단독 폴백. `GET /brief/{id}/site-context` 로 서빙. 회귀: `tests/test_vworld_analyzer.py` (8, 네트워크 0 — bbox/m/px 기하만). |
 | `proposal_number_check.py` | 제안서 prose **근거 없는 수치 검산** (LLM 0 · 숫자 수정 0, `quant_validator` 의 제안서판). `check_proposal_numbers(proposal, brief_data)` — `_proposal` 의 LLM 작성 서술에 나온 수치를 코퍼스(brief_data 전체 + 결정론 scoring_focus)와 대조해 원천에 없는 숫자만 flag (분양가·ROI 등 발명/일반지식 수치가 사실처럼 새는 것 차단). basis(근거 인용)·메타 제외. **2-pass:** ① **위험 단위 쌍**(억/만원/원/%/세대/가구/호)에 붙은 수치는 `(숫자,단위)` 쌍으로 대조 — 자릿수 무관, 소액 발명(공실률 12%·30억·480세대)까지 포착 ② 그 외 **bare 다자리** 수치는 코퍼스 막대조(한 자리 구조 숫자 1순위·5안 제외). 코퍼스는 over-permissive(false positive 회피), 단 위험 단위만 쌍 정밀도. 배점 비중 'N%'는 scoring_focus weight_pct 로 허용(오탐 방지). `_propose_sync` 가 `result["_number_flags"]` 부착(비치명), 렌더러가 "근거 미확인 수치" 경고 밴드로 노출. 회귀: `tests/test_proposal_number_check.py` (11). |
@@ -94,7 +96,7 @@ brief.py propose 가 `_brief.json._site_context` + `{brief_id}_site.jpg` 로 주
 
 상단에 "수주 전략 가설 · 당락 예측 아님" 디스클레이머 고정. 회귀: `tests/test_brief_proposal_report.py` (27).
 
-**Report Generation Rule:** `report_generator.py`, `submission_report_generator.py`, `diagnosis_report_generator.py`, `myproject_report_generator.py`, `brief_proposal_report_generator.py` 는 모두 Claude API 호출 금지. 기존 데이터를 HTML 로 렌더링만.
+**Report Generation Rule:** `report_generator.py`, `submission_report_generator.py`, `diagnosis_report_generator.py`, `myproject_report_generator.py`, `brief_proposal_report_generator.py`, `brief_playbook_report_generator.py` 는 모두 Claude API 호출 금지. 기존 데이터를 HTML 로 렌더링만.
 
 ### Configuration
 
@@ -112,7 +114,7 @@ brief.py propose 가 `_brief.json._site_context` + `{brief_id}_site.jpg` 로 주
 4. **DiagnoseMode** — 신규 제출물 진단. `pattern` prop 으로 정량 비교 바.
 5. **SettingsPanel** — 설정 + `PatternViewer` (시설유형 탭 + 당선/낙선 통계).
 6. **ArchiveMode** — 자연어 검색 + 카드 그리드 + 슬라이드오버 (`AxisAccordion` 펼침).
-7. **BriefMode** — 지침서 단독 분석. `accept=".pdf,.docx,.hwp,.hwpx"`. docx / hwp·hwpx 선택 시 "도면 포함 지침서는 PDF로" 안내. 블록 기반 포맷(docx/hwp/hwpx)일 때 flag location `p.N` → `블록 N` 치환 (`isBlockFormat`). "AI 종합 해설 포함" 체크박스(기본 ON)로 `include_insight` 토글, 결과에 포함 배지 / 미포함 시 재생성 버튼(`reinterpretBrief`). 결과·이력에 **프로젝트 수주 제안서** 생성/열기 버튼(`proposeBrief` → `{brief_id}_proposal.html` 새 탭, `has_proposal` 배지) — 요약·정리를 넘어선 수주 전략 제안.
+7. **BriefMode** — 지침서 단독 분석. `accept=".pdf,.docx,.hwp,.hwpx"`. docx / hwp·hwpx 선택 시 "도면 포함 지침서는 PDF로" 안내. 블록 기반 포맷(docx/hwp/hwpx)일 때 flag location `p.N` → `블록 N` 치환 (`isBlockFormat`). "AI 종합 해설 포함" 체크박스(기본 ON)로 `include_insight` 토글, 결과에 포함 배지 / 미포함 시 재생성 버튼(`reinterpretBrief`). 결과·이력에 **프로젝트 수주 제안서** 생성/열기 버튼(`proposeBrief` → `{brief_id}_proposal.html` 새 탭, `has_proposal` 배지) — 요약·정리를 넘어선 수주 전략 제안. 결과·이력에 **경험 기반 처방** 생성/열기 버튼(`buildBriefPlaybook` → `{brief_id}_playbook.html` 새 탭, `has_playbook`/'경험 처방' 배지) — 같은 시설유형 과거 축적 데이터를 이 지침서에 적용한 처방(과거 데이터 없으면 안내 메시지, LLM 미호출).
 
 **Key components:** `useMeta()` 훅이 시설유형·페이지타입·평가축 한국어 레이블 단일 소스 (`/settings/meta` 1회 fetch). 하드코딩 금지. `useMeta.jsx` JSX 포함하므로 `.jsx` 확장자 필수.
 
@@ -154,6 +156,7 @@ brief.py propose 가 `_brief.json._site_context` + `{brief_id}_site.jpg` 로 주
 7. `_brief_meta.source_format` (`"pdf"` | `"docx"` | `"hwp"` | `"hwpx"`) 기록.
 8. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write(html)` + `_sync_write_bytes(xlsx)`. 위치: `{db_path}/_briefs/{stamp}_{facility_type}_{slug}.{json|md|html|xlsx}` (≤120자).
 9. SSE `complete`: `{brief_id, md_filename, xlsx_filename, html_filename, validation_summary, source_format, has_insight}`. accumulate 의 `done`/`brief` 이벤트도 `html_filename` 포함.
+10. 분석 후 별도 엔드포인트(추출 재처리 0): `POST /{brief_id}/interpret`(해설 재생성), `POST /{brief_id}/propose`(수주 제안서), `POST /{brief_id}/playbook`(경험 기반 처방 — `reference_cases` 없으면 무료 게이트로 LLM 미호출).
 
 ### Diagnose
 
@@ -273,6 +276,26 @@ _proposal: {
 
 `interpret`(=`_insight`, 해설가) 과 별개. 사실 주장엔 근거 인용 강제, 전략·접근은 제안으로 명시. **당락 보장 금지** — caveats 에 "실제 심사 결과 보장 못 함" 강제. 별도 `{brief_id}_proposal.html` 로 렌더. **2층 분리(Phase 2):** `program_directions`/`massing_strategy`/`phasing` = AI 해석 확장층 — 1층 사실(배점·강조·대지) 위 추론, 각 항목 `basis` 앵커 강제, 새 숫자를 사실로 만들지 않음(가정은 open_questions/caveats). 렌더는 명시적 범례 + "AI 해석" 배지로 사실과 구분.
 
+**`_brief.json` 의 `_playbook` (경험 기반 처방, `brief_playbook.build_playbook()` 결과, schema_version 1):**
+
+```text
+_playbook: {
+  schema_version: 1, brief_id, facility_type, generated_at, model_id,
+  has_accumulated_data: bool,                              # false = 과거 데이터 없음 (LLM 미호출 sentinel)
+  data_basis: {win_n, lose_n, case_count, comparison_count},  # 결정론 — 과거 표본 규모 (LLM 환각 차단용 덮어씀)
+  summary: str,                                            # 과거×현재 엮은 핵심 2~3문장
+  winning_lessons: [{lesson, evidence, source, confidence: "strong|tentative"}],  # 과거·사실 (당선 교훈)
+  losing_pitfalls: [{pitfall, evidence, source, confidence}],                      # 과거·사실 (낙선 함정)
+  applications: [{guidance, rooted_in, brief_anchor, basis: [...], confidence}],   # AI 해석 (과거 교훈 × 이 지침서 교차 앵커)
+  watch_axes: [{axis, why, source}],                       # 과거·사실 (당락 가른 축, key_differentiators)
+  scoring_focus: [...],                                    # 결정론 (렌더러 배점 무게중심 참조)
+  _reference_cases: {...},                                 # reference_cases.collect_reference_context() 원본
+  data_confidence: "high|medium|low|none", caveats: [str]
+}
+```
+
+`interpret`(해설가)·`propose`(전략가) 와 **별개인 세 번째 산출물**. advisor/propose 가 `reference_cases` 를 배경 참고로만 쓰는 것과 정반대 — playbook 은 그것을 **주연료**로 삼아 과거 당락→이 지침서 능동 처방. **핵심 오염 방지:** `applications` 각 항목은 과거 교훈(`rooted_in`)+이 지침서 실제 사실(`basis`, p.N/항목명) **둘 다** 앵커, 못 달면 제외 — 과거 공모 수치를 이 지침서 사실로 옮기기 금지. **무료 게이트:** `reference_cases` 비면 LLM 미호출·`has_accumulated_data=false` sentinel. 별도 `{brief_id}_playbook.html` 로 렌더(2층 시각 분리 + "AI 해석" 배지). 당락 예측·보장 없음. 전제조건=DB에 같은 시설유형 과거 데이터 축적.
+
 **`_quantitative` 키:** `site_area_sqm`, `building_area_sqm`, `total_floor_area_sqm`, `area_above_ground_sqm`, `area_below_ground_sqm`, `floor_area_ratio_pct`, `building_coverage_ratio_pct`, `floors_above`, `floors_below`, `parking_count`.
 
 **`_quantitative_flags` (제안서 추출 시 모순 있을 때만 부착, `quant_validator.validate_quantitative` 결과):**
@@ -345,7 +368,7 @@ _proposal: {
 ## Sequences (Future Work, 보류)
 
 - **시퀀스 B — 추출 정확도 평가 하네스:** `tools/eval/` 폴더에 B-2 까지 구현. 재개 조건: 제안서 PDF 5건 + ground_truth JSON. 다음 단계 B-3 (CI 통합 훅). `python tools/eval/run_harness.py --pdf-dir pdfs/ --max-samples 5` 로 평가, `~$0.27/PDF`. `_quantitative` 키 10개는 `tolerance.json` 과 일치 필수.
-- **시퀀스 C — 멀티파일 지침서 업로드:** 1파일 안정화 완료 후 재개. 접근 A (multi-file 동시 분석, `_brief_meta.source_files: list[...]` 도입) 권장. 충돌 우선순위 룰 미결 — 지침서 vs 과업지시서 중복 시 어느 쪽 우선인지 사용자 결정 필요.
+- **시퀀스 C — 멀티파일 지침서 업로드:** ✅ 기본 구현 완료 (접근 A: `analyze` 가 `brief_pdf_refs` JSON 배열로 복수 파일 동시 분석, `_brief_meta.source_files: list[...]`, `_merge_multi_brief_data`). **남은 보류: 충돌 우선순위 = 현재 업로드 순서(first_wins)뿐, 도메인 규칙 없음** — 지침서 vs 과업지시서가 정량·스칼라 필드를 다르게 규정하면 먼저 올린 파일이 조용히 이김(설계지침은 additive 병합이라 무손실). 개선 방향: 충돌을 숨기지 말고 `_quantitative_flags` 처럼 경고로 노출해 사람이 판단.
 - **시퀀스 D — 오프라인 / 제로-API 지침서 분석 (Claude Code 가 LLM 엔진):** API 토큰 절감용 **로컬·소량 전용** 경로. 동기: 파이프라인에서 LLM 필요 단계는 **classify / extract / requirements 3개뿐**이고 나머지(파싱·표 배점 파싱·`merge_extracted_data`·`validate_brief`·exporter)는 이미 결정론적 무료. DOCX/HWP/HWPX 는 **텍스트·표 기반(비전 불필요)** 이라 그 3단계가 "블록 텍스트 읽고 JSON 생성"에 불과 → **Claude Code(또는 claude.ai)가 직접 수행 가능**(구독 기반이면 API 미터 미사용, API 키 종량제면 과금됨). 구현안: `tools/analyze_brief_offline.py` — ① 결정론적 파싱 → 블록 + `source_text` + classify/extract 프롬프트를 파일로 출력, ② Claude Code 가 그 핸드오프를 읽고 classify/extract JSON 채움, ③ 다시 도구가 `merge_extracted_data` → `validate_brief` → 기존 exporter 로 **동일한 xlsx/html/md** 산출. 한계: **배포 앱엔 불가**(Cloud Run 서버는 구독 호출 불가, API 만 가능) · PDF 는 비전 필요로 핸드오프 무거움(DOCX/HWP/HWPX 가 최적) · 소량 수동 전용(배치 부적합). 같은 원리로 compare/diagnose 도 가능하나 제안서 PDF 는 비전+복잡해 손이 더 감.
 - **시퀀스 E — 수주 제안서 비주얼 덱 출력 (`brief_proposal` 출력 고도화):** Phase 1(히어로+팩트밴드) ✅ / Phase 2(AI 해석 확장층·범례·근거 미확인 수치 밴드) ✅ / **Phase 3(PPT형 덱 전면 재설계) 미착수 → 당면 TODO 4번**. 현재 `brief_proposal_report_generator.to_proposal_html` 은 *보고서형*(스크롤 섹션). 사용자 피드백으로 **PPT형 스크롤 덱**이 더 낫다고 확정 — 향후 그 양식을 앱 기본 출력으로 이식. 디자인 계약(수동 검증 완료): ① **하나의 통일 캔버스**(섹션별 배경색 분리 금지 — "페이지 나눈 느낌" 역효과) ② 글을 줄일 땐 **삭제 말고 도식·아이콘으로 치환**(SVG: 맥락 개념도·100칸 와플 배점·매트릭스+상세카드·단면 긴장도·인허가 타임라인) ③ **밀도 높게**(나란히 배치) ④ 5안은 매트릭스(한눈) + **상세 카드**(공간전략/득점/포기/이 부지라서 + 매스 실루엣)로 — 이게 사용자가 "최종적으로 얻고 싶은" 산출물 ⑤ 매스는 *평면 만화 금지*(실무자 역효과), 측면 개념 실루엣까지만. 참고 산출물은 수동 생성본(시퀀스 D 경로) 존재. Phase 1 히어로는 사용자가 디자인·표현·이미지 해석 로직 불만족(2026-06-29) → Phase 3에서 히어로 재설계 포함.
 - **시퀀스 F — 대지·맥락 분석 통합:** ✅ 구현·자동 파이프라인 통합 완료 (2026-06-26~29, 위성+지적도 하이브리드 단일 이미지). 상세는 Core Services 표의 `vworld_analyzer.py` 참조. 남은 보류: ③ SketchUp MCP 3D 매스 — 사용자가 자료 줄 때 재개.
@@ -414,7 +437,7 @@ npm install
 
 **PaddleOCR (선택):** `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision 으로 동작하므로 불필요.
 
-**테스트:** `cd backend && venv/Scripts/python.exe -m pytest tests/ -v` (현재 393 passed, suite = `backend/tests/`). HWP/HWPX 코드 추가 시 `tests/test_hwpx_loader.py` 회귀 보호 필수 (22 케이스, rhwp monkeypatch — rhwp 미설치 환경도 통과). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일. `quant_validator.py` / `pattern_builder._build_quant_stats` / `merge_extracted_data` 의 `_quantitative_flags` 훅 수정 시 `tests/test_quant_validator.py` 19 케이스. `feasibility_export.py` 수정 시 `tests/test_feasibility_export.py` 46 케이스 + 무료 검증 `tools/feasibility_verify.py`. ⚠️ DOCX 회귀 `test_docx_extractor.py` (10 케이스) 는 repo-root `tests/` 에 있어 backend 기준 suite(393)에 **미포함** — DOCX 수정 시 별도 실행 (repo-root cwd): `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`. repo-root `tests/` 엔 conftest 없음 — 테스트 파일이 직접 `services.utils` 등을 sys.modules 스텁(`types.ModuleType`)하므로, `data_extractor` 가 `services.utils` 에서 새 심볼을 import 하면 **스텁 함수 목록도 갱신 필수** (안 하면 collection 단계 `cannot import name ... (unknown location)`). 현재 상태: 9 pass / 1 사전실패 `test_force_cut_31_paragraphs` (docx_loader F3 force-cut 미발동, **미해결·brief 전용**).
+**테스트:** `cd backend && venv/Scripts/python.exe -m pytest tests/ -v` (현재 406 passed, suite = `backend/tests/`). `brief_playbook.py` / `brief_playbook_report_generator.py` 수정 시 `tests/test_brief_playbook.py` 7 케이스 (무료 게이트·결정론 덮어쓰기·렌더 escape, LLM monkeypatch). HWP/HWPX 코드 추가 시 `tests/test_hwpx_loader.py` 회귀 보호 필수 (22 케이스, rhwp monkeypatch — rhwp 미설치 환경도 통과). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일. `quant_validator.py` / `pattern_builder._build_quant_stats` / `merge_extracted_data` 의 `_quantitative_flags` 훅 수정 시 `tests/test_quant_validator.py` 19 케이스. `feasibility_export.py` 수정 시 `tests/test_feasibility_export.py` 46 케이스 + 무료 검증 `tools/feasibility_verify.py`. ⚠️ DOCX 회귀 `test_docx_extractor.py` (10 케이스) 는 repo-root `tests/` 에 있어 backend 기준 suite(393)에 **미포함** — DOCX 수정 시 별도 실행 (repo-root cwd): `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`. repo-root `tests/` 엔 conftest 없음 — 테스트 파일이 직접 `services.utils` 등을 sys.modules 스텁(`types.ModuleType`)하므로, `data_extractor` 가 `services.utils` 에서 새 심볼을 import 하면 **스텁 함수 목록도 갱신 필수** (안 하면 collection 단계 `cannot import name ... (unknown location)`). 현재 상태: 9 pass / 1 사전실패 `test_force_cut_31_paragraphs` (docx_loader F3 force-cut 미발동, **미해결·brief 전용**).
 
 ## Deployment
 

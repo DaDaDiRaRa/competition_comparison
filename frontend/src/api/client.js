@@ -412,6 +412,20 @@ export async function proposeBrief(briefId) {
   return r.json()
 }
 
+// 경험 기반 처방 생성 (과거 축적 데이터 → 이 지침서 적용, 추출 재처리 없음, 최대 LLM 1콜).
+// 과거 데이터 없으면 has_playbook:false + reason 반환 (LLM 미호출). 사용자별 키 헤더 필요.
+export async function buildBriefPlaybook(briefId) {
+  const headers = {}
+  const apiKey = getStoredApiKey()
+  if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/playbook`, { method: 'POST', headers })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `경험 기반 처방 생성 실패 (HTTP ${r.status})`)
+  }
+  return r.json()
+}
+
 async function* streamSSE(url, formData) {
   const headers = {}
   const apiKey = getStoredApiKey()
