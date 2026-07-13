@@ -283,3 +283,87 @@ class TestPhase2Interpretation:
         h = to_proposal_html(p, "x", "y")
         assert "<script>x</script>" not in h
         assert "&lt;script&gt;" in h
+
+
+# 권장 종합안·결정 요약용 — 5안(>=2) + 배점 랭킹
+_PROPOSAL_REC = dict(
+    _PROPOSAL,
+    scoring_focus=[
+        {"category": "배치계획", "points": 40, "weight_pct": 40.0, "rank": 1},
+        {"category": "경관", "points": 20, "weight_pct": 20.0, "rank": 2},
+        {"category": "기술", "points": 20, "weight_pct": 20.0, "rank": 3},
+    ],
+    design_directions=[
+        {"direction": "저층 개방형 — 저층부 개방", "addresses": "경관 20점", "scoring_play": "경관 20",
+         "tradeoffs": "효율 저하", "basis": ["p.1"]},
+        {"direction": "동선 분리형 — 코어 분리", "addresses": "배치계획 40점 동선", "scoring_play": "배치계획 40",
+         "tradeoffs": "공용면적 증가", "basis": ["p.2"]},
+        {"direction": "사생활 배려형 — 북측 저층화", "addresses": "경관", "scoring_play": "경관",
+         "tradeoffs": "볼륨이 줄어 유효면적 감소", "basis": ["p.3"]},
+    ],
+)
+
+
+class TestDecisionCockpit:
+    def test_cockpit_renders(self):
+        h = to_proposal_html(_PROPOSAL, "영등포", "공공청사")
+        assert 'class="cockpit"' in h
+        assert "결정 요약" in h and "DECISION BRIEF" in h
+        assert "발주 의도" in h and "최대 리스크" in h
+
+    def test_cockpit_absent_when_too_thin(self):
+        h = to_proposal_html({"executive_summary": "요약만"}, "x", "y")
+        assert 'class="cockpit"' not in h   # 셀 3개 미만이면 생략
+
+
+class TestRecommendedSynthesis:
+    def test_recommendation_renders_backbone_and_grafts(self):
+        h = to_proposal_html(_PROPOSAL_REC, "영등포", "공공청사")
+        assert 'class="rec"' in h
+        assert "권장 종합안" in h
+        assert "동선 분리형" in h            # 배치계획 40점 겨냥 → 뼈대
+        assert "접목" in h
+
+    def test_volume_reducer_is_conditional_not_graft(self):
+        h = to_proposal_html(_PROPOSAL_REC, "x", "y")
+        # 사생활 배려형(볼륨 축소)은 조건부로 — 접목 칩이 아님
+        i_cond = h.find("조건부 옵션")
+        assert i_cond >= 0 and "사생활 배려형" in h[i_cond:i_cond + 200]
+
+    def test_no_recommendation_with_single_direction(self):
+        h = to_proposal_html(_PROPOSAL, "x", "y")   # design_directions 1개
+        assert 'class="rec"' not in h
+
+    def test_no_recommendation_for_bid_na(self):
+        p = dict(_PROPOSAL_REC, design_directions=[{"direction": "해당 없음 — 설계자 선정 입찰"}])
+        h = to_proposal_html(p, "x", "y")
+        assert 'class="rec"' not in h
+
+
+_BID_STRUCT = {
+    "top_layer": {
+        "basis_dimension": "연면적",
+        "axes": [
+            {"name": "사업수행능력평가", "role": "pq",
+             "bands": [{"label": "8만㎡미만", "min_sqm": None, "max_sqm": 80000, "weight_pct": 20.0},
+                       {"label": "24만㎡이상", "min_sqm": 240000, "max_sqm": None, "weight_pct": 40.0}]},
+            {"name": "가격평가", "role": "price", "weight_range": [60.0, 80.0], "bands": []},
+        ],
+        "applicable": {"note": "연면적 미확보 — 적용 밴드 판정 보류", "weights": {}},
+    },
+    "pq_detail": {"total_points": 100, "categories": []},
+}
+
+
+class TestBidStructureSection:
+    def test_renders_when_bid(self):
+        h = to_proposal_html(_PROPOSAL, "대치미도", "재건축", bid_structure=_BID_STRUCT)
+        assert 'id="bidstruct"' in h
+        assert "2층 배점 구조" in h
+        assert "사업수행능력평가" in h and "가격평가" in h
+        assert "20" in h and "40" in h              # 정확 밴드
+        assert "60~80%" in h                          # 범위 폴백
+
+    def test_absent_for_competition(self):
+        h = to_proposal_html(_PROPOSAL, "영등포", "공공청사")   # bid_structure 미전달
+        assert 'id="bidstruct"' not in h

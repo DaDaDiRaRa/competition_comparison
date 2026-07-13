@@ -77,6 +77,8 @@ _PROPOSAL_INSTRUCTION = (
     "- design_overview / sites / special_conditions / validation_flags: 보조 근거.\n"
     "- prior_insight: (있으면) 앞서 생성된 사실 triage 해설 — 제안의 토대로 삼되 그대로\n"
     "  복붙하지 말고 '그래서 어떻게 할지'로 발전시킨다.\n"
+    "- placement_requirements: (있으면) 지침서가 **명시한 위치·층 요구 문장**들. placement_strategy\n"
+    "  에서 이 요구는 사실·필수 제약이니 반드시 그대로 반영(required=true)하고 override 하지 마라.\n"
     "- reference_cases: (있으면) 동일 시설유형 **다른 공모**의 참고자료 — 세 서브키:\n"
     "  · pattern_summary: 당선·낙선 집계 통계(키워드·정성패턴). 경향 힌트로만.\n"
     "  · case_excerpts: 과거 당선작의 실제 컨셉 서술(main_strategy 등).\n"
@@ -134,6 +136,19 @@ _PROPOSAL_INSTRUCTION = (
     '      "detail": "2~4문장 — 어떤 사실(실격/한도/배점 무게)이 이 순서를 강제하는지 + 각 단계에서 무엇을 확정하는지. 근거 있는 추론, 새 숫자 금지.",\n'
     '      "basis": ["근거 위치/항목"] }\n'
     "  ],\n"
+    '  "placement_strategy": {\n'
+    '    "synthesis": "여러 근거(배점 × 대지 × 법적 envelope × 프로그램 성격)를 엮은 배치 논지 2~3문장. 뻔한 전략어가 아니라 \'이 땅의 이 조건들이 겹쳐서 이렇게 풀린다\'로.",\n'
+    '    "zones": [\n'
+    '      { "program": "프로그램/기능 (예: 시민개방 저층부·업무동·보건소·구의회·코어)",\n'
+    '        "plan": "N|S|E|W|NE|NW|SE|SW|C 중 하나 — 평면상 대략 위치(대지 방위·접도 기준). 다이어그램용 enum.",\n'
+    '        "level": "지하|저층|중층|상층 중 하나 — 단면상 층대. 정확한 층수 아님(원리).",\n'
+    '        "required": "true|false — 지침서가 이 프로그램의 위치/층을 **명시적으로 요구**했으면 true(사실·필수), AI 가 추론한 배치면 false(제안).",\n'
+    '        "why": "왜 여기인가 — 대지사실·법·프로그램·배점이 교차하는 근거 1~2문장",\n'
+    '        "draws_on": ["대지:남측 20m도로", "법:정북일조/용적460%", "프로그램:감염동선", "배점:배치40"],\n'
+    '        "basis": ["site_context.road_access", "배치계획", "p.20"] }\n'
+    "    ],\n"
+    '    "section_note": "단면 원리 한 줄 (예: 저층 시민개방 · 중상층 업무 · 코어 북측 · 지하 부지연계)"\n'
+    "  },\n"
     '  "priorities": [\n'
     '    { "rank": 1, "focus": "가장 먼저·가장 무겁게 다룰 영역",\n'
     '      "why": "배점/강조 근거", "scoring_weight": "비중%(있으면)" }\n'
@@ -168,6 +183,25 @@ _PROPOSAL_INSTRUCTION = (
     "  (배점·강조·대지) 위에서 추론한 제안이다. 각 claim 은 **반드시 basis 로 어떤 사실에서\n"
     "  나왔는지 앵커**하라(앵커 못 달면 그 항목은 빼라). 신호가 얕으면 항목 수를 줄여라.\n"
     "  사실로 위장하지 말 것 — 이 셋은 '제안'으로 읽히게 쓴다.\n"
+    "- **placement_strategy (CRITICAL — 뻔함 탈출 엔진):** 이 필드가 '동선 분리하라' 같은\n"
+    "  뻔한 전략어를 **구체적·대지 특정 배치**로 바꾸는 곳이다. 핵심 규칙:\n"
+    "  ① **교차 합성 강제** — 각 zone.draws_on 은 **서로 다른 소스 유형 2개 이상**을 엮어야\n"
+    "     한다(대지·법·프로그램·배점 중 2+). 한 소스만으로 나온 배치(=배점만 보고 '분리')는\n"
+    "     뻔하니 넣지 마라. 여러 사실이 겹치는 지점에서 나온 배치만 가치 있다.\n"
+    "  ② **법적 envelope 활용** — sites 의 zone_use(용도지역)·floor_area_ratio_pct·\n"
+    "     building_coverage_pct·max_height·limits_determined_by 를 매스·층대 근거로 써라\n"
+    "     (예: 용도지역/높이한도 안에서 상층 업무, 정북 방향이면 북측 후퇴). 단 우리에겐\n"
+    "     정밀 일조사선 계산이 없으니 '한도 안에서' 수준까지, limits_determined_by=심의면\n"
+    "     그 수치를 법정 한계로 단정 말 것.\n"
+    "  ③ **대지 사실 우선** — plan(방위) 은 site_context(향·접도·주변·조망) 근거로 정하라.\n"
+    "     site_context 없으면 배점·프로그램·envelope 로만 정하고 confidence 를 낮춰라.\n"
+    "  ④ plan 은 8방위+C enum, level 은 지하/저층/중층/상층 enum(정확한 층수 발명 금지).\n"
+    "  ⑤ **명시 요구 절대 준수 (CRITICAL) — 지침서가 특정 프로그램의 위치/층을 명시하면\n"
+    "     (예: '보건소 1층 필수', '어린이집 저층 옥외 접함', '민원실 주출입 인접') 그건 사실이자\n"
+    "     필수 제약이다. 반드시 그대로 반영하고 required=true + basis 에 그 요구 위치를 앵커하라.\n"
+    "     AI 추론으로 그 위치를 덮거나 무시하지 마라.** 지침서가 위치를 안 정한 것만 AI 가\n"
+    "     추론(required=false)해 배치한다. 명시 요구와 추론이 충돌하면 명시 요구가 이긴다.\n"
+    "  ⑥ synthesis 는 '이 땅의 이 조건들이 겹쳐서 이렇게'로 — 일반론 금지. zones 5~8개 권장.\n"
     "- **읽을 만한 깊이 (CRITICAL):** 각 항목은 한 줄 제목(claim/direction)에서 끝내지 말고\n"
     "  detail/narrative 로 **2~4문장 풀어써라** — 설계팀이 읽고 판단할 수 있게. 단 분량을\n"
     "  늘리는 건 'filler(미사여구·동어반복)'가 아니라 **근거 있는 추론의 깊이**다: ① 어떤\n"
@@ -254,11 +288,55 @@ def _measured_digest(brief) -> dict | None:
     }
 
 
+_PLACEMENT_KEYS = (
+    "층", "저층", "중층", "상층", "지하", "지상", "옥상", "배치", "위치", "인접",
+    "접함", "면한", "면하", "주출입", "진출입", "진입", "별동", "독립", "동선 분리",
+    "조닝", "남측", "북측", "동측", "서측", "저층부", "상층부", "1층", "2층",
+)
+
+
+def _placement_req_signals(brief_data: dict) -> list[str]:
+    """지침서에서 프로그램의 위치·층을 명시한 문장 수집 (placement 준수용).
+
+    design_guidelines_grouped 항목 + _requirements 서술 중 위치/층 키워드 포함 문장만.
+    LLM 이 이 요구를 override 하지 않고 required=true 로 반영하게 근거를 준다. dedup·상한.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _add(t: str):
+        t = (t or "").strip()
+        if t and len(t) >= 6 and t not in seen and any(k in t for k in _PLACEMENT_KEYS):
+            seen.add(t)
+            out.append(t[:180])
+
+    for g in (brief_data.get("design_guidelines_grouped") or []):
+        if not isinstance(g, dict):
+            continue
+        for it in (g.get("items") or []):
+            _add(it if isinstance(it, str) else (it.get("text") if isinstance(it, dict) else ""))
+        for sub in (g.get("items_by_sub") or []):
+            if isinstance(sub, dict):
+                for it in (sub.get("items") or []):
+                    _add(it if isinstance(it, str) else (it.get("text") if isinstance(it, dict) else ""))
+    req = brief_data.get("_requirements") or {}
+    for r in (req.get("requirements") or []):
+        if isinstance(r, dict):
+            _add(str(r.get("description") or ""))
+    for r in (req.get("special_requirements") or []):
+        _add(r if isinstance(r, str) else str(r))
+    return out[:14]
+
+
 def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     # advisor 와 동일한 결정론 백본 신호 — 단일 소스 재사용 (드리프트 차단). reference_cases
     # (시설유형 기존 사례 참고자료) 도 _build_advisor_payload 가 이미 채워서 넘겨준다.
     payload = _build_advisor_payload(brief_data, facility_type)
     payload["prior_insight"] = _prior_insight_digest(brief_data)
+    # 명시 위치·층 요구 — placement_strategy 가 override 없이 준수하도록 (required=true 근거).
+    _preq = _placement_req_signals(brief_data)
+    if _preq:
+        payload["placement_requirements"] = _preq
     ref_ctx = payload.get("reference_cases", {})
 
     # 대지 맥락 — vision(VWorld 위성·지적도 판독) + measured(터읽기 실측 board_brief). 둘 중 하나만 있어도 실음.

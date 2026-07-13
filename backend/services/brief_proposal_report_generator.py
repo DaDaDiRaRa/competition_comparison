@@ -54,29 +54,33 @@ _CIRCLE_NUMS = "①②③④⑤⑥⑦⑧⑨⑩"
 
 _PROPOSAL_CSS = """
 :root{
-  --ink:#1a1a1a;--text:#3a3a3a;--muted:#9a9a9a;--line:#e8e8e8;
-  --soft:#f7f7f8;--accent:#e60012;
-  --high:#e60012;--med:#c47b00;--low:#9a9a9a;
+  --ink:#141414;--text:#3a3a3a;--muted:#6f6b66;--faint:#a9a5a0;--line:#dcdad6;
+  --soft:#f6f4f1;--accent:#e60012;
+  --high:#c0202a;--med:#b7791f;--low:#4e7d3e;--ai:#2a6496;
+  --serif:'Noto Serif KR','Nanum Myeongjo',Georgia,'Batang',serif;
+  --sans:'Montserrat','Pretendard','Malgun Gothic',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
-body{margin:0;background:#fff;color:var(--text);
-  font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-  font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased}
-.wrap{max-width:960px;margin:0 auto;padding:52px 30px 110px}
-header.doc{margin-bottom:8px;padding-bottom:22px;border-bottom:2px solid var(--ink)}
-header.doc .eyebrow{font-size:12px;letter-spacing:.14em;color:var(--accent);font-weight:700;text-transform:uppercase}
-header.doc h1{margin:8px 0 0;font-size:25px;font-weight:700;color:var(--ink);letter-spacing:-.02em;line-height:1.3}
-header.doc .meta{margin-top:12px;color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 18px}
-.disclaimer{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:18px 0 4px}
+body{margin:0;background:#eceae7;color:var(--text);
+  font-family:var(--serif);
+  font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.wrap{max-width:1120px;margin:34px auto;padding:48px 56px 96px;background:#fff;
+  border:1px solid var(--line);box-shadow:0 6px 30px rgba(0,0,0,.05)}
+header.doc{margin-bottom:8px;padding-bottom:24px;border-bottom:3px solid var(--ink)}
+header.doc .eyebrow{font-family:var(--sans);font-size:12px;letter-spacing:.28em;color:var(--accent);font-weight:800;text-transform:uppercase}
+header.doc h1{font-family:var(--sans);margin:14px 0 0;font-size:44px;font-weight:900;color:var(--ink);letter-spacing:-.02em;line-height:1.08}
+header.doc .meta{font-family:var(--sans);margin-top:16px;color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 18px}
+.disclaimer{font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-left:3px solid var(--faint);padding:12px 16px;margin:18px 0 4px;line-height:1.6}
 
 /* ── 섹션 ─────────────────────────── */
-section.sec{margin:38px 0 0;scroll-margin-top:58px}
-section.sec>h2{display:flex;align-items:center;gap:10px;margin:0 0 14px;
-  font-size:17px;font-weight:700;color:var(--ink);letter-spacing:-.01em}
+section.sec{margin:52px 0 0;scroll-margin-top:20px}
+section.sec>h2{display:flex;align-items:center;gap:12px;margin:0 0 18px;
+  font-family:var(--sans);font-size:27px;font-weight:900;color:var(--ink);letter-spacing:-.02em;
+  border-bottom:2px solid var(--ink);padding-bottom:12px}
 section.sec>h2 .n{display:inline-flex;align-items:center;justify-content:center;
-  min-width:24px;height:24px;padding:0 6px;border-radius:6px;
-  background:var(--accent);color:#fff;font-size:12px;font-weight:700;flex:0 0 auto}
+  min-width:28px;height:28px;padding:0 8px;border-radius:7px;
+  background:var(--accent);color:#fff;font-size:14px;font-weight:800;flex:0 0 auto}
 section.sec>h2 .conf{margin-left:auto;font-size:11px;font-weight:600;border:1px solid var(--line);
   border-radius:20px;padding:3px 10px;color:var(--muted)}
 section.sec>h2 .conf.high{color:#2a8a3e;border-color:#bfe3c6}
@@ -234,17 +238,109 @@ nav.top .links{display:flex;gap:2px;margin-left:auto;flex-wrap:nowrap;overflow-x
 nav.top .links a{font-size:12px;color:var(--muted);text-decoration:none;padding:4px 10px;border-radius:6px;white-space:nowrap}
 nav.top .links a:hover{background:var(--soft);color:var(--ink)}
 
+/* ── 대지 근거 배치 (다이어그램) ── */
+.place-syn{font-size:15px;line-height:1.75;color:var(--ink);background:var(--soft);
+  border-left:3px solid var(--accent);padding:14px 18px;margin:0 0 16px}
+.place-dias{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:8px 0}
+.dia-box{border:1px solid var(--line);padding:14px;background:#fff}
+.dia-cap{font-size:10.5px;color:var(--faint);text-align:center;margin-top:6px;letter-spacing:.02em}
+.pz-tag{font-family:var(--sans);font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:8px;vertical-align:middle;white-space:nowrap}
+.pz-tag.req{color:#4e7d3e;background:#eef5ea;border:1px solid #cfe3c0}
+.pz-tag.inf{color:var(--ai);background:#eaf1f7;border:1px solid #cfe0ee}
+.pz.req{background:#fbfcfa}
+.lg-req{color:#4e7d3e;font-weight:600}.lg-inf{color:var(--ai);font-weight:600}
+.plan-wrap{border:1px solid var(--line);padding:14px;position:relative}
+.plan-compass{font-family:var(--sans);font-size:10.5px;font-weight:700;color:var(--muted);margin-bottom:8px;letter-spacing:.08em}
+.plan-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:1fr;gap:5px;aspect-ratio:1/1}
+.plan-cell{border:1px dashed var(--line);border-radius:5px;padding:5px;display:flex;flex-direction:column;gap:3px;
+  min-height:0;background:#fcfcfb;position:relative}
+.plan-cell.has{background:#fff;border-style:solid}
+.plan-pos{font-family:var(--sans);font-size:8.5px;font-weight:700;color:var(--faint);letter-spacing:.05em}
+.zt{display:inline-flex;align-items:center;gap:4px;font-size:10px;line-height:1.25;color:var(--ink);
+  border:1px solid var(--line);border-left-width:2px;border-radius:3px;padding:2px 5px;background:#fff}
+.zdot{width:6px;height:6px;border-radius:50%;flex:0 0 auto}
+.sect-wrap{border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:6px}
+.sect-band{display:flex;align-items:flex-start;gap:10px;padding:8px 4px;border-bottom:1px dashed var(--line);min-height:40px}
+.sect-band:last-of-type{border-bottom:none}
+.sect-band.sect-ground{border-bottom:2px solid var(--ink)}
+.sect-lv{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--muted);flex:0 0 40px;padding-top:2px}
+.sect-zs{display:flex;flex-wrap:wrap;gap:5px;flex:1}
+.place-snote{font-size:12.5px;color:var(--muted);margin:10px 0 2px}
+.place-snote b{color:var(--accent);font-family:var(--sans);font-size:11px;letter-spacing:.04em}
+.place-legend{font-size:11px;color:var(--muted);margin:14px 0 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.place-zones{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pz{border:1px solid var(--line);border-left:3px solid var(--accent);padding:11px 14px;background:#fff}
+.pz-head{font-size:14px;font-weight:700;color:var(--ink);line-height:1.4}
+.pz-num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;
+  color:#fff;font-family:var(--sans);font-size:11px;font-weight:800;margin-right:8px;vertical-align:middle;flex:0 0 auto}
+.pz-loc{font-family:var(--sans);font-size:10px;font-weight:700;color:#fff;background:var(--muted);
+  border-radius:3px;padding:1px 6px;margin-right:7px;vertical-align:middle;letter-spacing:.02em}
+.pz-why{font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:5px}
+.pz-draws{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px}
+.draw-chip{font-family:var(--sans);font-size:10px;font-weight:600;border-radius:3px;padding:2px 7px;border:1px solid}
+.draw-chip.d-site{color:#5a8a3e;border-color:#cfe3c0;background:#eef5ea}
+.draw-chip.d-law{color:#2a6496;border-color:#cfe0ee;background:#eaf1f7}
+.draw-chip.d-prog{color:#7a3a8e;border-color:#e0cfe8;background:#f4eef7}
+.draw-chip.d-score{color:var(--accent);border-color:#f3c2c6;background:#fdf2f3}
+.draw-chip.d-spec{color:#b7791f;border-color:#eeddc0;background:#fdf7ea}
+.draw-chip.d-etc{color:var(--muted);border-color:var(--line);background:var(--soft)}
+
+/* ── 결정 요약 cockpit ── */
+.cockpit{margin:26px 0 8px;border:2px solid var(--ink)}
+.cok-head{background:var(--ink);color:#fff;padding:14px 22px;display:flex;align-items:baseline;gap:18px;flex-wrap:wrap}
+.cok-h-l{font-family:var(--sans);font-size:13px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;flex:0 0 auto}
+.cok-h-r{font-size:12.5px;color:#c9c9c9;line-height:1.5}
+.cok-h-r b{color:#fff}
+.cok-grid{display:grid;grid-template-columns:repeat(3,1fr)}
+.cok-cell{display:block;text-decoration:none;color:inherit;padding:16px 18px;border-right:1px solid var(--line);
+  border-bottom:1px solid var(--line);background:#fff;transition:background .12s}
+.cok-cell:nth-child(3n){border-right:none}
+.cok-cell:hover{background:var(--soft)}
+.cok-label{font-family:var(--sans);font-size:10.5px;font-weight:700;letter-spacing:.08em;color:var(--accent);text-transform:uppercase}
+.cok-value{font-size:15px;font-weight:700;color:var(--ink);line-height:1.45;margin:7px 0 8px;min-height:44px}
+.cok-value.big{color:var(--accent)}
+.cok-how{font-size:11px;color:var(--muted);border-top:1px dashed var(--line);padding-top:7px}
+
+/* ── 권장 종합안 히어로 ── */
+.rec{display:grid;grid-template-columns:150px 1fr;border:2px solid var(--ink);background:#fff;margin:4px 0 12px}
+.rec-top{grid-column:1 / -1;display:flex;align-items:center;gap:10px;background:var(--ink);padding:11px 20px}
+.rec-eyebrow{font-family:var(--sans);font-size:12px;font-weight:800;letter-spacing:.16em;color:#fff;text-transform:uppercase}
+.rec-top .ai-badge{margin-left:auto}
+.rec-mass{display:flex;align-items:center;justify-content:center;background:var(--soft);border-right:1px solid var(--line);padding:18px}
+.rec-mass svg{width:104px;height:94px}
+.rec-body{padding:20px 26px}
+.rec-bb-label{font-family:var(--sans);font-size:10.5px;font-weight:700;letter-spacing:.1em;color:var(--accent);text-transform:uppercase}
+.rec-bb{font-family:var(--sans);font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-.01em;line-height:1.3;margin:3px 0 8px}
+.rec-why{font-size:14px;color:var(--muted);line-height:1.75}
+.rec-why b{color:var(--ink)}
+.rec-grafts-label{font-family:var(--sans);font-size:11px;font-weight:700;color:var(--accent);margin:16px 0 8px}
+.rec-grafts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rec-graft{border:1px solid var(--line);border-left:2px solid var(--accent);padding:10px 13px;background:var(--soft)}
+.rg-name{font-size:14px;font-weight:700;color:var(--ink)}
+.rg-gain{font-size:12px;color:var(--muted);margin-top:2px}
+.rec-cond{margin-top:14px;font-size:12.5px;color:var(--muted);line-height:1.6}
+.rec-cond .k{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--faint);
+  text-transform:uppercase;margin-right:8px;border:1px solid var(--line);padding:2px 7px;border-radius:20px}
+.rec-note{margin-top:16px;padding-top:13px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.65}
+.rec-note b{color:var(--ink)}
+
 @media print{.wrap{padding:0}body{font-size:12px}section.sec{break-inside:avoid}nav.top{display:none}}
-@media(max-width:600px){
-  .wrap{padding:32px 18px 64px}
+@media(max-width:720px){
+  .wrap{padding:32px 20px 64px;margin:0}
   nav.top .ttl{display:none}
   nav.top .inner{padding:8px 18px}
+  header.doc h1{font-size:32px}
+  section.sec>h2{font-size:22px}
   .dir-fields{grid-template-columns:1fr}
   .dir-card-svgbox{display:none}
   .waffle-wrap{flex-direction:column}
   .site-fields{grid-template-columns:1fr}
   .site-thumb{width:100%}
   .hero img{height:220px}
+  .cok-grid{grid-template-columns:1fr}.cok-cell{border-right:none}
+  .rec{grid-template-columns:1fr}.rec-mass{border-right:none;border-bottom:1px solid var(--line)}
+  .rec-grafts{grid-template-columns:1fr}
+  .place-dias{grid-template-columns:1fr}.place-zones{grid-template-columns:1fr}
 }
 """
 
@@ -828,6 +924,338 @@ def _checklist_html(proposal: dict, key: str, sec_id: str, n: str, title: str) -
 
 # ── 메인 렌더 ────────────────────────────────────────────────────────
 
+# ── 권장 종합안 + 결정 요약 (결정론, LLM 0) ──────────────────────────
+
+def _dir_name(d: dict) -> str:
+    """direction 필드에서 짧은 컨셉명 (—/앞부분)."""
+    return (d.get("direction") or "").split("—")[0].strip()
+
+
+def _recommend(proposal: dict) -> dict | None:
+    """5안 중 권장 종합안 도출(결정론): 최고 배점축을 겨냥한 안을 뼈대로,
+    볼륨·면적을 깎지 않는 안을 접목, 나머지는 조건부. design_directions 가 없거나
+    'N/A(입찰 등)'면 None."""
+    dds = [d for d in (proposal.get("design_directions") or []) if isinstance(d, dict)]
+    focus = [f for f in (proposal.get("scoring_focus") or []) if isinstance(f, dict)]
+    ranked = sorted([f for f in focus if isinstance(f.get("rank"), (int, float))],
+                    key=lambda f: f["rank"])
+    if len(dds) < 2 or not ranked:
+        return None
+    # '해당 없음'류(입찰 등) 방어 — 실제 컨셉명이 아니면 스킵
+    if any(k in _dir_name(dds[0]) for k in ("해당 없음", "해당없음", "N/A", "없음")):
+        return None
+    top = ranked[0]
+    topcat = top.get("category") or ""
+    toppts = top.get("points")
+
+    def _txt(d):
+        return f'{d.get("addresses","")} {d.get("scoring_play","")} {d.get("direction","")}'
+
+    scored = []
+    for i, d in enumerate(dds):
+        s = (3 if topcat and topcat in _txt(d) else 0)
+        if isinstance(toppts, (int, float)) and str(int(toppts)) in _txt(d):
+            s += 2
+        scored.append((s, -i, i))
+    backbone = max(scored)[2]
+
+    grafts, conditional = [], []
+    for i, d in enumerate(dds):
+        if i == backbone:
+            continue
+        tr = d.get("tradeoffs") or ""
+        reduces = ("축소" in tr) or ("연면적" in tr) or ("볼륨" in tr and "줄" in tr)
+        if not reduces and len(grafts) < 2:
+            grafts.append(i)
+        else:
+            conditional.append(i)
+    return {"backbone": backbone, "grafts": grafts, "conditional": conditional,
+            "topcat": topcat, "toppts": toppts, "topw": top.get("weight_pct"), "dds": dds}
+
+
+def _recommended_synthesis_html(proposal: dict) -> str:
+    """권장 종합안 히어로 카드 (설계 접근 섹션 최상단). 없으면 ''."""
+    rec = _recommend(proposal)
+    if not rec:
+        return ""
+    dds = rec["dds"]
+    bb = dds[rec["backbone"]]
+
+    def _gain(d):
+        a = (d.get("addresses") or "")
+        return a.split(",")[0].split("과 ")[0].strip()[:44]
+
+    graft_html = "".join(
+        f'<div class="rec-graft"><div class="rg-name">{_esc(_dir_name(dds[i]))}</div>'
+        f'<div class="rg-gain">{_esc(_gain(dds[i]))} 방어·가점</div></div>'
+        for i in rec["grafts"]
+    )
+    cond = " · ".join(_esc(_dir_name(dds[i])) for i in rec["conditional"])
+    topw = int(rec["topw"]) if isinstance(rec["topw"], (int, float)) else ""
+    return (
+        '<div class="rec">'
+        f'<div class="rec-top"><span class="rec-eyebrow">권장 종합안 · RECOMMENDED</span>{_AI_BADGE}</div>'
+        f'<div class="rec-mass">{_MASS_SVGS[rec["backbone"] % len(_MASS_SVGS)]}</div>'
+        '<div class="rec-body">'
+        '<div class="rec-bb-label">뼈대</div>'
+        f'<div class="rec-bb">「{_esc(_dir_name(bb))}」 을 중심으로</div>'
+        f'<p class="rec-why">배점이 <b>{_esc(rec["topcat"])} {_esc(rec["toppts"])}점'
+        f'{f"(전체 {topw}%)" if topw != "" else ""}</b>에 쏠려 있어, 이 안이 최대 승부처를 정면으로 '
+        '가져간다. 여기에 서로 상충하지 않는 안을 접목한다.</p>'
+        + (f'<div class="rec-grafts-label">+ 접목 (득점축이 달라 양립 가능)</div>'
+           f'<div class="rec-grafts">{graft_html}</div>' if graft_html else "")
+        + (f'<div class="rec-cond"><span class="k">조건부 옵션</span>{cond} — 심의·부지 여건에 따라 선택 적용</div>' if cond else "")
+        + '<div class="rec-note">5개 대안을 비교한 결과의 <b>권장 조합</b>입니다. 상충하는 전제는 '
+          '뭉치지 않았으며, <b>최종 컨셉 선택은 설계팀</b>의 몫입니다.</div>'
+        '</div></div>'
+    )
+
+
+def _decision_cockpit_html(proposal: dict, bid_structure: dict | None = None) -> str:
+    """결정 요약(Decision Brief) — 흩어진 판단을 6칸으로. 결정론, 이미 있는 값만.
+
+    각 칸 = (라벨, 값, 어떻게 나왔나, 앵커). 최소 요약 하나라도 있어야 렌더.
+    """
+    def _first_sentence(t):
+        t = (t or "").strip()
+        for sep in [" — ", ". ", "—"]:
+            if sep in t:
+                return t.split(sep)[0].strip().rstrip(".")
+        return t
+
+    def _trunc(t, n=48):
+        t = (t or "").strip()
+        return (t[:n].rstrip(" ,·") + "…") if len(t) > n else t
+
+    wt = [w for w in (proposal.get("win_themes") or []) if isinstance(w, dict)]
+    pr = sorted([p for p in (proposal.get("priorities") or []) if isinstance(p, dict)],
+                key=lambda p: p.get("rank") if isinstance(p.get("rank"), (int, float)) else 99)
+    risks = [r for r in (proposal.get("risks") or []) if isinstance(r, dict)]
+    hi = next((r for r in risks if r.get("severity") == "high"), risks[0] if risks else None)
+    conf = {"high": "높음", "medium": "보통", "low": "낮음"}.get(proposal.get("data_confidence"), "")
+    rec = _recommend(proposal)
+    rec_name = _dir_name(rec["dds"][rec["backbone"]]) if rec else ""
+
+    cells = []
+    es = _first_sentence(proposal.get("executive_summary", ""))
+    if es:
+        cells.append(("발주 의도", _trunc(es, 50), "배점·강조 분포로 해독", "summary"))
+    if wt:
+        cells.append(("승부처", _trunc(_first_sentence(wt[0].get("theme", "")), 40), "배점 1순위 + 반복 강조", "themes"))
+    if rec_name:
+        cells.append(("권장 방향", _trunc(rec_name, 36), "최고 배점축 겨냥 + 접목", "directions", True))
+    elif bid_structure:
+        cells.append(("배점 구조", "사업수행능력 vs 가격 (2층)", "입찰 — 연면적별 차등", "scoring", True))
+    if hi:
+        cells.append(("최대 리스크", _trunc(_first_sentence(hi.get("risk", "")), 42), "실격·심의 등 방어 필수", "risks"))
+    if pr:
+        w = pr[0].get("scoring_weight")
+        val = _trunc(pr[0].get("focus", "").split("(")[0], 32) + (f" ({w})" if w else "")
+        cells.append(("착수 1순위", val, "배점 무게중심 순", "priorities"))
+    if conf:
+        cells.append(("근거 신뢰도", conf, "판단이 선 데이터", "scoring"))
+
+    cells = [c for c in cells if c[1]]
+    if len(cells) < 3:
+        return ""
+
+    grid = ""
+    for c in cells:
+        lb, val, how, href = c[0], c[1], c[2], c[3]
+        big = " big" if (len(c) > 4 and c[4]) else ""
+        grid += (f'<a class="cok-cell" href="#{href}"><div class="cok-label">{_esc(lb)}</div>'
+                 f'<div class="cok-value{big}">{_esc(val)}</div>'
+                 f'<div class="cok-how">{_esc(how)}</div></a>')
+    return (
+        '<section class="cockpit"><div class="cok-head">'
+        '<div class="cok-h-l">결정 요약 · DECISION BRIEF</div>'
+        '<div class="cok-h-r">AI가 지침서를 읽고 <b>판단한 결론</b> — 각 칸은 아래 근거 섹션으로 연결됩니다. 최종 결정은 설계팀.</div>'
+        f'</div><div class="cok-grid">{grid}</div></section>'
+    )
+
+
+_ZONE_COLORS = ["#e60012", "#2a6496", "#5a8a3e", "#c47b00", "#7a3a8e", "#3a8a8e", "#c45a00", "#555"]
+_PLAN_ORDER = ["NW", "N", "NE", "W", "C", "E", "SW", "S", "SE"]
+_LEVEL_ORDER = ["상층", "중층", "저층", "지하"]
+_DRAW_CLS = {"대지": "d-site", "법": "d-law", "프로그램": "d-prog", "배점": "d-score", "특수조건": "d-spec", "특수": "d-spec"}
+
+
+def _draw_chip(s: str) -> str:
+    txt = str(s).strip()
+    key = txt.split(":")[0].strip()
+    cls = _DRAW_CLS.get(key, "d-etc")
+    return f'<span class="draw-chip {cls}">{_esc(txt)}</span>'
+
+
+def _zreq(z: dict) -> bool:
+    return z.get("required") in (True, "true", "True", 1)
+
+
+_PLAN_XY = {  # 320×320 viewBox, 대지 rect 46..274, 방위 앵커 중심
+    "N": (160, 86), "S": (160, 234), "E": (234, 160), "W": (86, 160),
+    "NE": (226, 94), "NW": (94, 94), "SE": (226, 226), "SW": (94, 226), "C": (160, 160),
+}
+
+
+def _num_marker(cx, cy, color, num, required):
+    """번호 마커(항상 읽힘) — 채움=필수(사실), 점선=AI 추론."""
+    fill = color if required else "#fff"
+    txt = "#fff" if required else color
+    dash = "" if required else ' stroke-dasharray="2.5 2"'
+    return (f'<g><rect x="{cx-11:.0f}" y="{cy-11:.0f}" width="22" height="22" rx="4" fill="{fill}" '
+            f'stroke="{color}" stroke-width="1.6"{dash}/>'
+            f'<text x="{cx:.0f}" y="{cy+4:.0f}" text-anchor="middle" font-size="11.5" font-weight="700" '
+            f'font-family="Montserrat,sans-serif" fill="{txt}">{num}</text></g>')
+
+
+def _placement_strategy_html(proposal: dict) -> str:
+    """대지 근거 배치 → SVG 조닝(방위)·단면(층대) 다이어그램(번호 마커) + 번호 존 카드. 없으면 ''.
+
+    다이어그램은 번호 마커만(겹침·잘림 없음), 전체 프로그램명은 아래 카드에. required=true(지침서
+    명시 필수)=채운 마커, false(AI 추론)=점선 마커. draws_on 색으로 교차 근거 시각화.
+    """
+    ps = proposal.get("placement_strategy")
+    if not isinstance(ps, dict):
+        return ""
+    zones = [z for z in (ps.get("zones") or []) if isinstance(z, dict) and (z.get("program") or "").strip()]
+    if not zones:
+        return ""
+    # 번호(1-base) + 색
+    for i, z in enumerate(zones):
+        z["_num"] = i + 1
+    zc = {id(z): _ZONE_COLORS[i % len(_ZONE_COLORS)] for i, z in enumerate(zones)}
+
+    # ── 조닝 SVG: 방위 앵커에 번호 마커를 겹치지 않게 배치 ──
+    by_plan: dict[str, list] = {}
+    for z in zones:
+        p = (z.get("plan") or "C").strip().upper()
+        by_plan.setdefault(p if p in _PLAN_XY else "C", []).append(z)
+    marks = ""
+    for pos, zs in by_plan.items():
+        cx, cy = _PLAN_XY[pos]
+        n = len(zs)
+        # 한 방위에 여러 개면 가로로 펼침(겹침 방지), 중심 정렬
+        for i, z in enumerate(zs):
+            ox = cx + (i - (n - 1) / 2) * 26
+            marks += _num_marker(ox, cy, zc[id(z)], z["_num"], _zreq(z))
+    plan_svg = (
+        '<svg viewBox="0 0 320 320" width="100%" style="max-width:340px;display:block;margin:0 auto">'
+        '<rect x="46" y="46" width="228" height="228" fill="#fbfbfa" stroke="#141414" stroke-width="1.5"/>'
+        '<text x="160" y="34" text-anchor="middle" font-size="12" font-weight="700" font-family="Montserrat,sans-serif" fill="#6f6b66">N ▲</text>'
+        '<text x="160" y="296" text-anchor="middle" font-size="10" fill="#a9a5a0">S</text>'
+        '<text x="30" y="164" text-anchor="middle" font-size="10" fill="#a9a5a0">W</text>'
+        '<text x="290" y="164" text-anchor="middle" font-size="10" fill="#a9a5a0">E</text>'
+        + marks + '</svg>'
+    )
+    plan_dia = f'<div class="dia-box">{plan_svg}<div class="dia-cap">개념 조닝 (방위 · 번호는 아래 목록)</div></div>'
+
+    # ── 단면 SVG: 층대 밴드에 번호 마커를 좌→우로 나열(겹침 없음) ──
+    _lvy = {"상층": 24, "중층": 70, "저층": 116, "지하": 178}
+    band_rects = ""
+    for lv, y in _lvy.items():
+        band_rects += (f'<rect x="44" y="{y}" width="252" height="38" fill="#f6f4f1" stroke="#e0ded9"/>'
+                       f'<text x="52" y="{y+23}" font-size="11" font-weight="700" font-family="Montserrat,sans-serif" fill="#6f6b66">{_esc(lv)}</text>')
+    smarks = ""
+    for lv, y in _lvy.items():
+        zs = [z for z in zones if (z.get("level") or "저층").strip() == lv]
+        x = 108
+        for z in zs:
+            smarks += _num_marker(x, y + 19, zc[id(z)], z["_num"], _zreq(z))
+            x += 28
+    sect_svg = (
+        '<svg viewBox="0 0 320 224" width="100%" style="max-width:360px;display:block;margin:0 auto">'
+        + band_rects
+        + '<line x1="38" y1="166" x2="302" y2="166" stroke="#141414" stroke-width="2"/>'
+        '<text x="298" y="163" text-anchor="end" font-size="8" fill="#a9a5a0">G.L</text>'
+        + smarks + '</svg>'
+    )
+    sect_dia = f'<div class="dia-box">{sect_svg}<div class="dia-cap">개념 단면 (층대 · 번호는 아래 목록)</div></div>'
+
+    # ── 번호 존 카드 (필수/추론 + 교차 근거 색칩) ──
+    zcards = ""
+    for z in zones:
+        draws = "".join(_draw_chip(x) for x in (z.get("draws_on") or []) if str(x).strip())
+        req = _zreq(z)
+        tag = ('<span class="pz-tag req">지침서 필수</span>' if req
+               else '<span class="pz-tag inf">AI 추론</span>')
+        col = zc[id(z)]
+        zcards += (
+            f'<div class="pz{" req" if req else ""}" style="border-left-color:{col}">'
+            f'<div class="pz-head"><span class="pz-num" style="background:{col}">{z["_num"]}</span>'
+            f'<span class="pz-loc">{_esc(z.get("plan"))}·{_esc(z.get("level"))}</span>'
+            f'{_esc(z.get("program"))}{tag}</div>'
+            + (f'<div class="pz-why">{_esc(z.get("why"))}</div>' if (z.get("why") or "").strip() else "")
+            + (f'<div class="pz-draws">{draws}</div>' if draws else "")
+            + '</div>'
+        )
+
+    syn = (ps.get("synthesis") or "").strip()
+    snote = (ps.get("section_note") or "").strip()
+    return (
+        '<section id="placement" class="sec">'
+        '<h2><span class="n">·</span>대지 근거 배치 ' + _AI_BADGE + '</h2>'
+        + (f'<div class="place-syn">{_esc(syn)}</div>' if syn else "")
+        + '<div class="place-dias">' + plan_dia + sect_dia + '</div>'
+        + (f'<div class="place-snote"><b>단면 원리</b> · {_esc(snote)}</div>' if snote else "")
+        + '<div class="place-legend"><b>마커:</b> <span class="lg-req">■ 채움=지침서 필수(사실)</span> '
+          '<span class="lg-inf">▢ 점선=AI 추론(제안)</span> &nbsp;|&nbsp; <b>근거 색:</b> '
+          '<span class="draw-chip d-site">대지</span><span class="draw-chip d-law">법</span>'
+          '<span class="draw-chip d-prog">프로그램</span><span class="draw-chip d-score">배점</span>'
+          '<span class="draw-chip d-spec">특수조건</span> — 여러 색 = 근거 교차</div>'
+        + f'<div class="place-zones">{zcards}</div>'
+        + '<div class="caveat">개념 다이어그램 — 방위·층대는 근거 기반 추론(정확한 도면·층수 아님). '
+          '<b>지침서가 위치를 명시한 존(필수)은 그대로 반영</b>, 나머지는 AI 배치 제안. 최종 배치는 설계팀.</div>'
+        '</section>'
+    )
+
+
+def _bid_structure_html(bid_structure: dict | None) -> str:
+    """입찰 2층 배점 구조(_bid_structure) → 섹션. 공모(None)면 ''. (하위 PQ표는 배점 무게중심 와플이 담당)"""
+    bs = bid_structure if isinstance(bid_structure, dict) else None
+    if not bs:
+        return ""
+    tl = bs.get("top_layer") or {}
+    axes = [a for a in (tl.get("axes") or []) if isinstance(a, dict)]
+    if not axes:
+        return ""
+    basis = tl.get("basis_dimension") or "연면적"
+
+    def _pct(v):
+        return f"{float(v):g}" if isinstance(v, (int, float)) else _esc(v)
+
+    rows = ""
+    exact = [a for a in axes if a.get("bands") and any(b.get("min_sqm") or b.get("max_sqm") for b in a["bands"])]
+    if exact:
+        labels = [(b.get("label") or "").split(":")[0].strip() for b in exact[0]["bands"]]
+        head = "".join(f'<th>{_esc(l)}</th>' for l in labels)
+        for a in axes:
+            if a.get("bands") and any(b.get("min_sqm") or b.get("max_sqm") for b in a["bands"]):
+                cells = "".join(f'<td>{_pct(b.get("weight_pct"))}%</td>' for b in a["bands"])
+            elif a.get("weight_range"):
+                lo, hi = a["weight_range"]; cells = f'<td colspan="{max(1,len(labels))}">{_pct(lo)}~{_pct(hi)}%</td>'
+            else:
+                cells = f'<td colspan="{max(1,len(labels))}">—</td>'
+            rows += f'<tr><td>{_esc(a.get("name"))}</td>{cells}</tr>'
+        table = f'<table class="dir-matrix"><thead><tr><th>상위 배점 축</th>{head}</tr></thead><tbody>{rows}</tbody></table>'
+    else:
+        lis = "".join(
+            f'<li>{_esc(a.get("name"))} — '
+            + (f'{_pct(a["weight_range"][0])}~{_pct(a["weight_range"][1])}%' if a.get("weight_range") else "비율 미확보")
+            + '</li>' for a in axes)
+        table = f'<ul class="list">{lis}<li class="muted">구간별 상세(%)는 추출에서 확보되지 않음 — 원문 확인 권장.</li></ul>'
+    app = (tl.get("applicable") or {})
+    note = _esc(app.get("note") or "")
+    return (
+        '<section id="bidstruct" class="sec">'
+        '<h2><span class="n">·</span>2층 배점 구조 <span style="font-size:12px;font-weight:600;color:var(--muted)">· 설계자 선정 입찰</span></h2>'
+        f'<div class="summ" style="border:none;padding:0;margin:0 0 10px;font-size:13.5px;color:var(--muted)">'
+        f'종합평점 = 사업수행능력평가 × w% + 가격평가 × (100−w)%. w 는 <b>{_esc(basis)}</b> 규모별 차등.</div>'
+        + table
+        + (f'<div class="site-note" style="margin-top:10px">⚠ {note}</div>' if note else "")
+        + '</section>'
+    )
+
+
 def to_proposal_html(
     proposal: dict,
     brief_name: str = "",
@@ -835,6 +1263,7 @@ def to_proposal_html(
     site_context: dict | None = None,
     site_image_b64: str = "",
     feasibility: dict | None = None,
+    bid_structure: dict | None = None,
 ) -> str:
     """_proposal dict → 자체완결 HTML 문자열 (PPT형 스크롤 덱, LLM 호출 없음).
 
@@ -884,15 +1313,23 @@ def to_proposal_html(
     legend_html = _legend_html() if (interp_html or directions_html) else ""
     refcases_html = _reference_cases_html(proposal)
 
+    # 결정 요약 cockpit(최상단) + 권장 종합안(설계 접근 직전) — 결정론, LLM 0.
+    cockpit_html = _decision_cockpit_html(proposal, bid_structure)
+    rec_html = _recommended_synthesis_html(proposal)
+
     body = (
-        legend_html
+        cockpit_html
+        + legend_html
         + summary_html
         + facts_html
         + site_html
         + _scoring_waffle(proposal)
+        + _bid_structure_html(bid_structure)
         + _win_themes_html(proposal)
+        + rec_html
         + directions_html
         + interp_html
+        + _placement_strategy_html(proposal)
         + _priorities_html(proposal)
         + _risks_html(proposal)
         + _checklist_html(proposal, "kickoff_checklist", "kickoff", "5", "착수 체크리스트")
