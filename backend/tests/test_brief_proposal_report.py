@@ -367,3 +367,61 @@ class TestBidStructureSection:
     def test_absent_for_competition(self):
         h = to_proposal_html(_PROPOSAL, "영등포", "공공청사")   # bid_structure 미전달
         assert 'id="bidstruct"' not in h
+
+
+class TestLawDiagnosisPanel:
+    """_site_context.law_diagnosis → '법적 골격(건축법 진단)' 패널. e2e 실동작으로 확정:
+    모드 A(용량)는 실형상이 없어 north_setback_m 이 대개 null → shadow_min_setback_m /
+    shadow_setback_rule / shadow_applies 로 정북 일조를 노출해야 한다(영등포·하안주공 실측 회귀).
+    """
+
+    def _sc(self, **hs):
+        base = {"north_setback_m": None, "shadow_applies": False, "shadow_setback_rule": None,
+                "shadow_min_setback_m": None, "road_height_limit_m": None, "parcel_north_depth_m": None}
+        base.update(hs)
+        return {"law_diagnosis": [{
+            "site_id": "부지1", "address": "테스트", "signal": "RED", "overall_score": 2.0,
+            "envelope": {"bcr_limit_pct": 60.0, "far_limit_pct": 400.0},
+            "height_solar": base, "reviews_required": [], "has_required_review": False,
+            "low_confidence": True, "source_notes": {}, "limit_mismatch": [],
+        }]}
+
+    def test_panel_renders_envelope_and_tag(self):
+        h = to_proposal_html({"executive_summary": "x"}, site_context=self._sc(road_height_limit_m=50.0))
+        assert "법적 골격" in h and "건축법 진단" in h
+        assert "건폐/용적 한도" in h and "건폐 60%" in h and "용적 400%" in h
+
+    def test_road_height_limit_shown(self):
+        h = to_proposal_html({"executive_summary": "x"}, site_context=self._sc(road_height_limit_m=50.0))
+        assert "가로구역 최고높이" in h and "50m" in h
+
+    def test_mode_a_solar_uses_shadow_min_not_north(self):
+        # north_setback_m=null 이지만 shadow_min_setback_m=65 → 정북 정보가 누락되면 안 됨(핵심 회귀)
+        h = to_proposal_html({"executive_summary": "x"}, site_context=self._sc(
+            shadow_applies=True, shadow_min_setback_m=65.0, shadow_setback_rule="높이/2 후퇴"))
+        assert "정북 일조" in h and "필요이격 65m" in h and "높이/2 후퇴" in h
+
+    def test_solar_actual_setback_preferred_when_present(self):
+        h = to_proposal_html({"executive_summary": "x"}, site_context=self._sc(north_setback_m=3.5))
+        assert "실이격 3.5m" in h
+
+    def test_solar_row_absent_when_no_shadow(self):
+        # 준공업 등 정북 미적용: shadow_applies=False·전부 null → 정북 행 자체가 없어야
+        h = to_proposal_html({"executive_summary": "x"}, site_context=self._sc(road_height_limit_m=50.0))
+        assert "정북 일조" not in h
+
+    def test_limit_mismatch_and_low_conf_warnings(self):
+        sc = self._sc(road_height_limit_m=50.0)
+        sc["law_diagnosis"][0]["limit_mismatch"] = [{"field": "용적률", "brief_pct": 460, "diagnose_limit_pct": 400.0}]
+        h = to_proposal_html({"executive_summary": "x"}, site_context=sc)
+        assert "brief 수치 재확인" in h and "용적률" in h
+        assert "신뢰도 낮음" in h
+
+    def test_absent_when_no_law_diagnosis(self):
+        h = to_proposal_html({"executive_summary": "x"}, site_context={"analysis": {"overall_summary": "요약"}})
+        assert "법적 골격" not in h
+
+    def test_escapes_law_data(self):
+        sc = self._sc(shadow_applies=True, shadow_min_setback_m=1.0, shadow_setback_rule="<script>x</script>")
+        h = to_proposal_html({"executive_summary": "x"}, site_context=sc)
+        assert "<script>x</script>" not in h

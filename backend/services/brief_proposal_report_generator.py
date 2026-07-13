@@ -559,9 +559,21 @@ def _law_diagnosis_html(site_context: dict | None) -> str:
         env = d.get("envelope") or {}
         hs = d.get("height_solar") or {}
         rows = []
-        ns = _num(hs.get("north_setback_m"), "m")
-        if ns:
-            rows.append(("정북 일조 후퇴", ns + (f" · {_esc(hs.get('shadow_setback_rule'))}" if hs.get("shadow_setback_rule") else "")))
+        # 정북 일조 — 모드 A(용량)는 실제 형상이 없어 north_setback_m(실이격)이 대개 null.
+        #   필요이격(shadow_min_setback_m)·적용여부(shadow_applies)·규칙(shadow_setback_rule)을 우선 노출.
+        nact, smin = hs.get("north_setback_m"), hs.get("shadow_min_setback_m")
+        rule = (hs.get("shadow_setback_rule") or "").strip()
+        solar = ""
+        if isinstance(nact, (int, float)):
+            solar = f"실이격 {nact:g}m"
+        elif isinstance(smin, (int, float)):
+            solar = f"필요이격 {smin:g}m"
+        elif hs.get("shadow_applies"):
+            solar = "적용(수동검토 필요)"
+        if solar:
+            if rule:
+                solar += " · " + (rule[:120] + "…" if len(rule) > 120 else rule)
+            rows.append(("정북 일조", solar))
         rh = _num(hs.get("road_height_limit_m"), "m")
         if rh:
             rows.append(("가로구역 최고높이", rh))
