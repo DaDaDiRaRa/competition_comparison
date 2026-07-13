@@ -102,6 +102,11 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
 .site-field .sfk{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;margin-bottom:2px}
 .site-field .sfv{font-size:13px;color:var(--text)}
 .site-note{margin-top:13px;font-size:11.5px;color:var(--muted);background:var(--soft);border-radius:6px;padding:8px 12px;line-height:1.55}
+.law-diag{margin-top:16px;border-top:1px dashed var(--line,#e0ded9);padding-top:14px}
+.law-hd{font-size:12px;font-weight:800;letter-spacing:.04em;color:var(--ink);margin-bottom:10px}
+.law-tag{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 6px;vertical-align:middle}
+.law-card{background:var(--soft);border-radius:8px;padding:11px 14px;margin-bottom:9px}
+.law-site{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:7px}
 
 /* ── 히어로 (대지 실측 이미지) ───── */
 .hero{margin:20px 0 6px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -535,8 +540,77 @@ def _facts_band_html(feasibility: dict | None) -> str:
     )
 
 
+def _law_diagnosis_html(site_context: dict | None) -> str:
+    """_site_context.law_diagnosis (건축법 진단 골격) → '법적 골격' 서브패널. 없으면 ''.
+
+    정북 일조사선 후퇴·가로구역 최고높이·건폐/용적 한도·심의 필수 — brief 에 없던 법적 매스
+    골격을 사실로 노출. low_confidence·limit_mismatch 는 주의 밴드로. (LLM 0, 진단 숫자 렌더만)
+    """
+    diags = [d for d in ((site_context or {}).get("law_diagnosis") or []) if isinstance(d, dict)]
+    if not diags:
+        return ""
+
+    def _num(v, unit=""):
+        return (f"{v:g}{unit}" if isinstance(v, (int, float)) else "")
+
+    cards = ""
+    any_low = False
+    for d in diags:
+        env = d.get("envelope") or {}
+        hs = d.get("height_solar") or {}
+        rows = []
+        ns = _num(hs.get("north_setback_m"), "m")
+        if ns:
+            rows.append(("정북 일조 후퇴", ns + (f" · {_esc(hs.get('shadow_setback_rule'))}" if hs.get("shadow_setback_rule") else "")))
+        rh = _num(hs.get("road_height_limit_m"), "m")
+        if rh:
+            rows.append(("가로구역 최고높이", rh))
+        bl = _num(env.get("bcr_limit_pct"), "%")
+        fl = _num(env.get("far_limit_pct"), "%")
+        if bl or fl:
+            rows.append(("건폐/용적 한도", " · ".join(x for x in (f"건폐 {bl}" if bl else "", f"용적 {fl}" if fl else "") if x)))
+        reviews = [r for r in (d.get("reviews_required") or []) if isinstance(r, dict) and (r.get("name") or "").strip()]
+        if reviews:
+            rows.append(("필수 심의", " · ".join(_esc(r.get("name")) for r in reviews)))
+        if not rows:
+            continue
+        body = "".join(
+            f'<div class="site-field"><div class="sfk">{_esc(k)}</div><div class="sfv">{_esc(v)}</div></div>'
+            for k, v in rows
+        )
+        head = _esc((d.get("site_id") or d.get("address") or "").strip())
+        warn = ""
+        mm = [m for m in (d.get("limit_mismatch") or []) if isinstance(m, dict)]
+        if mm:
+            bits = " · ".join(
+                f'{_esc(m.get("field"))} brief {_num(m.get("brief_pct"), "%")} ↔ 진단 {_num(m.get("diagnose_limit_pct"), "%")}'
+                for m in mm
+            )
+            warn = f'<div class="site-note" style="margin-top:6px">⚠ brief 수치 재확인 — {bits}</div>'
+        if d.get("low_confidence"):
+            any_low = True
+        cards += (
+            '<div class="law-card">'
+            + (f'<div class="law-site">{head}</div>' if head else "")
+            + f'<div class="site-fields">{body}</div>' + warn + '</div>'
+        )
+
+    if not cards:
+        return ""
+    note = "건축법 자동진단(arch-law-diagnose) 되받기 — 허용 한도로 최대 매스 역산 후 진단한 법적 골격."
+    if any_low:
+        note += " 일부 값은 자동조회·추정(신뢰도 낮음) — 현장·원문 확인 필요."
+    return (
+        '<div class="law-diag">'
+        '<div class="law-hd">법적 골격 <span class="law-tag">건축법 진단</span></div>'
+        + cards
+        + f'<div class="site-note" style="margin-top:8px">⚠ {_esc(note)} 정밀 일조사선·층수는 미포함(참고).</div>'
+        '</div>'
+    )
+
+
 def _site_context_html(site_context: dict | None, image_b64: str = "", compact: bool = False) -> str:
-    """_site_context (VWorld 위성 + AI 판독) → 대지·맥락 섹션. 데이터 없으면 ''.
+    """_site_context (VWorld 위성 + AI 판독 + 건축법 진단 골격) → 대지·맥락 섹션. 데이터 없으면 ''.
 
     compact=True 면 이미지·요약을 히어로가 이미 보여주므로 생략(필드·주의만).
     """
@@ -545,10 +619,11 @@ def _site_context_html(site_context: dict | None, image_b64: str = "", compact: 
     if not isinstance(analysis, dict):
         analysis = {}
 
+    law_html = _law_diagnosis_html(sc)
     summary = "" if compact else (analysis.get("overall_summary") or "").strip()
     matched = (sc.get("matched_address") or sc.get("address_input") or "").strip()
     has_fields = any((analysis.get(k) or "").strip() for k, _ in _SITE_FIELDS)
-    if not (summary or has_fields or (image_b64 and not compact)):
+    if not (summary or has_fields or law_html or (image_b64 and not compact)):
         return ""
 
     thumb = ""
@@ -575,21 +650,26 @@ def _site_context_html(site_context: dict | None, image_b64: str = "", compact: 
         )
 
     conf = (analysis.get("confidence") or "").lower()
-    conf_lbl = _CONF_LABEL.get(conf, "")
-    caveats = [str(c).strip() for c in (analysis.get("caveats") or []) if str(c).strip()]
-    note_bits = ["위성 영상 AI 판독 기반 — 현장 답사·지적도로 확인 필요 (추론 포함)"]
-    if conf_lbl:
-        note_bits.append(f"판독 신뢰도 {conf_lbl}")
-    note = '<div class="site-note">⚠ ' + " · ".join(_esc(x) for x in note_bits)
-    if caveats:
-        note += "<br>" + " · ".join(_esc(c) for c in caveats)
-    note += "</div>"
+    # vision 판독 주의 문구는 vision 콘텐츠(요약·필드·이미지)가 있을 때만.
+    has_vision = bool(summary or fields or (image_b64 and not compact))
+    note = ""
+    if has_vision:
+        conf_lbl = _CONF_LABEL.get(conf, "")
+        caveats = [str(c).strip() for c in (analysis.get("caveats") or []) if str(c).strip()]
+        note_bits = ["위성 영상 AI 판독 기반 — 현장 답사·지적도로 확인 필요 (추론 포함)"]
+        if conf_lbl:
+            note_bits.append(f"판독 신뢰도 {conf_lbl}")
+        note = '<div class="site-note">⚠ ' + " · ".join(_esc(x) for x in note_bits)
+        if caveats:
+            note += "<br>" + " · ".join(_esc(c) for c in caveats)
+        note += "</div>"
 
     main = (
         '<div class="site-main">'
         + (f'<div class="site-summary">{_esc(summary)}</div>' if summary else "")
         + (f'<div class="site-fields">{fields}</div>' if fields else "")
         + note
+        + law_html
         + '</div>'
     )
 

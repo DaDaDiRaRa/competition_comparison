@@ -102,6 +102,19 @@ _PROPOSAL_INSTRUCTION = (
     "    (2) measured.design_drivers 를 design_directions·site_rationale 에 직접 연결하라 (이 대지가 설계에 요구하는 것).\n"
     "    (3) basis 에 measured.key_facts.<항목> / measured.design_drivers.<이름> / measured.hazards 를 근거로 표기 가능.\n"
     "    (4) measured 수치는 인용 OK(실측·출처 있음), 단 measured 에 **없는** 새 숫자는 여전히 금지. proximity 가 '시군구'면 '구 평균(대지 고유값 아님)'임을 밝혀라.\n"
+    "  site_context.law_diagnosis (있으면): 건축법 자동진단(arch-law-diagnose)이 되돌린 **이 대지의\n"
+    "    법적 매스 골격** — 부지별 배열, 각 항목 하위 키:\n"
+    "    envelope(bcr_limit_pct 건폐율 한도·far_limit_pct 용적률 한도) /\n"
+    "    height_solar(north_setback_m 정북 실이격·shadow_setback_rule 일조사선 규칙·road_height_limit_m 가로구역 최고높이·parcel_north_depth_m) /\n"
+    "    reviews_required(심의 REQUIRED 항목) / has_required_review / low_confidence / limit_mismatch(brief 한도 vs 진단 한도 불일치).\n"
+    "  law_diagnosis 규칙: (1) **정북 후퇴·가로구역 최고높이·용적/건폐 한도는 brief 에 없던 법적 사실**이니\n"
+    "    massing_strategy·placement_strategy 의 매스·층대·방위 근거로 **직접** 써라(예: north_setback_m>0 이면\n"
+    "    북측 저층·후퇴, road_height_limit_m 로 최고 층대 상한). basis 에 'law:정북일조 N.Nm' / 'law:가로구역 Nm'\n"
+    "    처럼 표기 가능(진단 실측값이면 인용 OK). (2) has_required_review=true 면 그 심의를 risks 로 노출하고\n"
+    "    한도를 법정으로 단정하지 마라. (3) **low_confidence=true 거나 값이 null 이면 단정 말고 '한도 안에서'\n"
+    "    수준까지만** 쓰고 confidence 를 낮춰라(진단이 VWorld 자동조회·추정으로 채운 값). (4) limit_mismatch 가\n"
+    "    있으면 open_questions/risks 에 'brief 건폐/용적 수치 재확인' 을 넣어라. (5) 진단에 **없는** 새 숫자(정밀\n"
+    "    일조사선 각도·층수 확정 등) 발명 금지 — floors_above 는 애초에 추정 입력이라 층수 판정은 참고만.\n"
     "\n"
     "[출력 JSON — 정확히 이 키만, 다른 키 추가 금지]\n"
     "{\n"
@@ -190,9 +203,11 @@ _PROPOSAL_INSTRUCTION = (
     "     뻔하니 넣지 마라. 여러 사실이 겹치는 지점에서 나온 배치만 가치 있다.\n"
     "  ② **법적 envelope 활용** — sites 의 zone_use(용도지역)·floor_area_ratio_pct·\n"
     "     building_coverage_pct·max_height·limits_determined_by 를 매스·층대 근거로 써라\n"
-    "     (예: 용도지역/높이한도 안에서 상층 업무, 정북 방향이면 북측 후퇴). 단 우리에겐\n"
-    "     정밀 일조사선 계산이 없으니 '한도 안에서' 수준까지, limits_determined_by=심의면\n"
-    "     그 수치를 법정 한계로 단정 말 것.\n"
+    "     (예: 용도지역/높이한도 안에서 상층 업무, 정북 방향이면 북측 후퇴). **site_context.law_diagnosis\n"
+    "     가 있으면 그 진단 실측값(north_setback_m 정북 후퇴·road_height_limit_m 가로구역 최고높이·\n"
+    "     envelope 한도)을 우선 근거로 draws_on 에 'law:…' 로 앵커하라** — 이게 brief 에 없던 골격이다.\n"
+    "     단 정밀 일조사선 각도는 없으니 '한도/후퇴 안에서' 수준까지, low_confidence·null 이거나\n"
+    "     limits_determined_by=심의/has_required_review=true 면 그 수치를 법정 한계로 단정 말 것.\n"
     "  ③ **대지 사실 우선** — plan(방위) 은 site_context(향·접도·주변·조망) 근거로 정하라.\n"
     "     site_context 없으면 배점·프로그램·envelope 로만 정하고 confidence 를 낮춰라.\n"
     "  ④ plan 은 8방위+C enum, level 은 지하/저층/중층/상층 enum(정확한 층수 발명 금지).\n"
@@ -339,9 +354,10 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
         payload["placement_requirements"] = _preq
     ref_ctx = payload.get("reference_cases", {})
 
-    # 대지 맥락 — vision(VWorld 위성·지적도 판독) + measured(터읽기 실측 board_brief). 둘 중 하나만 있어도 실음.
+    # 대지 맥락 — vision(VWorld 위성·지적도 판독) + measured(터읽기 실측 board_brief) +
+    # law_diagnosis(건축법 진단 골격). 셋 중 하나만 있어도 실음.
     sc = brief_data.get("_site_context")
-    if sc and isinstance(sc, dict) and (sc.get("analysis") or sc.get("measured")):
+    if sc and isinstance(sc, dict) and (sc.get("analysis") or sc.get("measured") or sc.get("law_diagnosis")):
         site_ctx = {
             "matched_address": sc.get("matched_address", ""),
             "lat":             sc.get("lat"),
@@ -353,6 +369,10 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
         measured = _measured_digest(sc.get("measured"))
         if measured:
             site_ctx["measured"] = measured
+        # 건축법 진단 골격(정북 일조사선·가로구역 높이·건폐/용적 한도·심의) — placement 법근거.
+        law = [d for d in (sc.get("law_diagnosis") or []) if isinstance(d, dict)]
+        if law:
+            site_ctx["law_diagnosis"] = law
         payload["site_context"] = site_ctx
 
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)

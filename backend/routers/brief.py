@@ -552,6 +552,45 @@ async def analyze_brief(
                         })
                 except Exception as me:
                     logger.warning("터읽기 실측 맥락 실패 (비치명): %s", me)
+
+                # 건축법 진단 되받기 (arch-law-diagnose) — 배치의 '법적 골격'.
+                #   feasibility_export 허용 한도로 최대 매스 역산 → 진단 → 정북 일조사선·가로구역
+                #   높이·건폐/용적 한도·심의여부. ARCH_LAW_API_URL 설정 시에만(게이트), 부지별 병렬,
+                #   실패/필수값 결측 부지는 조용히 skip. brief 에 없는 매스 골격을 채운다.
+                try:
+                    from services import arch_law_client as alc
+                    reqs = [(s, alc.to_request(s)) for s in fe_sites]
+                    diag_targets = [(s, rq) for s, rq in reqs if rq]
+                    if alc.is_enabled() and diag_targets:
+                        yield sse({
+                            "type": "stage", "stage": "law_diagnosis",
+                            "msg": f"건축법 진단 중 ({len(diag_targets)}개 부지)", "_timestamp": ts,
+                        })
+                        diags = await asyncio.gather(
+                            *[alc.diagnose(rq) for _, rq in diag_targets],
+                            return_exceptions=True,
+                        )
+                        law_out: list[dict] = []
+                        for (s, _rq), diag in zip(diag_targets, diags):
+                            if isinstance(diag, Exception) or not diag:
+                                continue
+                            dig = alc.digest_diagnosis(diag, site=s)
+                            if dig:
+                                dig["site_id"] = s.get("site_id")
+                                dig["address"] = s.get("address")
+                                law_out.append(dig)
+                        if law_out:
+                            sc["law_diagnosis"] = law_out
+                            yield sse({"type": "done", "step": "law_diagnosis", "_timestamp": ts})
+                        else:
+                            yield sse({
+                                "type": "law_diagnosis_error",
+                                "message": "건축법 진단 미확보 (응답 없음) — 배점·envelope 근거로만 배치 진행",
+                                "_timestamp": ts,
+                            })
+                except Exception as le:
+                    logger.warning("건축법 진단 되받기 실패 (비치명): %s", le)
+
                 brief_data["_site_context"] = sc or None
 
             # ── 5. 저장 — JSON · MD · xlsx · html ──────────────────────────
