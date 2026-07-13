@@ -11,8 +11,9 @@ teoilgi_client 패턴. 우리가 이미 내보내는 feasibility_export.sites[] 
 ⚠ floors_above 는 brief 미제공 추정값 → 층수 의존 판정은 참고만.
 
 경계·안전:
-- 게이팅: ARCH_LAW_API_URL env 가 **명시 설정**될 때만 동작(_enabled). 기본값 없음 →
-  Cloud Run(service.yaml 미설정)에서는 자동 off, 자기호출 오작동 원천 차단. .env 로 로컬 dev 만 on.
+- 기본 ON: teoilgi 패턴 — 공개 배포된 진단 엔진(_DEFAULT_DIAG_URL)을 기본값으로 두고 항상 시도.
+  배포본·로컬 모두 별도 설정 없이 동작. 로컬 진단 엔진을 쓰려면 ARCH_LAW_API_URL 로 override.
+  끄려면 ARCH_LAW_DISABLE=1 (오프라인·비용 절감). 기본값이 공개 URL 이라 localhost 자기호출 없음.
 - graceful: to_request None(필수값 결측)·응답 실패·타임아웃 → 그 부지 조용히 skip, 본 파이프라인 무중단.
 - ⚠ timeout 120s — 진단 1건 65~110초(국가유산청·Claude 포함). 짧으면 정상 진단이 timeout.
 - Phase 3(graph 조문 원문)는 이번 범위 아님 — diagnose 숫자 골격만.
@@ -27,8 +28,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# 진단 서버 주소. 기본값 없음(명시 설정 게이트) — teoilgi 와 달리 배포 URL 미상이라 자동호출 금지.
-_DEFAULT_DIAG_URL = "http://localhost:8000"
+# 진단 서버 주소 기본값 = 공개 배포된 arch-law-diagnose (형제앱, teoilgi 와 동일 패턴).
+# 로컬 진단 엔진을 쓰려면 ARCH_LAW_API_URL 로 override (예: http://localhost:8010).
+_DEFAULT_DIAG_URL = "https://arch-law-diagnose-30350777436.asia-northeast3.run.app"
 
 # 신뢰도 저하 신호 — source 에 이 토큰이 있으면 low_confidence (VWorld 자동조회·추정 폴백).
 # '시행령'은 정상 법정값이라 제외 — 넣으면 전국 대부분이 저신뢰로 오탐(진단앱 피드백).
@@ -40,8 +42,11 @@ def diag_url() -> str:
 
 
 def is_enabled() -> bool:
-    """ARCH_LAW_API_URL 이 명시 설정됐을 때만 진단 호출을 켠다 (자기호출·prod 오작동 방지)."""
-    return bool(os.environ.get("ARCH_LAW_API_URL"))
+    """기본 ON — 공개 진단 엔진을 항상 시도. ARCH_LAW_DISABLE=1 이면 끔(오프라인·비용 절감).
+
+    graceful 이므로 엔진이 없어도 무해(조용히 skip). 자기호출 문제는 기본값이 공개 URL 이라 없음.
+    """
+    return os.environ.get("ARCH_LAW_DISABLE", "").strip().lower() not in ("1", "true", "yes")
 
 
 def to_request(site: dict) -> dict | None:

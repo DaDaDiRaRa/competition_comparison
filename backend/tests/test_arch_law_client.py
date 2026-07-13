@@ -175,11 +175,19 @@ def test_diagnose_graceful_on_exception(monkeypatch):
     assert asyncio.run(alc.diagnose({})) is None
 
 
-# ── 게이트: ARCH_LAW_API_URL 명시 설정 시에만 ─────────────────────────────────
+# ── 게이트: 기본 ON(공개 엔진), ARCH_LAW_DISABLE 로만 끔 ──────────────────────
 
-def test_is_enabled_gate(monkeypatch):
-    monkeypatch.delenv("ARCH_LAW_API_URL", raising=False)
+def test_is_enabled_default_on(monkeypatch):
+    monkeypatch.delenv("ARCH_LAW_DISABLE", raising=False)
+    assert alc.is_enabled() is True                     # 기본 ON
+    monkeypatch.setenv("ARCH_LAW_DISABLE", "1")
+    assert alc.is_enabled() is False                    # 명시 OFF
+    monkeypatch.setenv("ARCH_LAW_DISABLE", "true")
     assert alc.is_enabled() is False
-    monkeypatch.setenv("ARCH_LAW_API_URL", "http://localhost:8000")
-    assert alc.is_enabled() is True
-    assert alc.diag_url() == "http://localhost:8000"
+
+
+def test_diag_url_default_is_public(monkeypatch):
+    monkeypatch.delenv("ARCH_LAW_API_URL", raising=False)
+    assert alc.diag_url() == "https://arch-law-diagnose-30350777436.asia-northeast3.run.app"
+    monkeypatch.setenv("ARCH_LAW_API_URL", "http://localhost:8010")  # override
+    assert alc.diag_url() == "http://localhost:8010"
