@@ -163,8 +163,17 @@ def _check_duplicate(requirements: dict) -> list[dict]:
 
 
 def _check_omission(brief_data: dict, requirements: dict) -> list[dict]:
-    """핵심 정량 수치 null / 심사기준 비어있음 검출."""
+    """핵심 정량 수치 null / 심사기준 비어있음 검출.
+
+    장르 인식: 설계자 선정 입찰(bid) 지침서는 연면적/건폐율/용적률 같은 **설계지표를
+    애초에 규정하지 않는다**(자격·실적·가격 심사 문서). 그 3개를 '누락'으로 경고하면
+    false positive(대치미도 사례) — genre=="bid" 면 설계지표 누락 체크를 건너뛴다.
+    심사기준(PQ 배점) 누락 체크는 장르 무관하게 유지.
+    """
     flags: list[dict] = []
+
+    genre = (brief_data.get("_brief_genre") or {}).get("genre", "unknown")
+    _is_bid = genre == "bid"
 
     quant = brief_data.get("_quantitative") or {}
     bp    = _first(brief_data, "brief_program")
@@ -186,47 +195,50 @@ def _check_omission(brief_data: dict, requirements: dict) -> list[dict]:
         "floor_area_ratio_pct":   _first_site_val("floor_area_ratio_pct"),
     }
 
-    # 연면적
-    if not _any_nonnull(
-        (quant, "total_floor_area_sqm"),
-        (bp,    "total_required_floor_area_sqm"),
-        (at,    "total_required_area_sqm"),
-        (at,    "total_required_floor_area_sqm"),
-        (bpi_summary, "floor_area_sqm"),
-    ):
-        flags.append(_flag(
-            "omission", "high",
-            "연면적(총 요구 면적) 수치 미추출 — 면적 프로그램 페이지 확인 필요",
-            "_quantitative.total_floor_area_sqm",
-        ))
+    # 설계지표(연면적·건폐율·용적률) 누락 — 설계공모/일반 지침서에서만 검사.
+    # 입찰(bid) 지침서는 이 지표를 규정 안 하므로 누락 경고가 false positive.
+    if not _is_bid:
+        # 연면적
+        if not _any_nonnull(
+            (quant, "total_floor_area_sqm"),
+            (bp,    "total_required_floor_area_sqm"),
+            (at,    "total_required_area_sqm"),
+            (at,    "total_required_floor_area_sqm"),
+            (bpi_summary, "floor_area_sqm"),
+        ):
+            flags.append(_flag(
+                "omission", "high",
+                "연면적(총 요구 면적) 수치 미추출 — 면적 프로그램 페이지 확인 필요",
+                "_quantitative.total_floor_area_sqm",
+            ))
 
-    # 건폐율 한도
-    if not _any_nonnull(
-        (quant, "building_coverage_ratio_pct"),
-        (bp,    "building_coverage_limit_pct"),
-        (br,    "building_coverage_ratio_limit_pct"),
-        (at,    "building_coverage_limit_pct"),
-        (bpi_summary, "building_coverage_pct"),
-    ):
-        flags.append(_flag(
-            "omission", "medium",
-            "건폐율 한도 수치 미추출",
-            "_quantitative.building_coverage_ratio_pct",
-        ))
+        # 건폐율 한도
+        if not _any_nonnull(
+            (quant, "building_coverage_ratio_pct"),
+            (bp,    "building_coverage_limit_pct"),
+            (br,    "building_coverage_ratio_limit_pct"),
+            (at,    "building_coverage_limit_pct"),
+            (bpi_summary, "building_coverage_pct"),
+        ):
+            flags.append(_flag(
+                "omission", "medium",
+                "건폐율 한도 수치 미추출",
+                "_quantitative.building_coverage_ratio_pct",
+            ))
 
-    # 용적률 한도
-    if not _any_nonnull(
-        (quant, "floor_area_ratio_pct"),
-        (bp,    "floor_area_ratio_limit_pct"),
-        (br,    "floor_area_ratio_limit_pct"),
-        (at,    "floor_area_ratio_limit_pct"),
-        (bpi_summary, "floor_area_ratio_pct"),
-    ):
-        flags.append(_flag(
-            "omission", "medium",
-            "용적률 한도 수치 미추출",
-            "_quantitative.floor_area_ratio_pct",
-        ))
+        # 용적률 한도
+        if not _any_nonnull(
+            (quant, "floor_area_ratio_pct"),
+            (bp,    "floor_area_ratio_limit_pct"),
+            (br,    "floor_area_ratio_limit_pct"),
+            (at,    "floor_area_ratio_limit_pct"),
+            (bpi_summary, "floor_area_ratio_pct"),
+        ):
+            flags.append(_flag(
+                "omission", "medium",
+                "용적률 한도 수치 미추출",
+                "_quantitative.floor_area_ratio_pct",
+            ))
 
     # 심사기준(배점표) 비어있음
     be = _first(brief_data, "brief_evaluation")

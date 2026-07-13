@@ -1354,13 +1354,30 @@ def _extract_docx_eval_from_table(block: dict) -> dict:
         return {"evaluation_categories": [], "total_points": None}
 
     # 컬럼 인덱스 식별
+    #   points_col 은 "배점/비중/가중치" 컬럼이어야 한다. 단순 last-match 로 잡으면
+    #   "점수 계산 방법"(등급별 산출점수 컬럼)이 "점수" 정규식에 걸려 배점 컬럼을
+    #   덮어써 버린다 (대치미도 입찰지침서: '배점'(col5) 대신 '점수 계산 방법'(col9)
+    #   선택 → 등급점수·세대수 임계값을 배점으로 오추출, total 989.8). 그래서 후보를
+    #   점수화해 "계산/산출/방법" 컬럼은 배제하고 '배점/비중/가중'을 우선한다(동점 시 최좌).
+    def _points_header_rank(h: str) -> int:
+        if _re.search(r"계산|산출|산정|방법", h):   # "점수 계산 방법" 등 — 배점 아님
+            return -1
+        if _re.search(r"배점|비중|가중", h):
+            return 3
+        if _re.search(r"점수", h):
+            return 1
+        return 0
+
     name_col   = 0
     points_col = -1
     detail_col = -1
+    _best_rank = 0
     for i, h in enumerate(headers):
-        if _re.search(r"비중|배점|점수|가중", h):
+        rank = _points_header_rank(h)
+        if rank > _best_rank:                         # strict > → 동점이면 최좌측(먼저) 유지
+            _best_rank = rank
             points_col = i
-        elif _re.search(r"세부|평가\s*사항|항목|평가\s*항목|내용", h) and i != 0:
+        if detail_col < 0 and i != 0 and _re.search(r"세부|평가\s*사항|평가\s*항목|항목|내용", h):
             detail_col = i
 
     if points_col < 0:
@@ -1432,7 +1449,14 @@ def _extract_docx_eval_from_table(block: dict) -> dict:
                 if r >= len(body_rows):
                     continue
                 row = body_rows[r]
-                nm = row[name_col].strip() if name_col < len(row) else ""
+                # 병합 인식 우선: 다단계 표에서 상위 카테고리 셀이 col0 을 세로병합하면
+                # 하위 행의 raw col0 은 빈칸이라 이름이 ''로 샌다. name_groups(merge_info
+                # 기반)로 지배 카테고리명을 복원 (대치미도 유사용역실적/신용도 귀속 교정).
+                nm = ""
+                if r in name_groups:
+                    nm = (name_groups[r].get("value") or "").strip()
+                if not nm and name_col < len(row):
+                    nm = row[name_col].strip()
                 if nm and nm not in group_names:
                     group_names.append(nm)
                 if 0 <= detail_col < len(row):
@@ -2291,5 +2315,13 @@ def merge_extracted_data(
             result["feasibility_export"] = build_feasibility_export(result)
         except Exception:
             logger.warning("feasibility_export 생성 실패 (무시)", exc_info=True)
+
+        # 장르 판별 (설계공모 vs 설계자 선정 입찰) — 결정론·LLM 0. 다운스트림(해설·제안서·
+        # 처방·검증)이 입찰의 PQ 표를 설계축으로 오인하지 않게 태깅. 실패해도 무중단.
+        try:
+            from services.brief_genre import detect_brief_genre
+            result["_brief_genre"] = detect_brief_genre(result)
+        except Exception:
+            logger.warning("_brief_genre 판별 실패 (무시)", exc_info=True)
 
     return result

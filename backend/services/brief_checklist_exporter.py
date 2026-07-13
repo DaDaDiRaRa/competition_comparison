@@ -1141,6 +1141,84 @@ def _reference_cases_section_html(ref: Any) -> str:
     )
 
 
+def _bid_structure_html(brief_data: dict) -> str:
+    """입찰(bid) 2층 배점 구조(_bid_structure) → HTML 블록. 없으면 빈 문자열.
+
+    상위 배점을 두 경우로 렌더: ① 정확 밴드(연면적 구간별 %)가 있으면 밴드 표,
+    ② 범위만(예 '가격 60~80% 차등') 있으면 요약 라인. 하위 PQ 100점표는 항상.
+    """
+    bs = brief_data.get("_bid_structure")
+    if not isinstance(bs, dict):
+        return ""
+    tl = bs.get("top_layer") or {}
+    axes = tl.get("axes") or []
+    basis = tl.get("basis_dimension") or "unknown"
+    pq = bs.get("pq_detail") or {}
+    pq_cats = pq.get("categories") or []
+    if not axes and not pq_cats:
+        return ""
+
+    _role = {"pq": "사업수행능력", "price": "가격"}
+    exact_axes = [a for a in axes if a.get("bands") and any(
+        b.get("min_sqm") or b.get("max_sqm") for b in a["bands"])]
+
+    top_html = ""
+    if exact_axes:
+        ref_bands = exact_axes[0]["bands"]
+        band_labels = [(b.get("label") or "").split(":")[0].strip() for b in ref_bands]
+        head = "".join(f'<th class="num">{_esc(lbl)}</th>' for lbl in band_labels)
+        rows = []
+        for a in axes:
+            role = _role.get(a.get("role"), "")
+            if a.get("bands") and any(b.get("min_sqm") or b.get("max_sqm") for b in a["bands"]):
+                cells = "".join(f'<td class="num">{_esc(b.get("weight_pct"))}%</td>' for b in a["bands"])
+            elif a.get("weight_range"):
+                lo, hi = a["weight_range"]
+                cells = f'<td class="num muted" colspan="{max(1,len(band_labels))}">{_esc(lo)}~{_esc(hi)}% (구간 상세 미확보)</td>'
+            else:
+                cells = f'<td class="muted" colspan="{max(1,len(band_labels))}">—</td>'
+            rows.append(f'<tr><td>{_esc(a.get("name"))}'
+                        + (f' <span class="muted">({_esc(role)})</span>' if role else "")
+                        + f'</td>{cells}</tr>')
+        top_html = ('<table class="t"><thead><tr><th>상위 배점 축</th>' + head
+                    + '</tr></thead><tbody>' + "".join(rows) + '</tbody></table>')
+    elif axes:
+        # 범위만 — 요약 라인
+        lines = []
+        for a in axes:
+            role = _role.get(a.get("role"), "")
+            wr = a.get("weight_range")
+            rng = f'{_esc(wr[0])}~{_esc(wr[1])}%' if wr else '비율 미확보'
+            lines.append(f'<li>{_esc(a.get("name"))}'
+                         + (f' <span class="muted">({_esc(role)})</span>' if role else "")
+                         + f' — {rng}</li>')
+        top_html = ('<ul class="list">' + "".join(lines)
+                    + f'<li class="muted">구간별 상세(%)는 추출에서 확보되지 않음 — 원문 배점표 확인 권장.</li></ul>')
+
+    app = tl.get("applicable") or {}
+    app_note = app.get("note") or ""
+    weights = app.get("weights") or {}
+    if weights:
+        wtxt = " · ".join(f"{_esc(k)} {_esc(v)}%" for k, v in weights.items())
+        app_html = (f'<div class="note"><b>적용:</b> {_esc(app.get("band_label"))} → {wtxt} '
+                    f'<span class="muted">({_esc(app_note)})</span></div>')
+    elif app_note:
+        app_html = f'<div class="note muted">⚠ {_esc(app_note)}</div>'
+    else:
+        app_html = ""
+
+    pq_txt = " · ".join(f'{_esc(c.get("name"))} {_esc(c.get("points"))}점' for c in pq_cats)
+    return (
+        '<div class="gblock" style="border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:6px 0 18px">'
+        '<div class="ghead">2층 배점 구조 <span class="muted" style="font-weight:400">— 설계자 선정 입찰</span></div>'
+        f'<div class="note muted" style="margin:4px 0 10px">종합평점 = 사업수행능력평가 × w% + 가격평가 × (100−w)%. '
+        f'w 는 <b>{_esc(basis)}</b> 규모별 차등.</div>'
+        + top_html + app_html +
+        (f'<div class="note" style="margin-top:10px"><b>하위 — 사업수행능력 {_esc(pq.get("total_points"))}점:</b> {pq_txt}</div>' if pq_cats else "")
+        + '</div>'
+    )
+
+
 def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> str:
     """지침서 추출 데이터를 미니멀 스타일 HTML 문서로 반환 (보기·인쇄용).
 
@@ -1192,8 +1270,16 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
     if brief_data.get("total_pages"):
         unit = "블록" if src == "DOCX" else "페이지"
         meta_bits.append(f"<span>{brief_data['total_pages']} {unit}</span>")
+    # 장르 인식 eyebrow — 입찰 지침서를 '설계공모'로 오표기하지 않게.
+    _genre = (brief_data.get("_brief_genre") or {}).get("genre", "unknown")
+    _eyebrow = {
+        "bid": "설계자 선정 입찰 지침서 분석",
+        "competition": "설계공모 지침서 분석",
+    }.get(_genre, "지침서 분석")
+    if _genre == "bid":
+        meta_bits.insert(0, '<span>설계자 선정 입찰 (자격·실적·가격 심사)</span>')
     P.append(
-        '<header class="doc"><div class="eyebrow">설계공모 지침서 분석</div>'
+        f'<header class="doc"><div class="eyebrow">{_esc(_eyebrow)}</div>'
         f"<h1>{_esc(title)}</h1>"
         f'<div class="meta">{"".join(meta_bits)}</div></header>'
     )
@@ -1483,6 +1569,10 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
 
     # ══ 3. 심사기준 ════════════════════════════════════════════════════════════
     sec(3, "심사기준", "심사")
+    # 입찰이면 2층 배점 구조를 먼저 노출 (아래 표는 하위 PQ 100점표).
+    _bid_html = _bid_structure_html(brief_data)
+    if _bid_html:
+        P.append(_bid_html)
     kv([("총배점", e["total_points"]), ("평가방법", e["eval_method"]),
         ("심사단구성", e["jury"])], units={"총배점": " 점"})
 

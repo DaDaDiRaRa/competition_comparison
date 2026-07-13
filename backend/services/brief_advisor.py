@@ -234,6 +234,15 @@ _ADVISOR_INSTRUCTION = (
     "[작업] 아래 지침서 데이터를 종합해 JSON 한 개를 생성하라.\n"
     "\n"
     "[입력 설명]\n"
+    "- brief_genre: 이 지침서의 장르(결정론 판별). \"bid\"=설계자 선정 입찰(적격심사/협상)이면\n"
+    "  평가축은 **설계안이 아니라 자격·실적·가격**(사업수행능력=참여기술자·유사용역실적·신용도\n"
+    "  + 가격)이다. 이 경우 배치/공간계획 같은 '설계 강조'로 오해하지 말고 '어떤 자격·실적이\n"
+    "  얼마나 배점되는지'로 해설하라. \"competition\"이면 설계축 그대로. \"unknown\"이면 데이터가\n"
+    "  가리키는 대로.\n"
+    "- bid_structure: (입찰일 때만) 2층 배점 구조 — top_layer.axes(사업수행능력% vs 가격%,\n"
+    "  연면적 규모별 밴드) + pq_detail(하위 100점표). applicable.weights 가 있으면 그 값으로,\n"
+    "  없으면(연면적 미확보) '연면적에 따라 사업수행능력 20~40% / 가격 60~80%로 갈린다'처럼\n"
+    "  밴드로 서술하고 적용은 확인 필요라고 명시하라. 값을 지어내지 말 것.\n"
     "- scoring_focus: 배점표를 결정론으로 계산한 결과(카테고리·배점·비중·랭킹). 신뢰 가능.\n"
     "- evaluation_detail: 배점 항목별 세부(sub_items)·실격조건·총점·출처 페이지(eval_page).\n"
     "- emphasis_signals.emphasis_phrases: 강조어휘(특히/반드시/중점 등)가 붙은 본문 문장.\n"
@@ -322,6 +331,7 @@ def _build_advisor_payload(brief_data: dict, facility_type: str) -> dict:
 
     payload = {
         "facility_type": facility_type,
+        "brief_genre": (brief_data.get("_brief_genre") or {}).get("genre", "unknown"),
         "scoring_focus": compute_scoring_focus(brief_data),
         "evaluation_detail": {
             "total_points": be.get("total_points"),
@@ -345,6 +355,12 @@ def _build_advisor_payload(brief_data: dict, facility_type: str) -> dict:
     ref_ctx = collect_reference_context(facility_type)
     if ref_ctx:
         payload["reference_cases"] = ref_ctx
+
+    # 입찰(bid) 2층 배점 구조 — 있으면 상위 밴드·적용 가중치를 그대로 실어 LLM 이
+    # "사업수행능력 30% vs 가격 70%" 처럼 구체적으로 짚게 한다 (결정론 값, 환각 방지).
+    bid_struct = brief_data.get("_bid_structure")
+    if isinstance(bid_struct, dict):
+        payload["bid_structure"] = bid_struct
     return payload
 
 

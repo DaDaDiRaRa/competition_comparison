@@ -152,6 +152,14 @@ def _merge_multi_brief_data(data_list: list[dict]) -> dict:
     base["page_map"] = all_pages
     base["total_pages"] = len(all_pages)
 
+    # 장르는 합쳐진 brief_evaluation 전체 신호로 재판별 (first-wins 로 첫 파일 값만
+    # 쓰면 공고문·지침서 중 한쪽 축만 반영됨). 결정론·LLM 0, 실패해도 무중단.
+    try:
+        from services.brief_genre import detect_brief_genre
+        base["_brief_genre"] = detect_brief_genre(base)
+    except Exception:
+        pass
+
     return base
 
 
@@ -183,6 +191,7 @@ def list_briefs():
                 "has_proposal":       (briefs_dir / f"{p.stem}_proposal.html").exists(),
                 "has_playbook":       (briefs_dir / f"{p.stem}_playbook.html").exists(),
                 "has_site_context":   bool(meta.get("_site_context")),
+                "brief_genre":        (meta.get("_brief_genre") or {}).get("genre", "unknown"),
                 "validation_summary": (meta.get("validation") or {}).get("summary", {}),
             })
         except Exception:
@@ -436,6 +445,16 @@ async def analyze_brief(
             )
             yield sse({"type": "done", "step": "brief_reqs", "_timestamp": ts})
 
+            # 입찰(bid) 2층 배점 구조 — genre=="bid" 일 때만. requirements(상위 연면적 밴드)
+            # + brief_evaluation(하위 PQ 100점표) 재배치. 결정론·LLM 0, 실패해도 무중단.
+            try:
+                from services.bid_structure import build_bid_structure
+                bs = build_bid_structure(brief_data)
+                if bs:
+                    brief_data["_bid_structure"] = bs
+            except Exception:
+                logger.warning("_bid_structure 생성 실패 (무시)", exc_info=True)
+
             # ── 4. 검증 (결정론적, LLM 없음) ───────────────────────────────
             brief_data["_brief_meta"] = {
                 "brief_id":      brief_id,
@@ -586,6 +605,7 @@ async def analyze_brief(
                 "has_insight":        bool(brief_data.get("_insight")),
                 "has_site_context":   bool(brief_data.get("_site_context")),
                 "site_context":       brief_data.get("_site_context"),
+                "brief_genre":        (brief_data.get("_brief_genre") or {}).get("genre", "unknown"),
                 "_timestamp":         ts,
             })
 

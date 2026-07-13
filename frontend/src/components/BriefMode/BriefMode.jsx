@@ -101,6 +101,11 @@ const s = {
     background: 'var(--color-info-bg)', border: '1px solid var(--color-info)',
     color: 'var(--color-info)', fontWeight: 'var(--font-weight-semibold)',
   },
+  genreBadge: {
+    fontSize: 11, padding: '2px 7px', borderRadius: 10,
+    background: 'var(--color-ink, #1a1a1a)', border: '1px solid var(--color-ink, #1a1a1a)',
+    color: '#fff', fontWeight: 'var(--font-weight-semibold)',
+  },
 }
 
 export default function BriefMode() {
@@ -466,6 +471,20 @@ export default function BriefMode() {
         <>
           <div style={s.divider} />
 
+          {result.brief_genre === 'bid' && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16,
+              padding: '10px 14px', borderRadius: 8,
+              background: 'var(--color-bg-surface-alt)', border: '1px solid var(--color-border)',
+              fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)',
+            }}>
+              <span style={s.genreBadge}>입찰</span>
+              <span>이 문서는 <b>설계자 선정 입찰</b> 지침서로 판별되었습니다 — 평가가 설계안이 아니라
+                자격·실적·가격(사업수행능력+가격) 심사입니다. 해설·제안서·처방이 이에 맞춰 해석되며,
+                건폐율·용적률 같은 설계지표 누락은 경고에서 제외됩니다.</span>
+            </div>
+          )}
+
           <div style={s.sectionTitle}>체크리스트 내보내기</div>
           <div style={s.dlRow}>
             {result.html_filename && (
@@ -741,6 +760,8 @@ export default function BriefMode() {
                       {item.source_format === 'multi' ? '복수파일' : (item.source_format || 'pdf').toUpperCase()}
                     </span>
                     {item.has_insight && <span style={s.insightBadge}>AI 해설</span>}
+                    {item.brief_genre === 'bid' && <span style={s.genreBadge}>입찰</span>}
+                    {item.brief_genre === 'competition' && <span style={s.genreBadge}>공모</span>}
                     {item.has_proposal && (
                       <span style={{ ...s.insightBadge, background: 'var(--color-accent-bg, #fdecee)', borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}>제안서</span>
                     )}
