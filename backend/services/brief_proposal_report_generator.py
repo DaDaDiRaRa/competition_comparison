@@ -273,6 +273,9 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
 .place-snote{font-size:12.5px;color:var(--muted);margin:10px 0 2px}
 .place-snote b{color:var(--accent);font-family:var(--sans);font-size:11px;letter-spacing:.04em}
 .place-legend{font-size:11px;color:var(--muted);margin:14px 0 10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.place-site{margin:6px 0 18px;padding-top:4px}
+.place-site-hd{font-family:var(--sans);font-size:12px;font-weight:800;letter-spacing:.04em;color:var(--accent);
+  border-bottom:1.5px solid var(--accent);padding-bottom:4px;margin:0 0 10px}
 .place-zones{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .pz{border:1px solid var(--line);border-left:3px solid var(--accent);padding:11px 14px;background:#fff}
 .pz-head{font-size:14px;font-weight:700;color:var(--ink);line-height:1.4}
@@ -1200,24 +1203,8 @@ def _num_marker(cx, cy, color, num, required):
             f'font-family="Montserrat,sans-serif" fill="{txt}">{num}</text></g>')
 
 
-def _placement_strategy_html(proposal: dict) -> str:
-    """대지 근거 배치 → SVG 조닝(방위)·단면(층대) 다이어그램(번호 마커) + 번호 존 카드. 없으면 ''.
-
-    다이어그램은 번호 마커만(겹침·잘림 없음), 전체 프로그램명은 아래 카드에. required=true(지침서
-    명시 필수)=채운 마커, false(AI 추론)=점선 마커. draws_on 색으로 교차 근거 시각화.
-    """
-    ps = proposal.get("placement_strategy")
-    if not isinstance(ps, dict):
-        return ""
-    zones = [z for z in (ps.get("zones") or []) if isinstance(z, dict) and (z.get("program") or "").strip()]
-    if not zones:
-        return ""
-    # 번호(1-base) + 색
-    for i, z in enumerate(zones):
-        z["_num"] = i + 1
-    zc = {id(z): _ZONE_COLORS[i % len(_ZONE_COLORS)] for i, z in enumerate(zones)}
-
-    # ── 조닝 SVG: 방위 앵커에 번호 마커를 겹치지 않게 배치 ──
+def _zone_plan_svg(zones: list, zc: dict) -> str:
+    """조닝 SVG: 방위 앵커에 번호 마커를 겹치지 않게 배치 (부지 1개분)."""
     by_plan: dict[str, list] = {}
     for z in zones:
         p = (z.get("plan") or "C").strip().upper()
@@ -1226,11 +1213,10 @@ def _placement_strategy_html(proposal: dict) -> str:
     for pos, zs in by_plan.items():
         cx, cy = _PLAN_XY[pos]
         n = len(zs)
-        # 한 방위에 여러 개면 가로로 펼침(겹침 방지), 중심 정렬
-        for i, z in enumerate(zs):
+        for i, z in enumerate(zs):          # 한 방위 여러 개면 가로로 펼침(겹침 방지)
             ox = cx + (i - (n - 1) / 2) * 26
             marks += _num_marker(ox, cy, zc[id(z)], z["_num"], _zreq(z))
-    plan_svg = (
+    return (
         '<svg viewBox="0 0 320 320" width="100%" style="max-width:340px;display:block;margin:0 auto">'
         '<rect x="46" y="46" width="228" height="228" fill="#fbfbfa" stroke="#141414" stroke-width="1.5"/>'
         '<text x="160" y="34" text-anchor="middle" font-size="12" font-weight="700" font-family="Montserrat,sans-serif" fill="#6f6b66">N ▲</text>'
@@ -1239,9 +1225,10 @@ def _placement_strategy_html(proposal: dict) -> str:
         '<text x="290" y="164" text-anchor="middle" font-size="10" fill="#a9a5a0">E</text>'
         + marks + '</svg>'
     )
-    plan_dia = f'<div class="dia-box">{plan_svg}<div class="dia-cap">개념 조닝 (방위 · 번호는 아래 목록)</div></div>'
 
-    # ── 단면 SVG: 층대 밴드에 번호 마커를 좌→우로 나열(겹침 없음) ──
+
+def _zone_sect_svg(zones: list, zc: dict) -> str:
+    """단면 SVG: 층대 밴드에 번호 마커를 좌→우로 나열 (부지 1개분)."""
     _lvy = {"상층": 24, "중층": 70, "저층": 116, "지하": 178}
     band_rects = ""
     for lv, y in _lvy.items():
@@ -1254,24 +1241,32 @@ def _placement_strategy_html(proposal: dict) -> str:
         for z in zs:
             smarks += _num_marker(x, y + 19, zc[id(z)], z["_num"], _zreq(z))
             x += 28
-    sect_svg = (
+    return (
         '<svg viewBox="0 0 320 224" width="100%" style="max-width:360px;display:block;margin:0 auto">'
         + band_rects
         + '<line x1="38" y1="166" x2="302" y2="166" stroke="#141414" stroke-width="2"/>'
         '<text x="298" y="163" text-anchor="end" font-size="8" fill="#a9a5a0">G.L</text>'
         + smarks + '</svg>'
     )
-    sect_dia = f'<div class="dia-box">{sect_svg}<div class="dia-cap">개념 단면 (층대 · 번호는 아래 목록)</div></div>'
 
-    # ── 번호 존 카드 (필수/추론 + 교차 근거 색칩) ──
-    zcards = ""
+
+def _zone_diagrams(zones: list, zc: dict) -> str:
+    return (
+        f'<div class="dia-box">{_zone_plan_svg(zones, zc)}<div class="dia-cap">개념 조닝 (방위 · 번호는 아래 목록)</div></div>'
+        f'<div class="dia-box">{_zone_sect_svg(zones, zc)}<div class="dia-cap">개념 단면 (층대 · 번호는 아래 목록)</div></div>'
+    )
+
+
+def _zone_cards(zones: list, zc: dict) -> str:
+    """번호 존 카드 (필수/추론 + 교차 근거 색칩)."""
+    out = ""
     for z in zones:
         draws = "".join(_draw_chip(x) for x in (z.get("draws_on") or []) if str(x).strip())
         req = _zreq(z)
         tag = ('<span class="pz-tag req">지침서 필수</span>' if req
                else '<span class="pz-tag inf">AI 추론</span>')
         col = zc[id(z)]
-        zcards += (
+        out += (
             f'<div class="pz{" req" if req else ""}" style="border-left-color:{col}">'
             f'<div class="pz-head"><span class="pz-num" style="background:{col}">{z["_num"]}</span>'
             f'<span class="pz-loc">{_esc(z.get("plan"))}·{_esc(z.get("level"))}</span>'
@@ -1280,6 +1275,63 @@ def _placement_strategy_html(proposal: dict) -> str:
             + (f'<div class="pz-draws">{draws}</div>' if draws else "")
             + '</div>'
         )
+    return out
+
+
+_PLACE_LEGEND = (
+    '<div class="place-legend"><b>마커:</b> <span class="lg-req">■ 채움=지침서 필수(사실)</span> '
+    '<span class="lg-inf">▢ 점선=AI 추론(제안)</span> &nbsp;|&nbsp; <b>근거 색:</b> '
+    '<span class="draw-chip d-site">대지</span><span class="draw-chip d-law">법</span>'
+    '<span class="draw-chip d-prog">프로그램</span><span class="draw-chip d-score">배점</span>'
+    '<span class="draw-chip d-spec">특수조건</span> — 여러 색 = 근거 교차</div>'
+)
+
+
+def _placement_strategy_html(proposal: dict) -> str:
+    """대지 근거 배치 → SVG 조닝(방위)·단면(층대) 다이어그램(번호 마커) + 번호 존 카드. 없으면 ''.
+
+    다부지(zone.site 서로 다름)면 **부지별로 다이어그램·카드를 분리**한다 — 한 사각형에 두 부지를
+    섞으면 방위(N/S/E/W)가 뭉개지므로. 번호는 전체 통합(1..N), 색도 통합. 단부지면 종전과 동일.
+    required=true(지침서 명시)=채운 마커, false(AI 추론)=점선. draws_on 색으로 교차 근거 시각화.
+    """
+    ps = proposal.get("placement_strategy")
+    if not isinstance(ps, dict):
+        return ""
+    zones = [z for z in (ps.get("zones") or []) if isinstance(z, dict) and (z.get("program") or "").strip()]
+    if not zones:
+        return ""
+    # 번호(1-base) + 색 — 부지 분리와 무관하게 전체 통합(카드↔다이어그램 대조 유지)
+    for i, z in enumerate(zones):
+        z["_num"] = i + 1
+    zc = {id(z): _ZONE_COLORS[i % len(_ZONE_COLORS)] for i, z in enumerate(zones)}
+
+    # ── 부지별 그룹핑 (등장 순서 보존). site 라벨이 2개 이상 실제로 갈릴 때만 분리 ──
+    groups: dict[str, list] = {}
+    order: list[str] = []
+    for z in zones:
+        k = (z.get("site") or "").strip()
+        if k not in groups:
+            groups[k] = []
+            order.append(k)
+        groups[k].append(z)
+    multi = len([k for k in order if k]) > 1
+
+    if multi:
+        body = ""
+        for k in order:
+            zs = groups[k]
+            hd = f'<div class="place-site-hd">{_esc(k) if k else "부지 미지정"}</div>'
+            body += (
+                '<div class="place-site">' + hd
+                + '<div class="place-dias">' + _zone_diagrams(zs, zc) + '</div>'
+                + f'<div class="place-zones">{_zone_cards(zs, zc)}</div>'
+                + '</div>'
+            )
+    else:
+        body = (
+            '<div class="place-dias">' + _zone_diagrams(zones, zc) + '</div>'
+            + f'<div class="place-zones">{_zone_cards(zones, zc)}</div>'
+        )
 
     syn = (ps.get("synthesis") or "").strip()
     snote = (ps.get("section_note") or "").strip()
@@ -1287,14 +1339,9 @@ def _placement_strategy_html(proposal: dict) -> str:
         '<section id="placement" class="sec">'
         '<h2><span class="n">·</span>대지 근거 배치 ' + _AI_BADGE + '</h2>'
         + (f'<div class="place-syn">{_esc(syn)}</div>' if syn else "")
-        + '<div class="place-dias">' + plan_dia + sect_dia + '</div>'
         + (f'<div class="place-snote"><b>단면 원리</b> · {_esc(snote)}</div>' if snote else "")
-        + '<div class="place-legend"><b>마커:</b> <span class="lg-req">■ 채움=지침서 필수(사실)</span> '
-          '<span class="lg-inf">▢ 점선=AI 추론(제안)</span> &nbsp;|&nbsp; <b>근거 색:</b> '
-          '<span class="draw-chip d-site">대지</span><span class="draw-chip d-law">법</span>'
-          '<span class="draw-chip d-prog">프로그램</span><span class="draw-chip d-score">배점</span>'
-          '<span class="draw-chip d-spec">특수조건</span> — 여러 색 = 근거 교차</div>'
-        + f'<div class="place-zones">{zcards}</div>'
+        + _PLACE_LEGEND
+        + body
         + '<div class="caveat">개념 다이어그램 — 방위·층대는 근거 기반 추론(정확한 도면·층수 아님). '
           '<b>지침서가 위치를 명시한 존(필수)은 그대로 반영</b>, 나머지는 AI 배치 제안. 최종 배치는 설계팀.</div>'
         '</section>'

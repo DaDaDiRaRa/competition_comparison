@@ -425,3 +425,50 @@ class TestLawDiagnosisPanel:
         sc = self._sc(shadow_applies=True, shadow_min_setback_m=1.0, shadow_setback_rule="<script>x</script>")
         h = to_proposal_html({"executive_summary": "x"}, site_context=sc)
         assert "<script>x</script>" not in h
+
+
+class TestPlacementMultiSite:
+    """다부지 placement 는 부지별로 다이어그램·카드를 분리한다(방위 뭉갬 방지). 단부지는 종전대로."""
+
+    def _zone(self, program, plan, level="저층", site=None, required=False):
+        z = {"program": program, "plan": plan, "level": level, "required": required,
+             "why": "근거", "draws_on": ["대지:접도", "배점:배치40"]}
+        if site:
+            z["site"] = site
+        return z
+
+    def test_multisite_splits_per_site(self):
+        ps = {"synthesis": "두 부지 성격이 다르다", "section_note": "단면 원리",
+              "zones": [
+                  self._zone("민원실(부지1)", "S", site="부지1", required=True),
+                  self._zone("업무동(부지1)", "C", "상층", site="부지1"),
+                  self._zone("보건소(부지2)", "S", site="부지2", required=True),
+                  self._zone("커뮤니티(부지2)", "N", "중층", site="부지2"),
+              ]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert 'class="place-site"' in h
+        assert h.count('class="place-site-hd"') == 2          # 부지별 헤더 2개
+        assert "부지1" in h and "부지2" in h
+        assert h.count('class="place-dias"') == 2             # 다이어그램 쌍도 2세트
+        # 번호는 전체 통합(1..4)
+        for n in ("1", "2", "3", "4"):
+            assert f'>{n}</text>' in h or f'>{n}</span>' in h
+
+    def test_singlesite_no_split(self):
+        ps = {"zones": [self._zone("민원실", "S"), self._zone("업무동", "C", "상층")]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert 'class="place-site"' not in h                  # 분리 없음
+        assert h.count('class="place-dias"') == 1             # 다이어그램 쌍 1세트
+        assert 'class="place-zones"' in h
+
+    def test_single_labeled_site_not_split(self):
+        # 부지 라벨이 하나뿐이면(다 같은 site) 분리하지 않음
+        ps = {"zones": [self._zone("a", "S", site="부지1"), self._zone("b", "C", site="부지1")]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert 'class="place-site"' not in h
+
+    def test_site_label_escaped(self):
+        ps = {"zones": [self._zone("a", "S", site="<b>부지1</b>"),
+                        self._zone("b", "C", site="부지2")]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert "<b>부지1</b>" not in h
