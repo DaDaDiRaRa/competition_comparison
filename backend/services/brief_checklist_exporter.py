@@ -2154,6 +2154,86 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
         wsi.column_dimensions["B"].width = 14
         wsi.column_dimensions["C"].width = 70
 
+    # ── Sheet 0.5: 대지·법적 골격 (site_context 있을 때만) ──────────────────────
+    #   VWorld 판독 + 터읽기 실측 + arch-law 진단(정북·가로구역·envelope·심의) — 렌더만, LLM 0.
+    _sc = brief_data.get("_site_context")
+    if isinstance(_sc, dict):
+        _an = _sc.get("analysis") if isinstance(_sc.get("analysis"), dict) else {}
+        _me = _sc.get("measured") if isinstance(_sc.get("measured"), dict) else {}
+        _law = [d for d in (_sc.get("law_diagnosis") or []) if isinstance(d, dict)]
+        _summ = str(_an.get("overall_summary") or "").strip()
+        _drv = [d.get("name") for d in (_me.get("design_drivers") or [])
+                if isinstance(d, dict) and (d.get("name") or "").strip()]
+        if _summ or _an or _law or _drv:
+            _SL_SPAN = 8
+            wsl = wb.create_sheet("대지·법적 골격")
+            rowl = _write_section_title(wsl, "대지 · 법적 골격", 1, span=_SL_SPAN)
+            rowl += 1
+            _dl = wsl.cell(row=rowl, column=1,
+                value="※ 위성 판독·건축법 자동진단 기반(추론 포함) — 현장·원문 확인 필요. "
+                      "수주 제안서 생성 시 이 근거로 배치·전략까지 확장.")
+            _dl.font = Font(italic=True, color="888888")
+            _dl.alignment = _wrap_top
+            wsl.merge_cells(start_row=rowl, start_column=1, end_row=rowl, end_column=_SL_SPAN)
+            rowl += 1
+            rowl = _sep(wsl, rowl)
+
+            if _summ or _an or _drv:
+                rowl = _write_subsection(wsl, "대지 맥락 (위성·실측)", rowl, span=_SL_SPAN)
+                if _summ:
+                    c = wsl.cell(row=rowl, column=1, value=_summ)
+                    c.alignment = _wrap_top
+                    wsl.merge_cells(start_row=rowl, start_column=1, end_row=rowl, end_column=_SL_SPAN)
+                    rowl += 1
+                for _k, _lb in (("orientation", "향·형상"), ("road_access", "접도"),
+                                ("surrounding_uses", "주변 용도"), ("natural_assets", "자연·조망"),
+                                ("special_context", "특이사항")):
+                    _v = str(_an.get(_k) or "").strip()
+                    if _v:
+                        rowl = _write_kv(wsl, _lb, _v, rowl, val_end_col=_SL_SPAN)
+                if _drv:
+                    rowl = _write_kv(wsl, "실측 설계 드라이버(터읽기)", " · ".join(_drv), rowl, val_end_col=_SL_SPAN)
+                rowl = _sep(wsl, rowl)
+
+            if _law:
+                def _ln(v, unit=""):
+                    return f"{v:g}{unit}" if isinstance(v, (int, float)) else ""
+                rowl = _write_subsection(wsl, "법적 골격 (건축법 진단)", rowl, span=_SL_SPAN)
+                rowl = _write_header(wsl, ["부지", "필수 심의", "정북 일조", "가로구역 최고높이",
+                                           "건폐 한도(%)", "용적 한도(%)", "신뢰도", "재확인"], rowl)
+                for d in _law:
+                    hs = d.get("height_solar") or {}
+                    env = d.get("envelope") or {}
+                    reviews = [r.get("name") for r in (d.get("reviews_required") or [])
+                               if isinstance(r, dict) and r.get("name")]
+                    if isinstance(hs.get("north_setback_m"), (int, float)):
+                        solar = f"실이격 {_ln(hs['north_setback_m'], 'm')}"
+                    elif isinstance(hs.get("shadow_min_setback_m"), (int, float)):
+                        solar = f"필요이격 {_ln(hs['shadow_min_setback_m'], 'm')}"
+                    elif hs.get("shadow_applies"):
+                        solar = "적용(수동검토)"
+                    else:
+                        solar = "—"
+                    mism = " · ".join(
+                        f"{m.get('field')} 지침서{_ln(m.get('brief_pct'), '%')}↔진단{_ln(m.get('diagnose_limit_pct'), '%')}"
+                        for m in (d.get("limit_mismatch") or []) if isinstance(m, dict))
+                    bcr = env.get("bcr_limit_pct")
+                    far = env.get("far_limit_pct")
+                    vals = [str(d.get("site_id") or d.get("address") or ""),
+                            " · ".join(reviews) or "—", solar,
+                            _ln(hs.get("road_height_limit_m"), "m") or "—",
+                            bcr if isinstance(bcr, (int, float)) else "—",
+                            far if isinstance(far, (int, float)) else "—",
+                            "낮음" if d.get("low_confidence") else "보통", mism]
+                    for _ci, _val in enumerate(vals, start=1):
+                        cc = wsl.cell(row=rowl, column=_ci, value=_cell_safe(_val))
+                        cc.alignment = _wrap_top
+                        cc.border = _border_thin
+                    rowl += 1
+
+            for _col, _w in zip("ABCDEFGH", (14, 26, 30, 16, 12, 12, 10, 30)):
+                wsl.column_dimensions[_col].width = _w
+
     # ── Sheet 1: 면적·프로그램 ────────────────────────────────────────────────
     ws1 = wb.create_sheet("1.면적·프로그램")
 

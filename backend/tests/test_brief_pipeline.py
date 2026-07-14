@@ -379,3 +379,25 @@ class TestSiteLawSection:
         bd = {"_brief_meta": {"facility_type": "public"}}
         assert 'id="sitelaw"' not in to_html(bd, self._V)
         assert "0.5 대지" not in to_markdown(bd, self._V)
+
+
+class TestSiteLawXlsx:
+    """대지·법적 골격 xlsx 시트 (#7 마무리). site_context 있으면 시트, 없으면 생략."""
+
+    def test_xlsx_sheet_renders(self):
+        import io as _io, openpyxl as _ox
+        bd = TestSiteLawSection()._bd()
+        wb = _ox.load_workbook(_io.BytesIO(to_xlsx(bd, {"flags": [], "summary": {}})))
+        assert "대지·법적 골격" in wb.sheetnames
+        ws = wb["대지·법적 골격"]
+        blob = " | ".join(str(c.value) for row in ws.iter_rows() for c in row if c.value)
+        assert "건축위원회 심의" in blob and "도시계획위원회 심의" in blob
+        assert "필요이격 65m" in blob        # 주거 정북
+        assert "남측 접도" in blob            # 대지 요약
+        assert "용적률" in blob and "460" in blob   # mismatch 재확인
+
+    def test_xlsx_sheet_absent_without_site_context(self):
+        import io as _io, openpyxl as _ox
+        wb = _ox.load_workbook(_io.BytesIO(to_xlsx({"_brief_meta": {"facility_type": "public"}},
+                                                   {"flags": [], "summary": {}})))
+        assert "대지·법적 골격" not in wb.sheetnames
