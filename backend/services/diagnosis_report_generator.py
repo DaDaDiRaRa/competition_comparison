@@ -98,6 +98,7 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 
 from services.grade_helpers import GRADE_RING_COLORS as _GRADE_RING_COLORS, to_grade as _to_grade_base
 from services.citation_check import flags_band_html as citation_flags_band
+from services.report_badges import ai_badge as _ai_badge, fact_interp_legend as _fact_interp_legend
 
 
 def _to_grade(d) -> str | None:
@@ -300,7 +301,8 @@ def _render_axes(axes: dict, axes_meta: dict) -> str:
         if weaknesses:
             body += f'<div class="axis-weaknesses">▼ 약점: {_esc(" · ".join(weaknesses))}</div>'
         if recs:
-            body += f'<div class="axis-recs">→ 보강: {_esc(" / ".join(recs))}</div>'
+            body += (f'<div class="axis-recs">→ 보강{_ai_badge()}: '
+                     f'{_esc(" / ".join(recs))}</div>')
         if evidence:
             body += f'<div class="axis-evidence">근거: {_esc(evidence)}</div>'
 
@@ -327,7 +329,7 @@ def _render_recommendations(recs: list) -> str:
         )
     return (
         f'<div class="sec" style="border-left:4px solid #334155">'
-        f'<div class="sec-title">보강 포인트</div>'
+        f'<div class="sec-title">보강 포인트{_ai_badge()}</div>'
         f'<div class="rec-list">{items}</div>'
         f'</div>'
     )
@@ -340,6 +342,7 @@ def generate_diagnosis_report(diagnosis: dict) -> str:
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     body = _render_header(diagnosis, ft_label)
+    body += _fact_interp_legend()
     body += _render_page_dist(
         diagnosis.get("page_distribution") or {},
         diagnosis.get("total_pages") or 0,

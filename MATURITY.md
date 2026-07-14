@@ -95,5 +95,5 @@ impact(정확도·활용도 개선폭) ÷ effort 로 정렬. 위에서부터 순
 - [x] 4. 교차비교 결과 저장/재조회 — 2026-07-14 완료 (HTML 옆에 구조화 JSON 저장, `save/load_cross_compare_data`, `has_data` 플래그, `/rerender` 라우트(LLM 0), 프론트 재렌더 버튼, 회귀 5케이스)
 - [x] 5. 교차비교 토큰 오버플로우 가드 — 2026-07-14 완료 (⚠재평가: 오버플로우 위험은 ~30제출물부터로 과대추정이었음. 진짜 latent 버그=Pass 2 실패 시 성공한 Pass 1 통째 유실. 방어 가드로 전환: Pass 2 비치명화(Pass 1 등급 보존)+concept 전축키 보장+capped/실패 시 `_coverage_note` 고지+리포트 렌더, 회귀 3케이스)
 - [x] 6. 아카이브 BM25 랭킹 — 2026-07-14 완료 (FTS5 `ORDER BY bm25()` 관련도순 + 컬럼 가중치 `_BM25_WEIGHTS`(시설유형·컨셉키워드 우대), 무순 폴백, `_ranked_match` 공유 헬퍼로 keyword·natural 통일, 회귀 4케이스). 남은 무관 한계: trigram 2자 미만 미매칭(병원·시청)은 별개 이슈
-- [ ] 7. 진단·비교 사실/해석 2층 분리
+- [x] 7. 진단·비교 사실/해석 2층 분리 — 2026-07-14 완료 (`report_badges.py` 공용 배지·범례. 진단=보강(recommendations) 배지, 비교=당선/낙선 사후요약 배지 + 상단 범례. 사실(강점/약점/근거·p.N)은 그대로. 프롬프트·스키마 불변(렌더만), 회귀 8케이스). 자연 확장: MyProject improvement_points·key_differentiators도 동일 배지 적용 가능(미적용)
 - [ ] 8. 회귀 테스트 백필

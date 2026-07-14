@@ -18,6 +18,7 @@ COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미�
 
 from services.grade_helpers import GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade
 from services.citation_check import flags_band_html as citation_flags_band
+from services.report_badges import ai_badge as _ai_badge, fact_interp_legend as _fact_interp_legend
 
 
 def _grade_badge(grade) -> str:
@@ -1167,14 +1168,20 @@ def generate_comparison_report(
     # ── 당선/낙선 요약 ────────────────────────────────────
     ws_items   = "".join(f'<div class="diff-item diff-win">{w}</div>' for w in winner_strengths)
     lw_items   = "".join(f'<div class="diff-item diff-lose">{w}</div>' for w in loser_weaknesses)
+    # 당선작 우월 요인·낙선작 공통 약점 = 결과 공개 후 사후 추론(AI 해석) — 배지로 사실과 구분.
     ws_section = (
-        f'<div class="sec">{_sec_title(_next_n(), "당선작 우월 요인")}<div class="diff-list">{ws_items}</div></div>'
+        f'<div class="sec">{_sec_title(_next_n(), "당선작 우월 요인")}{_ai_badge()}'
+        f'<div class="diff-list">{ws_items}</div></div>'
         if ws_items else ""
     )
     lw_section = (
-        f'<div class="sec">{_sec_title(_next_n(), "낙선작 공통 약점")}<div class="diff-list">{lw_items}</div></div>'
+        f'<div class="sec">{_sec_title(_next_n(), "낙선작 공통 약점")}{_ai_badge()}'
+        f'<div class="diff-list">{lw_items}</div></div>'
         if lw_items else ""
     )
+
+    # 사실/해석 범례 — AI 해석 섹션(당선/낙선 사후 요약)이 있을 때만 노출.
+    legend_section = _fact_interp_legend() if (ws_items or lw_items) else ""
 
     # ── 당선작 강점 분석 ──────────────────────────────────
     winner_boxes = ""
@@ -1251,6 +1258,7 @@ document.getElementById('btn-dl-html').addEventListener('click', function() {{
 </script>
 <div class="page-wrap">
 {header}
+{legend_section}
 {dashboard_section}
 {sub_section}
 {table_section}
