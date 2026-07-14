@@ -119,6 +119,7 @@ export default function BriefMode() {
   const [result, setResult] = useState(null)   // complete 이벤트 payload
   const [flags, setFlags] = useState([])        // validate done의 flag_list
   const [includeInsight, setIncludeInsight] = useState(true)  // AI 종합 해설 포함 여부
+  const [includeProposal, setIncludeProposal] = useState(false)  // 수주 제안서(대지·법 융합)까지 한 방에
   const [regening, setRegening] = useState(false)             // 해설 재생성 진행 중
   const [regenErr, setRegenErr] = useState('')
   const [proposing, setProposing] = useState(false)           // 수주 제안서 생성 진행 중
@@ -183,6 +184,7 @@ export default function BriefMode() {
     fd.append('brief_name', briefName.trim())
     briefFiles.forEach(f => fd.append('brief_pdf', f))
     fd.append('include_insight', includeInsight ? 'true' : 'false')
+    fd.append('include_proposal', includeProposal ? 'true' : 'false')
 
     try {
       for await (const ev of runBriefAnalyze(fd)) {
@@ -448,6 +450,24 @@ export default function BriefMode() {
           AI 종합 해설 포함
           <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', marginLeft: 6 }}>
             지침서가 강조하는 것·놓치면 안 되는 것을 근거와 함께 정리합니다 (API 토큰 소량 사용)
+          </span>
+        </span>
+      </label>
+
+      <label style={{
+        display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, cursor: 'pointer',
+        fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)',
+      }}>
+        <input
+          type="checkbox"
+          checked={includeProposal}
+          onChange={e => setIncludeProposal(e.target.checked)}
+          style={{ marginTop: 2, cursor: 'pointer' }}
+        />
+        <span>
+          수주 제안서까지 한 번에
+          <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', marginLeft: 6 }}>
+            대지 실측·건축법 진단을 융합해 배치·전략 제안서를 분석과 동시에 생성합니다 (시간·API 비용 추가, 나중에 버튼으로도 가능)
           </span>
         </span>
       </label>

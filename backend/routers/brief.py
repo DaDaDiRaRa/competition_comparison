@@ -245,6 +245,7 @@ async def analyze_brief(
     brief_pdf_ref: str | None = Form(None),
     brief_pdf_refs: str | None = Form(None),   # JSON 배열 — 복수 파일 청크 업로드용
     include_insight: bool = Form(True),
+    include_proposal: bool = Form(False),      # 켜면 분석 한 방에 수주 제안서까지(대지·법 융합, 비용·지연 추가)
 ):
     """
     지침서 분석 + 체크리스트 내보내기. 단일 파일 또는 복수 파일(혼합 포맷 가능) 지원.
@@ -593,6 +594,35 @@ async def analyze_brief(
 
                 brief_data["_site_context"] = sc or None
 
+            # ── 4.8 수주 제안서 (옵션, LLM 1콜) — 추출+대지+법을 한 방에 종합 해석 ──
+            #   include_proposal 시 propose_project 가 _insight(4.5)+_site_context(4.7: vision·
+            #   measured·law_diagnosis)+배점을 종합해 placement·법적 골격까지 산출. 수집된 신호가
+            #   버튼 없이 바로 소비됨. 실패해도 비치명(추출·해설·site_context 산출물 유지).
+            if include_proposal and settings.has_api_key():
+                yield sse({
+                    "type": "stage", "stage": "proposal",
+                    "msg": "수주 제안서 생성 중 (대지·법 융합, LLM)", "_timestamp": ts,
+                })
+                try:
+                    proposal = await propose_project(brief_data, facility_type)
+                    proposal["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                    brief_data["_proposal"] = proposal   # 5단계 json 저장이 함께 씀
+                    _sync_write(
+                        briefs_dir / f"{brief_id}_proposal.html",
+                        _render_proposal_html(brief_data, brief_id, briefs_dir,
+                                              facility_type, brief_name or brief_id),
+                    )
+                    yield sse({
+                        "type": "done", "step": "proposal",
+                        "data_confidence": proposal.get("data_confidence"), "_timestamp": ts,
+                    })
+                except Exception as pe:
+                    logger.error("brief proposal error: %s", traceback.format_exc())
+                    yield sse({
+                        "type": "proposal_error",
+                        "message": _user_error_msg(pe), "_timestamp": ts,
+                    })
+
             # ── 5. 저장 — JSON · MD · xlsx · html ──────────────────────────
             yield sse({
                 "type": "stage", "stage": "save",
@@ -642,6 +672,8 @@ async def analyze_brief(
                 "validation_summary": flag_summary,
                 "source_format":      source_format,
                 "has_insight":        bool(brief_data.get("_insight")),
+                "has_proposal":       bool(brief_data.get("_proposal")),
+                "proposal_filename":  f"{brief_id}_proposal.html" if brief_data.get("_proposal") else None,
                 "has_site_context":   bool(brief_data.get("_site_context")),
                 "site_context":       brief_data.get("_site_context"),
                 "brief_genre":        (brief_data.get("_brief_genre") or {}).get("genre", "unknown"),
@@ -712,6 +744,29 @@ async def reinterpret_brief(brief_id: str):
 
 # ── 프로젝트 수주 제안서 생성 (수주 전략 처방, 추출 재처리 없음) ──────────────
 
+def _render_proposal_html(brief_data: dict, safe_id: str, briefs_dir: Path,
+                          facility_type: str, brief_name: str) -> str:
+    """_proposal → 자체완결 제안서 HTML (대지 위성 썸네일 base64 임베드). /propose·/analyze 공용.
+
+    site_context·feasibility·bid_structure 를 함께 넘겨 법적 골격·대지·2층 배점 섹션까지 렌더.
+    """
+    site_context = brief_data.get("_site_context")
+    site_image_b64 = ""
+    if site_context:
+        site_img_path = briefs_dir / f"{safe_id}_site.jpg"
+        if site_img_path.exists():
+            try:
+                site_image_b64 = base64.standard_b64encode(site_img_path.read_bytes()).decode()
+            except Exception:
+                site_image_b64 = ""
+    return to_proposal_html(
+        brief_data["_proposal"], brief_name, facility_label(facility_type),
+        site_context=site_context, site_image_b64=site_image_b64,
+        feasibility=brief_data.get("feasibility_export"),
+        bid_structure=brief_data.get("_bid_structure"),
+    )
+
+
 @router.post("/{brief_id}/propose")
 async def propose_brief(brief_id: str):
     """저장된 지침서로 '프로젝트 수주 제안서'를 생성 (LLM 1콜, PDF 재처리 없음).
@@ -753,28 +808,11 @@ async def propose_brief(brief_id: str):
     brief_data["_proposal"] = proposal
     proposal_filename = f"{safe_id}_proposal.html"
 
-    # 대지·맥락 분석을 제안서 HTML 상단에 노출 (어떤 대지 정보를 반영했나 투명성).
-    # 위성 썸네일은 자체완결 HTML 유지 위해 base64 임베드.
-    site_context = brief_data.get("_site_context")
-    site_image_b64 = ""
-    if site_context:
-        site_img_path = briefs_dir / f"{safe_id}_site.jpg"
-        if site_img_path.exists():
-            try:
-                site_image_b64 = base64.standard_b64encode(site_img_path.read_bytes()).decode()
-            except Exception:
-                site_image_b64 = ""
-
     try:
         _atomic_write(json_path, brief_data)
         _sync_write(
             briefs_dir / proposal_filename,
-            to_proposal_html(
-                proposal, brief_name, facility_label(facility_type),
-                site_context=site_context, site_image_b64=site_image_b64,
-                feasibility=brief_data.get("feasibility_export"),
-                bid_structure=brief_data.get("_bid_structure"),
-            ),
+            _render_proposal_html(brief_data, safe_id, briefs_dir, facility_type, brief_name),
         )
     except Exception as e:
         logger.error("propose save error: %s", traceback.format_exc())
