@@ -50,21 +50,27 @@ far_limit_manual_override: float|None  # 심의/지구단위 확정 용적률
   "overall_score": 8.3,                       // float 0~10
   "land_info": { "zone_use": str, "zone_district": str, "district_unit_plan": {...} },
 
-  "applicable_reviews": [                      // 심의 vs 법정 판별
-    { "name": "건축위원회 심의", "severity": "REQUIRED|CONDITIONAL|NONE",
-      "triggered_reasons": [str], "law_ref": str, "law_ref_url": str }
-  ],
+  // ⚠ applicable_reviews 는 배열이 아니라 dict — items[] 를 순회할 것 (2026-07-14 로컬 e2e 확인)
+  "applicable_reviews": {
+    "items": [                                 // ← 실제 배열은 여기
+      { "name": "건축위원회 심의", "severity": "REQUIRED|MAYBE|NONE",
+        "triggered_reasons": [str], "law_ref": str, "law_ref_url": str, "note": str }
+    ],
+    "required_count": int,                     // severity==REQUIRED 개수 (이미 계산됨 — 그대로 써도 됨)
+    "maybe_count": int
+  },
 
   "results": {                                 // 값 미확인 시 pass=null, confidence=1
     "건폐율":   { "limit_pct": float|null, "actual_pct": float, "pass": bool|null,
                  "source": str, "law_refs": [{"name":str,"url":str}] },
     "용적률":   { "limit_pct": float|null, "actual_pct": float, "pass": bool|null,
                  "source": str, "law_refs": [...] },
+    // ⚠ 높이_일조.pass 는 envelope 모드에서 항상 null (실제 이격거리 미입력이라 판정 불가) — low_confidence 판단에 쓰지 말 것
     "높이_일조": { "actual_height_m": float, "floors_above": int, "road_width_m": float,
-                 "north_setback_m": float|null,          // 정북 이격
+                 "north_setback_m": float|null,          // 정북 이격(입력 echo) — envelope 모드선 항상 null
                  "shadow_applies": bool, "shadow_min_setback_m": float|null,
-                 "shadow_setback_rule": str|null,        // 일조사선 규칙
-                 "road_height_limit_m": float|null,      // 가로구역 최고높이 = 최고 N층
+                 "shadow_setback_rule": str|null,        // 일조사선 규칙 (배치 근거 텍스트 원천)
+                 "road_height_limit_m": float|null,      // 가로구역 최고높이 = 최고 N층 (고시데이터 없으면 null)
                  "parcel_north_depth_m": float|null,
                  "pass": bool|null, "law_refs": [...] },
     "주차": {...}, "조경": {...}, "설비_소방": {...}, "도시계획시설": {...}, "행위제한": {...}
@@ -81,7 +87,7 @@ far_limit_manual_override: float|None  # 심의/지구단위 확정 용적률
 - envelope: `results.건폐율.limit_pct`, `results.용적률.limit_pct`
 - 정북 후퇴: `높이_일조.north_setback_m` + `shadow_setback_rule` + `shadow_min_setback_m`
 - 높이 cap: `높이_일조.road_height_limit_m`(가로구역), `parcel_north_depth_m`
-- 심의 여부: `applicable_reviews[].severity == "REQUIRED"` → limits_determined_by="심의"
+- 심의 여부: `applicable_reviews["items"][]` 중 `severity == "REQUIRED"` (또는 `applicable_reviews["required_count"]`) → limits_determined_by="심의"
 
 ### 에러 시맨틱
 
