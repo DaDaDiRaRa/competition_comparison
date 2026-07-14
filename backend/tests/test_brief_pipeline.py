@@ -325,3 +325,57 @@ class TestToHtml:
         assert '근거 낮음' in h
         stk, bad = self._tag_balance(h)
         assert stk == [] and bad == 0
+
+
+class TestSiteLawSection:
+    """대지·법적 골격 섹션 (_site_context) → html/md 렌더. LLM 0. #7 — 제안서 없이도 대지·법 표시."""
+
+    def _bd(self):
+        law = [
+            {"site_id": "부지1", "address": "영등포",
+             "envelope": {"bcr_limit_pct": 60.0, "far_limit_pct": 400.0},
+             "height_solar": {"north_setback_m": None, "shadow_applies": False,
+                              "shadow_setback_rule": None, "shadow_min_setback_m": None,
+                              "road_height_limit_m": None, "parcel_north_depth_m": None},
+             "reviews_required": [{"name": "건축위원회 심의"}, {"name": "경관심의"}],
+             "has_required_review": True, "low_confidence": False, "source_notes": {},
+             "limit_mismatch": [{"field": "용적률", "brief_pct": 460, "diagnose_limit_pct": 400.0}]},
+            {"site_id": "부지주거", "address": "하안주공",
+             "envelope": {"bcr_limit_pct": 60.0, "far_limit_pct": 250.0},
+             "height_solar": {"north_setback_m": None, "shadow_applies": True,
+                              "shadow_setback_rule": "높이/2 후퇴", "shadow_min_setback_m": 65.0,
+                              "road_height_limit_m": None, "parcel_north_depth_m": None},
+             "reviews_required": [{"name": "도시계획위원회 심의"}], "has_required_review": True,
+             "low_confidence": True, "source_notes": {}, "limit_mismatch": []},
+        ]
+        return {
+            "_brief_meta": {"facility_type": "public", "brief_name": "테스트"},
+            "_site_context": {
+                "matched_address": "영등포",
+                "analysis": {"overall_summary": "저층 주거 밀집 시가지",
+                             "orientation": "남측 접도", "road_access": "당산로27길"},
+                "measured": {"design_drivers": [{"name": "1인가구 대응"}, {"name": "방재"}]},
+                "law_diagnosis": law,
+            },
+        }
+
+    _V = {"flags": [], "summary": {}}
+
+    def test_html_renders_section(self):
+        h = to_html(self._bd(), self._V)
+        assert 'id="sitelaw"' in h and "대지 · 법적 골격" in h
+        assert "필수 심의" in h and "건축위원회 심의" in h
+        assert "정북 일조" in h and "필요이격 65m" in h        # 주거지역 정북(패치 후 shadow_min)
+        assert "brief 수치 재확인" in h                        # limit_mismatch 경고
+        assert "남측 접도" in h and "실측 설계 드라이버" in h   # 대지 요약 + 터읽기
+
+    def test_md_renders_section(self):
+        m = to_markdown(self._bd(), self._V)
+        assert "## 0.5 대지 · 법적 골격" in m
+        assert "필수 심의" in m and "필요이격 65m" in m
+        assert "용적률 재확인" in m
+
+    def test_absent_when_no_site_context(self):
+        bd = {"_brief_meta": {"facility_type": "public"}}
+        assert 'id="sitelaw"' not in to_html(bd, self._V)
+        assert "0.5 대지" not in to_markdown(bd, self._V)

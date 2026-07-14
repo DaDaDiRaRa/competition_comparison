@@ -475,6 +475,68 @@ def _md_insight_block(L: list[str], insight: Any) -> None:
     L.append("")
 
 
+def _md_site_law_block(L: list[str], brief_data: dict) -> None:
+    """_site_context(대지 실측 + 법적 골격) → 마크다운 라인 append. LLM 0, 렌더만. 없으면 무동작."""
+    sc = brief_data.get("_site_context")
+    if not isinstance(sc, dict):
+        return
+    analysis = sc.get("analysis") if isinstance(sc.get("analysis"), dict) else {}
+    measured = sc.get("measured") if isinstance(sc.get("measured"), dict) else {}
+    law = [d for d in (sc.get("law_diagnosis") or []) if isinstance(d, dict)]
+    summ = str(analysis.get("overall_summary") or "").strip()
+    drivers = [d.get("name") for d in (measured.get("design_drivers") or [])
+               if isinstance(d, dict) and (d.get("name") or "").strip()]
+    if not (summ or analysis or law or drivers):
+        return
+
+    def _n(v, unit=""):
+        return f"{v:g}{unit}" if isinstance(v, (int, float)) else ""
+
+    L.append("## 0.5 대지 · 법적 골격")
+    L.append("")
+    if summ:
+        L.append(summ)
+        L.append("")
+    for k, label in (("orientation", "향·형상"), ("road_access", "접도"),
+                     ("surrounding_uses", "주변 용도"), ("natural_assets", "자연·조망"),
+                     ("special_context", "특이사항")):
+        v = str(analysis.get(k) or "").strip()
+        if v:
+            L.append(f"- **{label}**: {v}")
+    if drivers:
+        L.append(f"- **실측 설계 드라이버(터읽기)**: {' · '.join(drivers)}")
+    L.append("")
+    for d in law:
+        sid = str(d.get("site_id") or d.get("address") or "").strip()
+        L.append(f"### 법적 골격 — {sid}" if sid else "### 법적 골격")
+        hs = d.get("height_solar") or {}
+        env = d.get("envelope") or {}
+        reviews = [r.get("name") for r in (d.get("reviews_required") or [])
+                   if isinstance(r, dict) and r.get("name")]
+        if reviews:
+            L.append(f"- **필수 심의**: {' · '.join(reviews)}")
+        if isinstance(hs.get("north_setback_m"), (int, float)):
+            L.append(f"- **정북 일조**: 실이격 {_n(hs['north_setback_m'], 'm')}")
+        elif isinstance(hs.get("shadow_min_setback_m"), (int, float)):
+            L.append(f"- **정북 일조**: 필요이격 {_n(hs['shadow_min_setback_m'], 'm')}")
+        elif hs.get("shadow_applies"):
+            L.append("- **정북 일조**: 적용(수동검토 필요)")
+        if isinstance(hs.get("road_height_limit_m"), (int, float)):
+            L.append(f"- **가로구역 최고높이**: {_n(hs['road_height_limit_m'], 'm')}")
+        bl, fl = _n(env.get("bcr_limit_pct"), "%"), _n(env.get("far_limit_pct"), "%")
+        if bl or fl:
+            L.append(f"- **건폐/용적 한도**: 건폐 {bl or '—'} · 용적 {fl or '—'}")
+        for m in (d.get("limit_mismatch") or []):
+            if isinstance(m, dict):
+                L.append(f"- ⚠ **{m.get('field')} 재확인**: 지침서 {_n(m.get('brief_pct'), '%')} "
+                         f"↔ 진단 {_n(m.get('diagnose_limit_pct'), '%')}")
+        if d.get("low_confidence"):
+            L.append("- ⚠ 신뢰도 낮음 (일부 값 자동조회·추정)")
+        L.append("")
+    L.append("> 위성 판독·건축법 자동진단 기반(추론 포함) — 현장·원문 확인 필요.")
+    L.append("")
+
+
 def to_markdown(brief_data: dict, validation: dict) -> str:
     """지침서 추출 데이터를 구조화 텍스트 덤프로 반환.
 
@@ -496,6 +558,7 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     # 0. AI 종합 해설 (insight 있을 때만 — 문서 맨 앞)
     # ══════════════════════════════════════════════════════════════════════════
     _md_insight_block(L, brief_data.get("_insight"))
+    _md_site_law_block(L, brief_data)   # 0.5 대지·법적 골격 (site_context 있을 때만)
 
     # ══════════════════════════════════════════════════════════════════════════
     # 1. 사업 개요
@@ -902,6 +965,16 @@ h3.sub{margin:26px 0 9px;font-size:15px;font-weight:700;color:var(--ink);
   padding-bottom:7px;border-bottom:1px solid var(--line)}
 h4.subsub{margin:18px 0 7px;font-size:13.5px;font-weight:600;color:var(--accent)}
 .note{margin:14px 0;color:var(--text)}
+/* 대지·법적 골격 섹션 (brief_proposal_report_generator._law_diagnosis_html 재사용) */
+.site-fields{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px}
+.site-field .sfk{font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted);text-transform:uppercase;margin-bottom:2px}
+.site-field .sfv{font-size:13px;color:var(--text)}
+.site-note{margin-top:13px;font-size:11.5px;color:var(--muted);background:var(--soft);border-radius:6px;padding:8px 12px;line-height:1.55}
+.law-diag{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
+.law-hd{font-size:12px;font-weight:800;letter-spacing:.04em;color:var(--ink);margin-bottom:10px}
+.law-tag{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 6px;vertical-align:middle}
+.law-card{background:var(--soft);border-radius:8px;padding:11px 14px;margin-bottom:9px}
+.law-site{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:7px}
 dl.kv{display:grid;grid-template-columns:140px 1fr;gap:1px 18px;margin:6px 0}
 dl.kv dt{color:var(--muted);font-size:13px;padding:4px 0}
 dl.kv dd{margin:0;color:var(--ink);padding:4px 0;word-break:break-word}
@@ -1141,6 +1214,54 @@ def _reference_cases_section_html(ref: Any) -> str:
     )
 
 
+def _site_law_section_html(brief_data: dict) -> str:
+    """_site_context(대지 실측 + 건축법 진단 골격) → HTML 섹션. LLM 0, 렌더만.
+
+    수주 제안서를 생성하지 않아도 분석 산출물만으로 대지·법이 보이게 한다(수집↔표시 단절 해소).
+    법적 골격 패널은 brief_proposal_report_generator._law_diagnosis_html 재사용(단일 소스).
+    대지 요약은 텍스트만(이미지 없음 — 체크리스트 경량). site_context 없으면 '' (대부분 브리프).
+    """
+    sc = brief_data.get("_site_context")
+    if not isinstance(sc, dict):
+        return ""
+    from services.brief_proposal_report_generator import _law_diagnosis_html
+    law_html = _law_diagnosis_html(sc)
+
+    analysis = sc.get("analysis") if isinstance(sc.get("analysis"), dict) else {}
+    measured = sc.get("measured") if isinstance(sc.get("measured"), dict) else {}
+    site_bits: list[str] = []
+    summ = str(analysis.get("overall_summary") or "").strip()
+    if summ:
+        site_bits.append(f'<div class="note">{_esc(summ)}</div>')
+    fields = ""
+    for k, label in (("orientation", "향·형상"), ("road_access", "접도"),
+                     ("surrounding_uses", "주변 용도"), ("natural_assets", "자연·조망"),
+                     ("special_context", "특이사항")):
+        v = str(analysis.get(k) or "").strip()
+        if v:
+            fields += f'<dt>{_esc(label)}</dt><dd>{_esc(v)}</dd>'
+    if fields:
+        site_bits.append(f'<dl class="kv">{fields}</dl>')
+    drivers = [d.get("name") for d in (measured.get("design_drivers") or [])
+               if isinstance(d, dict) and (d.get("name") or "").strip()]
+    if drivers:
+        site_bits.append('<div class="caveat muted">실측 설계 드라이버(터읽기): '
+                         + _esc(" · ".join(drivers)) + '</div>')
+
+    if not site_bits and not law_html:
+        return ""
+    site_block = ('<h3 class="sub">대지 맥락 (위성·실측)</h3>' + "".join(site_bits)) if site_bits else ""
+    return (
+        '<section id="sitelaw" class="sec">'
+        '<h2><span class="n">◆</span>대지 · 법적 골격</h2>'
+        + site_block
+        + law_html
+        + '<div class="caveat muted">위성 판독·건축법 자동진단 기반(추론 포함) — 현장·원문 확인 필요. '
+          '수주 제안서를 생성하면 이 근거로 배치·전략까지 확장됩니다.</div>'
+        '</section>'
+    )
+
+
 def _bid_structure_html(brief_data: dict) -> str:
     """입찰(bid) 2층 배점 구조(_bid_structure) → HTML 블록. 없으면 빈 문자열.
 
@@ -1328,6 +1449,12 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
     if insight:
         nav_items.append(("insight", "AI해설"))
         P.append(_insight_section_html(insight))
+
+    # ══ 대지 · 법적 골격 (site_context 있을 때만 — 제안서 없이도 대지·법 표시) ════════
+    _sitelaw = _site_law_section_html(brief_data)
+    if _sitelaw:
+        nav_items.append(("sitelaw", "대지·법"))
+        P.append(_sitelaw)
 
     # ══ 1. 사업 개요 ════════════════════════════════════════════════════════════
     sec(1, "사업 개요", "개요")
