@@ -25,6 +25,13 @@ from services.utils import parse_json_response
 
 logger = logging.getLogger(__name__)
 
+# BM25 컬럼 가중치 — archive_fts 8컬럼 순서와 정확히 일치해야 한다.
+# 순서: competition_id, facility_type, ranking, key_differentiators,
+#       winner_patterns, concept_keywords, gap_analysis_alignment, extra_meta
+# 매칭이 더 의미있는 컬럼(시설유형·컨셉/차별화 키워드)을 우대, 식별자/정렬라벨은 낮게.
+# 고정 상수(사용자 입력 아님) — SQL 문자열 보간 안전.
+_BM25_WEIGHTS = "0.5, 2.0, 1.0, 1.5, 1.2, 1.5, 0.3, 1.0"
+
 # 시설유형 동의어 — 사용자가 자연어로 쓰는 표현(시청·병원·아파트 등)이
 # facility_type FTS 컬럼과 매칭되도록 영어 키 + 한국어 레이블 + 일반 호칭을 함께 저장한다.
 # 수주 형태 동의어 — MyProjectMode의 procurement_type FTS 매칭용.
@@ -295,22 +302,39 @@ class ArchiveSearchIndex:
         logger.info("[archive_search] 인덱싱 완료 — %d개 공모 (base=%s)", count, self.base_path)
         return count
 
-    def search_keyword(self, query: str, limit: int = 20) -> list[dict]:
-        """FTS5 키워드 검색 — 따옴표로 감싼 phrase 매칭."""
-        q = (query or "").strip()
-        if not q:
-            return []
-        fts_query = f'"{_fts_escape(q)}"'
+    def _ranked_match(self, fts_query: str, limit: int) -> list[dict]:
+        """FTS5 MATCH 를 BM25 관련도순으로 실행 (best-first). bm25 미지원 시 무순 폴백.
+
+        BM25 는 음수 점수(작을수록 더 관련)라 ORDER BY 오름차순이 곧 관련도순.
+        컬럼 가중치(_BM25_WEIGHTS)로 시설유형·컨셉 키워드 매칭을 우대 — 무순 LIMIT 컷의
+        핵심 결함(관련도 정렬 불가)을 해소.
+        """
         try:
             rows = self.conn.execute(
-                "SELECT competition_id FROM archive_fts WHERE archive_fts MATCH ? LIMIT ?",
+                "SELECT competition_id FROM archive_fts WHERE archive_fts MATCH ? "
+                f"ORDER BY bm25(archive_fts, {_BM25_WEIGHTS}) LIMIT ?",
                 (fts_query, limit),
             ).fetchall()
         except sqlite3.OperationalError as e:
-            logger.warning("[archive_search] FTS 키워드 쿼리 실패: %s — %s", fts_query, e)
-            return []
+            # bm25 미지원(구 SQLite) 등 → 무순 폴백 (기존 동작). 그래도 결과는 준다.
+            logger.warning("[archive_search] BM25 정렬 실패 — 무순 폴백: %s — %s", fts_query, e)
+            try:
+                rows = self.conn.execute(
+                    "SELECT competition_id FROM archive_fts WHERE archive_fts MATCH ? LIMIT ?",
+                    (fts_query, limit),
+                ).fetchall()
+            except sqlite3.OperationalError as e2:
+                logger.warning("[archive_search] FTS 쿼리 실패: %s — %s", fts_query, e2)
+                return []
         return [self._cards[r["competition_id"]] for r in rows
                 if r["competition_id"] in self._cards]
+
+    def search_keyword(self, query: str, limit: int = 20) -> list[dict]:
+        """FTS5 키워드 검색 — 따옴표로 감싼 phrase 매칭 (BM25 관련도순)."""
+        q = (query or "").strip()
+        if not q:
+            return []
+        return self._ranked_match(f'"{_fts_escape(q)}"', limit)
 
     def search_natural(self, query: str, limit: int = 10) -> list[dict]:
         """자연어 검색 — Claude로 의도 추출 후 FTS5 OR 매칭."""
@@ -371,16 +395,7 @@ class ArchiveSearchIndex:
             return []
 
         fts_query = " OR ".join(f'"{_fts_escape(kw)}"' for kw in keywords)
-        try:
-            rows = self.conn.execute(
-                "SELECT competition_id FROM archive_fts WHERE archive_fts MATCH ? LIMIT ?",
-                (fts_query, limit),
-            ).fetchall()
-        except sqlite3.OperationalError as e:
-            logger.warning("[archive_search] FTS 자연어 쿼리 실패: %s — %s", fts_query, e)
-            return []
-        return [self._cards[r["competition_id"]] for r in rows
-                if r["competition_id"] in self._cards]
+        return self._ranked_match(fts_query, limit)
 
     def all_cards(self) -> list[dict]:
         return list(self._cards.values())
