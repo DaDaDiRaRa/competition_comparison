@@ -975,6 +975,13 @@ h4.subsub{margin:18px 0 7px;font-size:13.5px;font-weight:600;color:var(--accent)
 .law-tag{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 6px;vertical-align:middle}
 .law-card{background:var(--soft);border-radius:8px;padding:11px 14px;margin-bottom:9px}
 .law-site{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:7px}
+.law-refs{margin-top:10px}
+.law-refs-hd{font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.law-ref,.law-ref-lnk{font-size:12px;line-height:1.5;padding:3px 0;border-bottom:1px dotted var(--line)}
+.law-ref>summary{cursor:pointer;color:var(--ink)}
+.law-ref-body{margin:6px 0 4px;padding:8px 12px;background:var(--soft);border-radius:6px;font-size:11.5px;color:var(--muted);white-space:pre-wrap;line-height:1.6}
+.law-ref a,.law-ref-lnk a{color:var(--accent);text-decoration:none}
+.law-ref a:hover,.law-ref-lnk a:hover{text-decoration:underline}
 dl.kv{display:grid;grid-template-columns:140px 1fr;gap:1px 18px;margin:6px 0}
 dl.kv dt{color:var(--muted);font-size:13px;padding:4px 0}
 dl.kv dd{margin:0;color:var(--ink);padding:4px 0;word-break:break-word}

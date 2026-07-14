@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 # 로컬 진단 엔진을 쓰려면 ARCH_LAW_API_URL 로 override (예: http://localhost:8010).
 _DEFAULT_DIAG_URL = "https://arch-law-diagnose-30350777436.asia-northeast3.run.app"
 
+# arch-law-graph (Phase 3 조문 원문). GRAPH_API_URL 로 override. graph 죽어도 진단 골격은 유효.
+_DEFAULT_GRAPH_URL = "https://arch-law-graph-30350777436.asia-northeast3.run.app"
+
 # 신뢰도 저하 신호 — source 에 이 토큰이 있으면 low_confidence (VWorld 자동조회·추정 폴백).
 # '시행령'은 정상 법정값이라 제외 — 넣으면 전국 대부분이 저신뢰로 오탐(진단앱 피드백).
 _LOW_CONF_TOKENS = ("미확인", "추정")
@@ -89,6 +92,38 @@ async def diagnose(payload: dict, timeout: float = 120.0) -> dict | None:
     except Exception as e:  # noqa: BLE001 — 미배포·네트워크·타임아웃 전부 graceful
         logger.warning("건축법 진단 호출 오류 (비치명): %s", e)
         return None
+
+
+def graph_url() -> str:
+    return (os.environ.get("GRAPH_API_URL") or _DEFAULT_GRAPH_URL).rstrip("/")
+
+
+async def fetch_law_texts(names: list[str], timeout: float = 20.0) -> dict[str, dict]:
+    """law_ref name 리스트 → {name: {title, content, source_url, law_nm, article_no}} (graph 원문).
+
+    Phase 3 — arch-law-graph /api/lookup 배치 조회. found=false 는 제외(인용 금지, 링크만).
+    graph 죽어도/미보유해도 graceful({} 또는 부분) — 진단 골격은 유효. name dedup·최대 50개.
+    """
+    names = [n for n in dict.fromkeys(names) if n]   # dedup, 순서 보존
+    if not names:
+        return {}
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as c:
+            r = await c.post(f"{graph_url()}/api/lookup", json={"queries": names[:50]})
+        if r.status_code != 200:
+            logger.warning("법조문 원문 조회 비200: %s", r.status_code)
+            return {}
+        results = (r.json() or {}).get("results") or []
+        return {
+            x["query"]: {"title": x.get("title"), "content": x.get("content"),
+                         "source_url": x.get("source_url"), "law_nm": x.get("law_nm"),
+                         "article_no": x.get("article_no")}
+            for x in results
+            if isinstance(x, dict) and x.get("found") and x.get("query") and (x.get("content") or "").strip()
+        }
+    except Exception as e:  # noqa: BLE001 — graph 미배포·네트워크 전부 graceful
+        logger.warning("법조문 원문 조회 실패 (비치명): %s", e)
+        return {}
 
 
 def digest_diagnosis(diag: dict, site: dict | None = None) -> dict | None:
@@ -163,6 +198,17 @@ def digest_diagnosis(diag: dict, site: dict | None = None) -> dict | None:
             if isinstance(bv, (int, float)) and isinstance(lim, (int, float)) and abs(bv - lim) > 0.5:
                 limit_mismatch.append({"field": label, "brief_pct": bv, "diagnose_limit_pct": lim})
 
+    # 관련 법조문 포인터 (배치 관련 카테고리만: 높이_일조·건폐율·용적률) — Phase 3 graph 원문 조회용.
+    #   results.<cat>.law_refs = [{name, url}]. 이름 dedup(순서 보존). 원문은 소비측이 graph 로 별도 조회.
+    law_refs: list[dict] = []
+    _seen_ref: set = set()
+    for _cat in ("높이_일조", "건폐율", "용적률"):
+        for _ref in (_r(_cat).get("law_refs") or []):
+            _nm = _ref.get("name") if isinstance(_ref, dict) else None
+            if _nm and _nm not in _seen_ref:
+                _seen_ref.add(_nm)
+                law_refs.append({"name": _nm, "url": _ref.get("url")})
+
     return {
         "signal": diag.get("signal"),
         "overall_score": diag.get("overall_score"),
@@ -173,4 +219,5 @@ def digest_diagnosis(diag: dict, site: dict | None = None) -> dict | None:
         "low_confidence": low_conf,
         "source_notes": source_notes,
         "limit_mismatch": limit_mismatch,
+        "law_refs": law_refs,
     }

@@ -101,13 +101,17 @@ def _full_diag():
             "required_count": 1, "maybe_count": 1,
         },
         "results": {
-            "건폐율": {"limit_pct": 60.0, "actual_pct": 60.0, "pass": True, "source": "🏛 조례"},
-            "용적률": {"limit_pct": 460.0, "actual_pct": 460.0, "pass": True, "source": "🏛 조례"},
+            "건폐율": {"limit_pct": 60.0, "actual_pct": 60.0, "pass": True, "source": "🏛 조례",
+                     "law_refs": [{"name": "건축법 제55조 (건폐율)", "url": "https://law/55"}]},
+            "용적률": {"limit_pct": 460.0, "actual_pct": 460.0, "pass": True, "source": "🏛 조례",
+                     "law_refs": [{"name": "건축법 제56조 (용적률)", "url": "https://law/56"}]},
             # envelope 모드 현실 반영: 높이_일조.pass 는 None
             "높이_일조": {"north_setback_m": None, "shadow_applies": True,
                         "shadow_setback_rule": "정북 h/2", "shadow_min_setback_m": 1.5,
                         "road_height_limit_m": 90.0, "parcel_north_depth_m": 40.0,
-                        "pass": None, "law_refs": []},
+                        "pass": None,
+                        "law_refs": [{"name": "건축법 제61조 (일조 등의 확보를 위한 높이 제한)",
+                                      "url": "https://law/61"}]},
             # 정보성 카드도 pass:None — low_confidence 오탐 유발 여부 회귀
             "설비_소방": {"pass": None, "source": "AI 정성판단"},
         },
@@ -214,3 +218,42 @@ def test_diag_url_default_is_public(monkeypatch):
     assert alc.diag_url() == "https://arch-law-diagnose-30350777436.asia-northeast3.run.app"
     monkeypatch.setenv("ARCH_LAW_API_URL", "http://localhost:8010")  # override
     assert alc.diag_url() == "http://localhost:8010"
+
+
+# ── Phase 3: 조문 원문 (graph) ────────────────────────────────────────────────
+
+def test_digest_captures_placement_law_refs():
+    """digest 가 배치 관련 카테고리(높이_일조·건폐율·용적률) law_refs 를 dedup 캡처."""
+    d = alc.digest_diagnosis(_full_diag())
+    names = [r["name"] for r in d["law_refs"]]
+    assert "건축법 제61조 (일조 등의 확보를 위한 높이 제한)" in names   # 정북
+    assert "건축법 제55조 (건폐율)" in names and "건축법 제56조 (용적률)" in names
+    assert all(r.get("url") for r in d["law_refs"])                     # url 보존
+
+
+def test_graph_url_default_is_public(monkeypatch):
+    monkeypatch.delenv("GRAPH_API_URL", raising=False)
+    assert alc.graph_url() == "https://arch-law-graph-30350777436.asia-northeast3.run.app"
+
+
+def test_fetch_law_texts_found_only(monkeypatch):
+    payload = {"results": [
+        {"query": "건축법 제61조 (일조 등의 확보를 위한 높이 제한)", "found": True,
+         "title": "일조 등의 확보를 위한 높이 제한", "content": "① 전용주거지역과 일반주거지역...",
+         "source_url": "https://law/61", "law_nm": "건축법", "article_no": "제61조"},
+        {"query": "미보유 조문", "found": False},                              # found=false → 제외
+        {"query": "빈 원문", "found": True, "content": "   "},                 # content 빈 → 제외
+    ]}
+    monkeypatch.setattr(alc.httpx, "AsyncClient",
+                        lambda *a, **k: _FakeClient(resp=_Resp(200, payload)))
+    out = asyncio.run(alc.fetch_law_texts(
+        ["건축법 제61조 (일조 등의 확보를 위한 높이 제한)", "미보유 조문", "빈 원문", "건축법 제61조 (일조 등의 확보를 위한 높이 제한)"]))
+    assert set(out) == {"건축법 제61조 (일조 등의 확보를 위한 높이 제한)"}       # found+content 만, dedup
+    assert out["건축법 제61조 (일조 등의 확보를 위한 높이 제한)"]["content"].startswith("①")
+
+
+def test_fetch_law_texts_graceful(monkeypatch):
+    assert asyncio.run(alc.fetch_law_texts([])) == {}
+    monkeypatch.setattr(alc.httpx, "AsyncClient",
+                        lambda *a, **k: _FakeClient(exc=RuntimeError("graph down")))
+    assert asyncio.run(alc.fetch_law_texts(["x"])) == {}

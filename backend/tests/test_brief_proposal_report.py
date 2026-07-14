@@ -472,3 +472,43 @@ class TestPlacementMultiSite:
                         self._zone("b", "C", site="부지2")]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
         assert "<b>부지1</b>" not in h
+
+
+class TestLawRefsFootnote:
+    """Phase 3 — 관련 법조문 각주. graph 원문 있으면 접기, 없으면 law.go.kr 링크만(인용 가드)."""
+
+    def _sc(self, with_texts):
+        diag = {
+            "site_id": "부지1", "address": "영등포",
+            "envelope": {"bcr_limit_pct": 60.0, "far_limit_pct": 400.0},
+            "height_solar": {"north_setback_m": None, "shadow_applies": True,
+                             "shadow_setback_rule": "h/2", "shadow_min_setback_m": 65.0,
+                             "road_height_limit_m": None, "parcel_north_depth_m": None},
+            "reviews_required": [{"name": "건축위원회 심의"}], "has_required_review": True,
+            "low_confidence": False, "source_notes": {}, "limit_mismatch": [],
+            "law_refs": [{"name": "건축법 제61조 (일조)", "url": "https://law/61"},
+                         {"name": "건축법 제55조 (건폐율)", "url": "https://law/55"}],
+        }
+        sc = {"law_diagnosis": [diag]}
+        if with_texts:
+            sc["law_texts"] = {"건축법 제61조 (일조)": {"content": "① 전용주거지역과 일반주거지역...",
+                                                     "source_url": "https://law/61"}}
+        return sc
+
+    def test_footnote_with_graph_content(self):
+        h = to_proposal_html({"executive_summary": "x"}, site_context=self._sc(True))
+        assert "관련 법조문" in h
+        assert '<details class="law-ref">' in h and "전용주거지역과 일반주거지역" in h   # 원문 접기
+        assert 'law-ref-lnk' in h and "건축법 제55조 (건폐율)" in h                      # 원문 없는 건 링크만
+        assert 'href="https://law/61"' in h and 'target="_blank"' in h
+
+    def test_footnote_links_only_without_texts(self):
+        h = to_proposal_html({"executive_summary": "x"}, site_context=self._sc(False))
+        assert "관련 법조문" in h and "건축법 제61조 (일조)" in h
+        assert "<details" not in h        # law_texts 없으면 원문 각주 없이 링크만
+
+    def test_law_data_escaped(self):
+        sc = self._sc(True)
+        sc["law_texts"]["건축법 제61조 (일조)"]["content"] = "<script>x</script>"
+        h = to_proposal_html({"executive_summary": "x"}, site_context=sc)
+        assert "<script>x</script>" not in h

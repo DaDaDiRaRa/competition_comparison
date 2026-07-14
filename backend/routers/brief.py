@@ -599,6 +599,17 @@ async def analyze_brief(
                                 law_out.append(dig)
                         if law_out:
                             sc["law_diagnosis"] = law_out
+                            # Phase 3: 배치 관련 조문 원문 각주 (arch-law-graph) — 전 부지 refs 배치
+                            #   조회 1콜. graph 죽어도 골격 유지(graceful). found=false 는 제외(링크만).
+                            try:
+                                _ref_names = [ref.get("name") for d in law_out
+                                              for ref in (d.get("law_refs") or []) if ref.get("name")]
+                                if _ref_names:
+                                    _texts = await alc.fetch_law_texts(_ref_names)
+                                    if _texts:
+                                        sc["law_texts"] = _texts
+                            except Exception as ge:
+                                logger.warning("법조문 원문 조회 실패 (비치명): %s", ge)
                             yield sse({"type": "done", "step": "law_diagnosis", "_timestamp": ts})
                         else:
                             yield sse({

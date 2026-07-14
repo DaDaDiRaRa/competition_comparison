@@ -107,6 +107,13 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
 .law-tag{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:var(--accent);border:1px solid var(--accent);border-radius:4px;padding:1px 6px;vertical-align:middle}
 .law-card{background:var(--soft);border-radius:8px;padding:11px 14px;margin-bottom:9px}
 .law-site{font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:7px}
+.law-refs{margin-top:10px}
+.law-refs-hd{font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.law-ref,.law-ref-lnk{font-size:12px;line-height:1.5;padding:3px 0;border-bottom:1px dotted var(--line)}
+.law-ref>summary{cursor:pointer;color:var(--ink)}
+.law-ref-body{margin:6px 0 4px;padding:8px 12px;background:var(--soft);border-radius:6px;font-size:11.5px;color:var(--muted);white-space:pre-wrap;line-height:1.6}
+.law-ref a,.law-ref-lnk a{color:var(--accent);text-decoration:none}
+.law-ref a:hover,.law-ref-lnk a:hover{text-decoration:underline}
 
 /* ── 히어로 (대지 실측 이미지) ───── */
 .hero{margin:20px 0 6px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -612,6 +619,35 @@ def _law_diagnosis_html(site_context: dict | None) -> str:
 
     if not cards:
         return ""
+
+    # 관련 법조문 각주 (Phase 3 — arch-law-graph 원문 있으면 접기, 없으면 law.go.kr 링크만).
+    #   found=false/원문 없음 = 링크만(인용 금지 가드). refs 는 전 부지 dedup.
+    law_texts = (site_context or {}).get("law_texts") or {}
+    refs, _seen_ref = [], set()
+    for d in diags:
+        for ref in (d.get("law_refs") or []):
+            nm = (ref.get("name") or "").strip() if isinstance(ref, dict) else ""
+            if nm and nm not in _seen_ref:
+                _seen_ref.add(nm)
+                refs.append(ref)
+    refs_html = ""
+    if refs:
+        items = ""
+        for ref in refs:
+            nm, url = ref.get("name"), ref.get("url")
+            link = (f'<a href="{_esc(url)}" target="_blank" rel="noopener">{_esc(nm)}</a>'
+                    if url else _esc(nm))
+            tx = law_texts.get(nm) if isinstance(law_texts, dict) else None
+            content = (tx or {}).get("content") if isinstance(tx, dict) else None
+            if content and str(content).strip():
+                excerpt = str(content).strip()
+                excerpt = excerpt[:400] + ("…" if len(excerpt) > 400 else "")
+                items += (f'<details class="law-ref"><summary>{link}</summary>'
+                          f'<div class="law-ref-body">{_esc(excerpt)}</div></details>')
+            else:
+                items += f'<div class="law-ref-lnk">{link}</div>'
+        refs_html = f'<div class="law-refs"><div class="law-refs-hd">관련 법조문</div>{items}</div>'
+
     note = "건축법 자동진단(arch-law-diagnose) 되받기 — 허용 한도로 최대 매스 역산 후 진단한 법적 골격."
     if any_low:
         note += " 일부 값은 자동조회·추정(신뢰도 낮음) — 현장·원문 확인 필요."
@@ -619,6 +655,7 @@ def _law_diagnosis_html(site_context: dict | None) -> str:
         '<div class="law-diag">'
         '<div class="law-hd">법적 골격 <span class="law-tag">건축법 진단</span></div>'
         + cards
+        + refs_html
         + f'<div class="site-note" style="margin-top:8px">⚠ {_esc(note)} 정밀 일조사선·층수는 미포함(참고).</div>'
         '</div>'
     )
