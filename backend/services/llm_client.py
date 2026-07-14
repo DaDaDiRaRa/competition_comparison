@@ -88,6 +88,15 @@ def call_messages(
                     usage.get("output_tokens", 0),
                 )
 
+            # 출력이 max_tokens 에서 잘리면(stop_reason) JSON 이 미완결 → 조용히 넘기지 말고 경고.
+            # 소비측(제안서 등)은 max_tokens 를 넉넉히 줘야 함. 예전엔 이 신호가 없어 잘림이 은닉됐다.
+            if data.get("stop_reason") == "max_tokens":
+                logger.warning(
+                    "[truncated] model=%s stop_reason=max_tokens output=%d/max=%d "
+                    "— 출력이 잘렸습니다. max_tokens 상향 필요(JSON 파싱 실패 원인).",
+                    model, usage.get("output_tokens", 0), max_tokens,
+                )
+
             return data["content"][0]["text"]
 
         except httpx.TimeoutException as e:

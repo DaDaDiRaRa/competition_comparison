@@ -385,7 +385,7 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)
     raw = call_messages(
         model=settings.model_id_advisor,   # 제안 전용 모델(기본 Opus). 추출은 그대로 Sonnet.
-        max_tokens=16000,
+        max_tokens=32000,   # 대형 brief(5안+placement+program/massing/phasing)에서 16k 초과 잘림 방지
         temperature=0,     # Opus 4.7/4.8 은 call_messages 가 temperature 를 자동 생략 (400 회피)
         system=_PROPOSAL_SYSTEM,
         messages=[{

@@ -369,7 +369,7 @@ def _interpret_sync(brief_data: dict, facility_type: str) -> dict:
     dynamic = "지침서 데이터 (이 안의 내용만 사용):\n" + _compact(payload)
     raw = call_messages(
         model=settings.model_id_advisor,   # 해설 전용 모델(기본 Opus). 추출은 그대로 Sonnet.
-        max_tokens=16000,  # 긴 한국어 출력 + Opus 가 thinking 생략 시 본문에 쓰는 추론 여유분
+        max_tokens=24000,  # 긴 한국어 출력 + Opus thinking 생략 시 본문 추론 + 잘림 여유(16k 초과 방지)
         temperature=0,     # Opus 4.7/4.8 은 call_messages 가 temperature 를 자동 생략 (400 회피)
         system=_ADVISOR_SYSTEM,
         messages=[{

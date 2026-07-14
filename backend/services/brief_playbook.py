@@ -197,7 +197,7 @@ def _playbook_sync(brief_data: dict, facility_type: str) -> dict:
     )
     raw = call_messages(
         model=settings.model_id_advisor,   # 처방 전용 모델(기본 Opus). 추출은 그대로 Sonnet.
-        max_tokens=16000,
+        max_tokens=24000,   # 잘림 여유 (16k 초과 방지)
         temperature=0,     # Opus 4.7/4.8 은 call_messages 가 temperature 를 자동 생략 (400 회피)
         system=_PLAYBOOK_SYSTEM,
         messages=[{
