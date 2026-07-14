@@ -49,6 +49,7 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 | `brief_playbook.py` | 지침서 "경험 기반 처방"(experiential playbook, **세 번째 산출물** — `interpret`=해설가, `propose`=전략가에 이은 것). `build_playbook()` (LLM 최대 1콜, Opus `settings.model_id_advisor`, `max_tokens=16000`, comparator 패턴). **advisor/propose 와 정반대**: 저 둘은 `reference_cases`(같은 시설유형 과거 당선/낙선 축적)를 *배경 참고로만* 쓰고 이 지침서 판단 근거로는 못 쓰게 가드가 걸려 있음 — playbook 은 그 관계를 **뒤집어** reference_cases 를 *주연료*로 삼아 "과거엔 이래서 됐고/떨어졌으니 이 지침서에선 이걸 이렇게" 능동 처방. `_build_advisor_payload` 재사용. **무료 게이트: `collect_reference_context` 가 비면 LLM 미호출 sentinel(`has_accumulated_data=False`)** (연료 없는데 과금 방지). **오염 방지 — 교차 앵커**: `applications` 각 항목은 과거 교훈(`rooted_in`)+이 지침서 실제 사실(`basis`, p.N/항목명) **둘 다** 앵커, 못 달면 제외. 과거 공모 수치를 이 지침서 사실로 옮기기 금지·당락 예측 금지. 결정론 덮어씀: `data_basis`(표본 규모)·`scoring_focus`. 전제조건=DB에 같은 시설유형 과거 데이터 축적. 회귀: `tests/test_brief_playbook.py` (7). |
 | `brief_playbook_report_generator.py` | `_playbook` → 자체완결 HTML (LLM 0, Report Generation Rule). 화이트 + 건원 RED. 2층 시각 분리: **과거·사실**(당선 교훈·낙선 함정·당락 축, 파란 `source` 칩=과거 공모명) vs **AI 해석**(`applications`, "AI 해석" 배지 + `rooted_in` 과거 앵커 + `basis` 이 지침서 앵커 동시 노출). 상단 표본 근거 밴드(win/lose/발췌 수)·범례·디스클레이머. `has_accumulated_data=False` 면 안내 카드만(graceful). `to_playbook_html()`. 데이터 `html.escape`. |
 | `teoilgi_client.py` | **터읽기(arch-site-context) 형제앱 연동** (2026-07-09) — `POST /board {brief:true,synthesize:false}` 로 **실측** 대지 맥락(전국=100 인구지수·근접도·수급진단·재해·★지배 설계 드라이버) 취득. vision(vworld_analyzer)을 대체 않고 **보강**: 정량·사실은 measured 우선, vision 은 형상·조망 시각판독. `FACILITY_TO_USE_TYPE`(14종→주거/상업/의료), env `TEOILGI_BOARD_URL`(기본 Cloud Run). graceful(실패→None, 제안서는 vision 만으로). `routers/brief.py` 가 `_site_context.measured` 로 병합, `brief_proposal._measured_digest`가 프롬프트 주입(터읽기 ②AI판단·notes 제외 = 경계: 우리는 제안서 컨셉안 소유, 터읽기는 사실+드라이버까지). 회귀: `tests/test_teoilgi_client.py` (6). |
+| `arch_law_client.py` | **arch-law-diagnose(건축법 자동진단)+graph 형제앱 연동** (2026-07-14, Phase 2·3, prod 활성). feasibility_export 허용 한도로 **최대 매스 역산**(모드 A) → `POST /api/diagnose`(공개 배포 URL 기본값, `ARCH_LAW_API_URL` override, **always-on**·`ARCH_LAW_DISABLE=1`로만 끔) → 정북 일조사선·가로구역 최고높이·건폐/용적 한도·심의여부 되받아 배치 **법적 골격**. `to_request`·`diagnose`(timeout 120·graceful)·`digest_diagnosis`(골격 추림+null가드+low_confidence+limit_mismatch+law_refs). ⚠**계약**: `applicable_reviews` 는 dict `{items[],required_count}`(배열 아님 — items[] 순회), severity=REQUIRED/**MAYBE**/NONE, `높이_일조.pass` 는 envelope 모드 **항상 null**(low_confidence 판정 제외 — 건폐/용적 pass만 유효). **Phase 3**: `graph_url`+`fetch_law_texts`(arch-law-graph `/api/lookup`, 조문 원문·found+content만·graceful). `routers/brief.py` 4.7 이 부지별 `asyncio.gather` 병렬 진단→`_site_context.law_diagnosis`(+`law_texts`), `_law_diagnosis_html`(brief_proposal_report_generator, brief_checklist_exporter 공용)이 법적 골격 패널+조문 각주 렌더, `brief_proposal` 이 placement 법근거 주입. 배포: `deploy.yml --update-env-vars` 에 `ARCH_LAW_API_URL` 고정. 회귀: `tests/test_arch_law_client.py` (20, 네트워크 0). |
 | `vworld_analyzer.py` | 지침서 "대지·맥락 분석" — 주소→지오코딩→VWorld 위성(WMTS)+지적도(WMS) 합성→Claude Sonnet vision 판독. 지침서 분석 완료 후 `feasibility_export.sites[0].address` 로 자동 실행 (키 있을 때만, 실패해도 비치명). 위성은 **WMTS 전용**(WMS GetMap 미지원), 지적도는 **WMS 전용**(WMTS 미제공) — 레이어명 `lp_pa_cbnd_bonbun,lp_pa_cbnd_bubun` (구 `lp_pa_cn_A` 는 오타, 확인은 GetCapabilities로). 광역 위성(zoom16, 3×3≈1.8km) **중앙**에 지적도를 고해상(900m@768px≈1.2m/px) 요청 후 비례 축소·합성 — 스케일 임계는 **절대 span 아닌 m/px**. `has_cadastral` 플래그가 `_site_context`·vision 프롬프트·제안서 썸네일 캡션까지 전파. 빈 타일·오프셋 이탈·PIL 에러는 위성 단독 폴백. `GET /brief/{id}/site-context` 로 서빙. 회귀: `tests/test_vworld_analyzer.py` (8, 네트워크 0 — bbox/m/px 기하만). |
 | `proposal_number_check.py` | 제안서 prose **근거 없는 수치 검산** (LLM 0 · 숫자 수정 0, `quant_validator` 의 제안서판). `check_proposal_numbers(proposal, brief_data)` — `_proposal` 의 LLM 작성 서술에 나온 수치를 코퍼스(brief_data 전체 + 결정론 scoring_focus)와 대조해 원천에 없는 숫자만 flag (분양가·ROI 등 발명/일반지식 수치가 사실처럼 새는 것 차단). basis(근거 인용)·메타 제외. **2-pass:** ① **위험 단위 쌍**(억/만원/원/%/세대/가구/호)에 붙은 수치는 `(숫자,단위)` 쌍으로 대조 — 자릿수 무관, 소액 발명(공실률 12%·30억·480세대)까지 포착 ② 그 외 **bare 다자리** 수치는 코퍼스 막대조(한 자리 구조 숫자 1순위·5안 제외). 코퍼스는 over-permissive(false positive 회피), 단 위험 단위만 쌍 정밀도. 배점 비중 'N%'는 scoring_focus weight_pct 로 허용(오탐 방지). `_propose_sync` 가 `result["_number_flags"]` 부착(비치명), 렌더러가 "근거 미확인 수치" 경고 밴드로 노출. 회귀: `tests/test_proposal_number_check.py` (11). |
 | `grade_helpers.py` | 등급 단일 소스. `GRADE_COLORS`, `GRADE_RING_COLORS`, `to_grade()`. 모든 리포트 generator 가 공통 import. |
@@ -154,11 +155,13 @@ brief.py propose 가 `_brief.json._site_context` + `{brief_id}_site.jpg` 로 주
 3. **추출**: PDF → `extract_pdf(is_brief=True)` (vision/tiled/OCR/digital text 다단) / DOCX → `extract_docx(is_brief=True)` / HWP·HWPX → `extract_hwpx(is_brief=True)`. BRIEF_EVALUATION 표는 LLM 없이 직접 파싱.
 4. `merge_extracted_data()` → `_merge_brief_project_info_pages()` 가 `sites[]` / `special_conditions[]` / `unit_program[]` 합침. brief 결과면 `feasibility_export` 블록도 부착 (Schemas 참조).
 5. `extract_brief_requirements()` → `validate_brief()` → flags + summary.
-6. **AI 종합 해설 (옵션, `include_insight` 기본 ON)**: `brief_advisor.interpret_brief()` Opus 1콜(`settings.model_id_advisor`) → `brief_data["_insight"]` 임베드 (별도 파일 아님). 한 방 통합(diagnose 패턴), 실패해도 비치명적(추출 산출물 유지). `to_html`·`to_markdown`·`to_xlsx` **3종 모두** `_insight` 를 "AI 종합 해설" 섹션/시트로 렌더(LLM 0; html 은 핵심수치 카드 직후, md 는 `## 0`, xlsx 는 맨 앞 시트).
-7. `_brief_meta.source_format` (`"pdf"` | `"docx"` | `"hwp"` | `"hwpx"`) 기록.
-8. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write(html)` + `_sync_write_bytes(xlsx)`. 위치: `{db_path}/_briefs/{stamp}_{facility_type}_{slug}.{json|md|html|xlsx}` (≤120자).
-9. SSE `complete`: `{brief_id, md_filename, xlsx_filename, html_filename, validation_summary, source_format, has_insight}`. accumulate 의 `done`/`brief` 이벤트도 `html_filename` 포함.
-10. 분석 후 별도 엔드포인트(추출 재처리 0): `POST /{brief_id}/interpret`(해설 재생성), `POST /{brief_id}/propose`(수주 제안서), `POST /{brief_id}/playbook`(경험 기반 처방 — `reference_cases` 없으면 무료 게이트로 LLM 미호출).
+6. **AI 종합 해설 (옵션, `include_insight` 기본 ON)** [4.5]: `brief_advisor.interpret_brief()` Opus 1콜(`settings.model_id_advisor`) → `brief_data["_insight"]` 임베드 (별도 파일 아님). 한 방 통합(diagnose 패턴), 실패해도 비치명적(추출 산출물 유지). `to_html`·`to_markdown`·`to_xlsx` **3종 모두** `_insight` 를 "AI 종합 해설" 섹션/시트로 렌더(LLM 0; html 은 핵심수치 카드 직후, md 는 `## 0`, xlsx 는 맨 앞 시트). ⚠ 이 단계는 site_context(7단계) **이전**이라 자동 해설은 대지·법을 못 씀 — 그건 수주 제안서(8단계 propose)가 소비.
+7. **대지·맥락 분석 (자동)** [4.7]: `feasibility_export.sites[]` 주소(또는 선택 입력 `site_address` override)로 **부지별 병렬**(`asyncio.gather`) — `vworld_analyzer.run_site_analysis`(vision, VWorld 키 有) + `teoilgi_client.fetch_board_context`(터읽기 measured) + `arch_law_client`(건축법 진단 `law_diagnosis` + graph `law_texts`). `_site_context` = 대표(첫 부지) analysis·measured + `sites[]`(전 부지 vision/measured, **다부지 비대칭 해소**) + `law_diagnosis`(전 부지)·`law_texts`. 전부 graceful. `site_address`(선택 Form) 로 지침서 미추출/오추출 주소 고정(첫 부지 대체·envelope 유지→law 작동, 부지 없으면 vision+measured만).
+8. **수주 제안서 (옵션, `include_proposal` 기본 OFF)** [4.8]: 켜면 분석 한 방에 `brief_proposal.propose_project()` (배점×대지실측×법 envelope×프로그램 종합→placement·법적 골격) → `_proposal` + `{brief_id}_proposal.html`. graceful. `_render_proposal_html` 헬퍼로 `/propose` 와 렌더 단일 소스.
+9. `_brief_meta.source_format` (`"pdf"` | `"docx"` | `"hwp"` | `"hwpx"`) 기록.
+10. 저장: `_atomic_write(json)` + `_sync_write(md)` + `_sync_write(html)` + `_sync_write_bytes(xlsx)`. **체크리스트 html/md/xlsx 3종 모두** `_site_context` 있으면 "대지·법적 골격" 섹션/시트 렌더(`_site_law_section_html`·`_md_site_law_block`·xlsx 시트, LLM 0 — 제안서 안 켜도 대지·법 표시).
+11. SSE `complete`: `{brief_id, md/xlsx/html_filename, validation_summary, source_format, has_insight, has_site_context, has_proposal, proposal_filename, brief_genre}`.
+12. 분석 후 별도 엔드포인트(추출 재처리 0): `POST /{brief_id}/interpret`(해설 재생성), `POST /{brief_id}/propose`(수주 제안서), `POST /{brief_id}/playbook`(경험 기반 처방), `POST /{brief_id}/site-analyze`(주소로 VWorld 재분석).
 
 ### Diagnose
 
@@ -209,6 +212,28 @@ feasibility_export: {
 ```
 
 1차(A~E): 재배치/정규화만. 2차(C 주차·D 용도지역·E 심의플래그): 이미 추출된 서술(brief_design_massing/zoning/special_conditions)을 **후처리에서 파싱** — vision 프롬프트 무관이라 BRIEF_* 분류·면적표 회귀 없음. `merge_extracted_data()` 가 brief 결과에 부착. `limits_determined_by="심의"` 면 60%/460% 등을 법정 한계로 보면 안 됨.
+
+**`_brief.json` 의 `_site_context` (대지·맥락, `routers/brief.py` 4.7 조립, graceful):**
+
+```text
+_site_context: {
+  matched_address, lat, lng, radius_m, has_cadastral,   # 대표(첫 부지) VWorld
+  analysis: { orientation, road_access, surrounding_uses, natural_assets, special_context,
+              overall_summary, confidence, caveats },   # 첫 부지 vision 판독
+  measured: {...},                                       # 첫 부지 터읽기 board_brief
+  sites: [{ site_id, address, analysis, measured }],     # 전 부지 (다부지 비대칭 해소)
+  law_diagnosis: [{ site_id, address, signal, overall_score,
+                    envelope:{bcr_limit_pct, far_limit_pct},
+                    height_solar:{shadow_applies, shadow_min_setback_m, shadow_setback_rule,
+                                  north_setback_m, road_height_limit_m, parcel_north_depth_m},
+                    reviews_required:[{name, law_ref, reasons}], has_required_review,
+                    low_confidence, source_notes, limit_mismatch:[{field,brief_pct,diagnose_limit_pct}],
+                    law_refs:[{name, url}] }],             # arch-law 진단 (전 부지)
+  law_texts: { "<law_ref name>": {title, content, source_url, law_nm, article_no} }  # Phase 3 graph 원문(found만)
+}
+```
+
+vision·measured·law_diagnosis·law_texts 각각 독립 graceful(하나 실패해도 나머지 유지). 소비: `brief_proposal`(placement 법근거)·`brief_proposal_report_generator._law_diagnosis_html`(법적 골격 패널+조문 각주)·`brief_checklist_exporter`(대지·법 섹션 html/md/xlsx). ⚠**모드 A(용량)**: `north_setback_m`·`road_height_limit_m` 은 지역·고시에 따라 null 흔함(정북은 `shadow_min_setback_m` 필요이격이 실신호), 건폐/용적 pass 는 한도맞춤이라 항상 true(가치는 limit 값·정북·가로구역·심의·mismatch).
 
 **`comparison.json`:**
 
@@ -414,19 +439,21 @@ _bid_structure: {
 - **시퀀스 E — 수주 제안서 비주얼 덱 출력 (`brief_proposal` 출력 고도화):** Phase 1(히어로+팩트밴드) ✅ / Phase 2(AI 해석 확장층·범례·근거 미확인 수치 밴드) ✅ / **Phase 3(매거진형 덱 재설계) ✅ 완료 (2026-07-13)** — 명조+Montserrat, 회색 위 흰 페이퍼, **결정 요약 cockpit**(6칸, AI 판단 응축+근거 앵커) + **권장 종합안**(5안을 뭉개지 않고 최고 배점축 뼈대+접목+조건부, KT 참고본의 "권장안+비교" 방식) + 입찰 2층 배점. 참고본(KT 명당 수동 생성본)의 **매거진 형식은 취하되 날조 수치는 거부**(근거·AI배지·근거미확인 경고 유지)가 핵심 결정. **남은 후보: takeaway 섹션별 한 줄(프로토타입엔 있으나 백엔드 미이식)·본문 문장 축약·논리 사슬/결정 변수 강화.** 현재 `brief_proposal_report_generator.to_proposal_html` 은 *보고서형*(스크롤 섹션). 사용자 피드백으로 **PPT형 스크롤 덱**이 더 낫다고 확정 — 향후 그 양식을 앱 기본 출력으로 이식. 디자인 계약(수동 검증 완료): ① **하나의 통일 캔버스**(섹션별 배경색 분리 금지 — "페이지 나눈 느낌" 역효과) ② 글을 줄일 땐 **삭제 말고 도식·아이콘으로 치환**(SVG: 맥락 개념도·100칸 와플 배점·매트릭스+상세카드·단면 긴장도·인허가 타임라인) ③ **밀도 높게**(나란히 배치) ④ 5안은 매트릭스(한눈) + **상세 카드**(공간전략/득점/포기/이 부지라서 + 매스 실루엣)로 — 이게 사용자가 "최종적으로 얻고 싶은" 산출물 ⑤ 매스는 *평면 만화 금지*(실무자 역효과), 측면 개념 실루엣까지만. 참고 산출물은 수동 생성본(시퀀스 D 경로) 존재. Phase 1 히어로는 사용자가 디자인·표현·이미지 해석 로직 불만족(2026-06-29) → Phase 3에서 히어로 재설계 포함.
 - **시퀀스 F — 대지·맥락 분석 통합:** ✅ 구현·자동 파이프라인 통합 완료 (2026-06-26~29, 위성+지적도 하이브리드 단일 이미지). 상세는 Core Services 표의 `vworld_analyzer.py` 참조. 남은 보류: ③ SketchUp MCP 3D 매스 — 사용자가 자료 줄 때 재개.
 
-## 당면 TODO (2026-07-01 기준)
+## 당면 TODO (2026-07-14 기준)
 
-VWorld 실동작 확인·대지분석 섹션·지적도 오버레이는 완료(시퀀스 F 참조). 남은 항목:
+**대지·법 연동 대작업 완료** (2026-07-14 세션) — 아래 1~4 는 다 끝남:
 
-1. ~~시퀀스 E Phase 3 — 매거진형 덱 재설계~~ **✅ 완료 (2026-07-13)** — `to_proposal_html` 매거진화(명조+Montserrat·흰 페이퍼) + 결정 요약 cockpit + 권장 종합안 + 입찰 2층 배점, 기존 헬퍼·클래스명 유지해 외과적 이식(27→35 테스트, LLM 0). 남은 후폴로우: **섹션별 takeaway 한 줄**(프로토타입 gen_deck.py 에 있으나 백엔드 미이식 — 각 섹션 markup 수정 필요), **본문 문장 축약**(brief_proposal 프롬프트에서 "한 문장=한 생각"), **결정 지원 강화**(②논리 사슬 ③결정을 바꿀 변수 블록 — project_proposal_magazine_deck 메모리 참조).
+1. ~~placement_strategy 부지별 다이어그램 분리~~ **✅** — zone 에 `site` 필드 + 프롬프트 규칙, 렌더러 부지별 블록(헤더+조닝/단면 쌍+카드) 분리(번호·색 통합). 단부지 불변.
+2. ~~Phase 1 — 대지 실측을 배치 근거로~~ **✅ (전제 규명)** — 조사 결과 placement 메커니즘은 **이미 작동**(site_context 있으면 방위 근거 살아남, 0629 서측 저수지→W/SW 활용). "남북 쏠림"은 데이터 없을 때 증상이었음. 부수: **다부지 vision/measured 비대칭 해소**(전 부지 각각), **선택 대지 주소 입력**(`site_address`, 지침서 미추출/오추출 고정).
+3. ~~Phase 2 — arch-law-diagnose 연동~~ **✅ prod 활성** — `arch_law_client` 되받기(정북·가로구역·envelope·심의) → 법적 골격. 공개 엔진 기본 URL·always-on·`deploy.yml` env 고정. **계약 버그 2건 수정**(applicable_reviews dict·envelope pass null)·라이브 검증 완료. 상세는 Core Services `arch_law_client.py`.
+4. ~~Phase 3 — arch-law-graph 조문 원문 각주~~ **✅** — `law_refs`→graph `/api/lookup`→`law_texts`, 법적 골격 패널에 원문 `<details>` 각주(없으면 law.go.kr 링크만).
+5. ~~수집↔해석 단절·자동 산출물 미표시~~ **✅** — `include_proposal` 토글(분석 한 방에 제안서까지)·체크리스트 html/md/xlsx 에 "대지·법적 골격" 섹션(제안서 없이도 대지·법 표시).
 
-2. **대지 근거 배치(placement_strategy) 고도화 — 진행 중 (2026-07-14)**. **완료:** `brief_proposal` 에 `placement_strategy`(zones=[{program, plan(8방위+C), level(지하~상층), required(지침서 명시 위치=사실·필수 vs AI 추론), why, draws_on(대지·법·프로그램·배점 교차), basis}], synthesis, section_note) 필드 — 여러 근거를 **교차 합성**해 '동선 분리하라'식 뻔한 답 대신 대지 특정 배치 생성. **명시 요구 절대 준수**(payload `placement_requirements` 주입 + 프롬프트 하드룰 + `required` 플래그로 사실/제안 구분). 렌더는 `_placement_strategy_html`(SVG 번호 마커 조닝·단면 다이어그램 + 번호 존 카드 + 교차근거 색칩, 채움=필수/점선=추론). **남은 후폴로우:** ⓐ **부지별 다이어그램 분리** — 다부지(부지1·부지2) 프로젝트를 한 사각형에 섞어 그려 방위가 뭉갬 → 부지별로 나눠 방위 살리기. ⓑ **동서 방위 근거 강화** = 아래 3번(Phase 1). 사용자 확인: SVG 번호 마커 방식으로 가독성 해결됨.
-
-3. **Phase 1 — VWorld/터읽기 대지 실측을 배치 근거에 물리기**. 지금 `placement_strategy` 가 site_context 없이 배점+프로그램+feasibility envelope 로만 배치해 **남북 위주**로 쏠림. `_site_context`(VWorld analysis 향·접도·조망 + 터읽기 measured 주변용도·재해·드라이버)를 배치 plan(방위)·level 근거로 명시 주입하면 "동측 하천 조망→동측 배치" 같은 **동서 근거**가 살아 더 풍부·비뻔. (VWorld 키 필요)
-
-4. **Phase 2 — arch-law-diagnose 연동 (법적 envelope)**. 지금 `feasibility_export` 는 이 앱으로 **내보내기만**(단방향, 콜백 없음). 터읽기(`teoilgi_client`) 패턴으로 진단 결과(일조사선·이격·높이·건폐용적·심의)를 **되받으면** 매스·단면 배치에 법적 근거 급상승. **막힘:** 그 앱에 호출 가능한 진단 엔드포인트+응답 스키마 있는지 사용자 확인 필요(현재 URL 미상). 없으면 feasibility envelope(용적·건폐·높이·용도지역)로 대체 중 — 정밀 일조사선만 부재.
-
-5. **Phase 4(보류) — SketchUp MCP 3D 매스**. 세션에 연결됨(massing/scenes 가능). 근거(2~4)로 배치가 풍부해진 뒤 형태화. 사용자: 지금은 원치 않고 HTML 다이어그램(2번)까지면 충분.
+**남은 것:**
+- **Phase 4(보류) — SketchUp MCP 3D 매스**. 근거(placement·법적 골격) 풍부해진 뒤 형태화. 사용자: 지금은 HTML 다이어그램까지면 충분.
+- **내재적 한계**(수정 불가/외부 앱 소관): 터읽기 measured=시군구 평균(대지 고유 방위 없음, 방위는 VWorld vision), law mode A(층수 추정·건폐/용적 pass 항상 통과), 외부 엔진 지연(진단 부지당 65~110초·graceful).
+- **시퀀스 E 후폴로우**: 섹션별 takeaway 한 줄·본문 축약(project_proposal_magazine_deck 메모리).
+- **feasibility 백필**: `tools/backfill_feasibility.py` — 옛 brief(기능 도입 전) 재빌드로 주소·envelope 확보(prod 14건 완료).
 
 ## Local Dev
 
@@ -486,7 +513,7 @@ npm install
 
 **PaddleOCR (선택):** `pip install -r requirements-ocr.txt`. 기본 파이프라인은 PyMuPDF + Claude vision 으로 동작하므로 불필요.
 
-**테스트:** `cd backend && venv/Scripts/python.exe -m pytest tests/ -v` (현재 439 passed, suite = `backend/tests/`). `brief_proposal_report_generator.py`(매거진 덱·cockpit·권장종합안·입찰2층) 수정 시 `tests/test_brief_proposal_report.py` 35 케이스. `brief_genre.py`(장르 판별) 수정 시 `tests/test_brief_genre.py` 7 케이스. `bid_structure.py`(입찰 2층 배점·다중표 병합) 수정 시 `tests/test_bid_structure.py` 14 케이스. `_extract_docx_eval_from_table` (배점표 파싱) 수정 시 `tests/test_eval_table_multilevel.py` 4 케이스(다단계 PQ 표 points_col·이름 귀속·합계). `brief_playbook.py` / `brief_playbook_report_generator.py` 수정 시 `tests/test_brief_playbook.py` 7 케이스 (무료 게이트·결정론 덮어쓰기·렌더 escape, LLM monkeypatch). HWP/HWPX 코드 추가 시 `tests/test_hwpx_loader.py` 회귀 보호 필수 (22 케이스, rhwp monkeypatch — rhwp 미설치 환경도 통과). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일. `quant_validator.py` / `pattern_builder._build_quant_stats` / `merge_extracted_data` 의 `_quantitative_flags` 훅 수정 시 `tests/test_quant_validator.py` 19 케이스. `feasibility_export.py` 수정 시 `tests/test_feasibility_export.py` 46 케이스 + 무료 검증 `tools/feasibility_verify.py`. ⚠️ DOCX 회귀 `test_docx_extractor.py` (10 케이스) 는 repo-root `tests/` 에 있어 backend 기준 suite(393)에 **미포함** — DOCX 수정 시 별도 실행 (repo-root cwd): `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`. repo-root `tests/` 엔 conftest 없음 — 테스트 파일이 직접 `services.utils` 등을 sys.modules 스텁(`types.ModuleType`)하므로, `data_extractor` 가 `services.utils` 에서 새 심볼을 import 하면 **스텁 함수 목록도 갱신 필수** (안 하면 collection 단계 `cannot import name ... (unknown location)`). 현재 상태: 9 pass / 1 사전실패 `test_force_cut_31_paragraphs` (docx_loader F3 force-cut 미발동, **미해결·brief 전용**).
+**테스트:** `cd backend && venv/Scripts/python.exe -m pytest tests/ -v` (현재 479 passed, suite = `backend/tests/`). `arch_law_client.py`(건축법 진단 되받기·계약·Phase 3 graph) 수정 시 `tests/test_arch_law_client.py` 20 케이스(⚠**mock 은 실제 응답 형태로** — applicable_reviews dict·높이_일조.pass null·law_refs. 형태 틀린 mock 은 계약 버그를 통과시킴). 대지·법적 골격 렌더(`_law_diagnosis_html`·체크리스트 대지·법 섹션·조문 각주) 수정 시 `tests/test_brief_proposal_report.py`(법적 골격 패널·다부지·법조문 각주) + `tests/test_brief_pipeline.py`(TestSiteLawSection·TestSiteLawXlsx). `brief_proposal_report_generator.py`(매거진 덱·cockpit·권장종합안·입찰2층·placement·법적 골격) 수정 시 `tests/test_brief_proposal_report.py`. `brief_genre.py`(장르 판별) 수정 시 `tests/test_brief_genre.py` 7 케이스. `bid_structure.py`(입찰 2층 배점·다중표 병합) 수정 시 `tests/test_bid_structure.py` 14 케이스. `_extract_docx_eval_from_table` (배점표 파싱) 수정 시 `tests/test_eval_table_multilevel.py` 4 케이스(다단계 PQ 표 points_col·이름 귀속·합계). `brief_playbook.py` / `brief_playbook_report_generator.py` 수정 시 `tests/test_brief_playbook.py` 7 케이스 (무료 게이트·결정론 덮어쓰기·렌더 escape, LLM monkeypatch). HWP/HWPX 코드 추가 시 `tests/test_hwpx_loader.py` 회귀 보호 필수 (22 케이스, rhwp monkeypatch — rhwp 미설치 환경도 통과). `tests/test_normalize_design_grouped.py` 13 케이스, `tests/test_pure_functions.py::TestBriefValidatorPointsMismatch` 15 케이스도 동일. `quant_validator.py` / `pattern_builder._build_quant_stats` / `merge_extracted_data` 의 `_quantitative_flags` 훅 수정 시 `tests/test_quant_validator.py` 19 케이스. `feasibility_export.py` 수정 시 `tests/test_feasibility_export.py` 46 케이스 + 무료 검증 `tools/feasibility_verify.py`. ⚠️ DOCX 회귀 `test_docx_extractor.py` (10 케이스) 는 repo-root `tests/` 에 있어 backend 기준 suite(393)에 **미포함** — DOCX 수정 시 별도 실행 (repo-root cwd): `backend/venv/Scripts/python.exe -m pytest tests/test_docx_extractor.py`. repo-root `tests/` 엔 conftest 없음 — 테스트 파일이 직접 `services.utils` 등을 sys.modules 스텁(`types.ModuleType`)하므로, `data_extractor` 가 `services.utils` 에서 새 심볼을 import 하면 **스텁 함수 목록도 갱신 필수** (안 하면 collection 단계 `cannot import name ... (unknown location)`). 현재 상태: 9 pass / 1 사전실패 `test_force_cut_31_paragraphs` (docx_loader F3 force-cut 미발동, **미해결·brief 전용**).
 
 ## Deployment
 
