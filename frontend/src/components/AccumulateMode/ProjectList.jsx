@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, rerunCompare, rerenderReport, getReportUrl, getSubmissionReportUrl, addSubmission } from '../../api/client'
+import { getProjects, rerunCompare, rerenderReport, getReportUrl, getSubmissionReportUrl, addSubmission, deleteProject } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import DropZone from '../common/DropZone'
 import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
@@ -64,6 +64,12 @@ const s = {
     background: 'var(--color-warning-bg)', border: '1px solid var(--color-amber-dark)', borderRadius: 6,
     padding: '7px 12px', fontSize: 'var(--font-size-sm)', color: 'var(--color-grade-d)', marginTop: 8,
     display: 'flex', alignItems: 'center', gap: 'var(--gap-sm)',
+  },
+  deleteBtn: {
+    background: 'transparent', color: 'var(--color-danger)',
+    border: '1px solid var(--color-danger)', borderRadius: 6,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
+    marginLeft: 'auto',
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
   logWrap: { marginTop: 10 },
@@ -190,8 +196,22 @@ function ProjectCard({ project, onRerunDone }) {
   const [editingCompany, setEditingCompany] = useState(null)
   const [comparisonStale, setComparisonStale] = useState(false)
   const [reportTs, setReportTs] = useState(Date.now())
+  const [deleting, setDeleting] = useState(false)
 
   const hasReport = project.report_available
+
+  const handleDelete = async () => {
+    const name = project.competition_name || project.competition_id
+    if (!window.confirm(`"${name}" 프로젝트를 삭제할까요?\n제출물·비교 리포트가 모두 지워지고 되돌릴 수 없습니다.`)) return
+    setDeleting(true)
+    try {
+      await deleteProject(project.facility_type, project.competition_id)
+      onRerunDone?.()   // 목록 새로고침 (삭제된 카드 사라짐)
+    } catch (e) {
+      alert(`삭제 실패: ${e.message}`)
+      setDeleting(false)
+    }
+  }
   const freshReportUrl = () => getReportUrl(project.facility_type, project.competition_id) + '?t=' + reportTs
 
   const handleRerun = async () => {
@@ -326,6 +346,14 @@ function ProjectCard({ project, onRerunDone }) {
             </button>
           </>
         )}
+        <button
+          style={{ ...s.deleteBtn, ...(deleting || running ? s.disabledBtn : {}) }}
+          onClick={(deleting || running) ? undefined : handleDelete}
+          disabled={deleting || running}
+          title="이 프로젝트를 영구 삭제"
+        >
+          {deleting ? '삭제 중...' : '삭제'}
+        </button>
       </div>
       {rerenderMsg && (
         <div style={{ marginTop: 8, fontSize: 'var(--font-size-sm)',

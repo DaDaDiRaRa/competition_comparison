@@ -58,7 +58,7 @@ from services.db_manager import (
     save_cross_compare_data, load_cross_compare_data, _slugify,
     update_submission, has_comparison,
     save_myproject_deep, save_myproject_report, get_myproject_report_path,
-    update_project_meta,
+    update_project_meta, delete_project,
 )
 from services.page_classifier import classify_all_pages, classify_all_pages_brief
 from services.data_extractor import extract_pdf, merge_extracted_data, extract_brief_requirements
@@ -254,6 +254,34 @@ def rerender_cross_compare_report(filename: str):
     )
     save_cross_compare_report(filename, html)
     return {"report_filename": filename, "rerendered": True}
+
+
+# ── 프로젝트 삭제 ─────────────────────────────────────────────────────────────
+
+@router.delete("/projects/{facility_type}/{competition_id}")
+def delete_project_route(facility_type: str, competition_id: str):
+    """저장된 프로젝트 삭제(폴더 전체) 후 시설 패턴 재구축 + 아카이브 재인덱싱.
+
+    삭제된 제출물이 시설 당선/낙선 패턴·검색 인덱스에 남지 않도록 후처리한다.
+    """
+    try:
+        deleted = delete_project(facility_type, competition_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not deleted:
+        raise HTTPException(404, "프로젝트를 찾을 수 없습니다.")
+
+    # 삭제분이 패턴·검색에서 빠지도록 재구축 (실패해도 삭제 자체는 성공 처리).
+    try:
+        build_pattern(facility_type)
+    except Exception as e:
+        logger.warning("삭제 후 패턴 재구축 실패: %s", e)
+    try:
+        _rebuild_archive_index()
+    except Exception as e:
+        logger.warning("삭제 후 archive 인덱스 갱신 실패: %s", e)
+
+    return {"deleted": True, "facility_type": facility_type, "competition_id": competition_id}
 
 
 # ── 제안서 단건 추가 ──────────────────────────────────────────────────────────

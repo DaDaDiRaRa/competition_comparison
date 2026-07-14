@@ -200,6 +200,38 @@ def list_briefs():
     return items
 
 
+@router.delete("/{brief_id}")
+def delete_brief(brief_id: str):
+    """지침서 분석 1건의 모든 파생 파일 삭제 (json·md·xlsx·html·proposal·playbook·site).
+
+    path traversal 방지 — brief_id 에 경로 구분자가 있으면 거부. `{brief_id}.*` 와
+    `{brief_id}_*` 만 지워 다른 지침서(더 긴 slug)를 건드리지 않는다(구분자 경계).
+    """
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id or not safe_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+
+    briefs_dir = settings.db_path / "_briefs"
+    if not briefs_dir.exists():
+        raise HTTPException(404, "지침서를 찾을 수 없습니다.")
+
+    # `{id}.ext`(원본·파생) + `{id}_suffix`(proposal/playbook/site) — 구분자로 경계 고정.
+    targets = list(briefs_dir.glob(f"{safe_id}.*")) + list(briefs_dir.glob(f"{safe_id}_*"))
+    targets = [p for p in targets if p.is_file()]
+    if not targets:
+        raise HTTPException(404, "지침서를 찾을 수 없습니다.")
+
+    removed = 0
+    for p in targets:
+        try:
+            p.unlink()
+            removed += 1
+        except Exception as e:
+            logger.warning("지침서 파일 삭제 실패 %s: %s", p.name, e)
+
+    return {"deleted": True, "brief_id": safe_id, "files_removed": removed}
+
+
 # ── 파일 다운로드 ──────────────────────────────────────────────────────────────
 
 @router.get("/exports/{filename}")

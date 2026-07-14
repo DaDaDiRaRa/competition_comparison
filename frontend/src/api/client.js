@@ -86,6 +86,15 @@ export async function getProjects(facilityType) {
   return r.json()
 }
 
+export async function deleteProject(facilityType, competitionId) {
+  const r = await fetch(
+    `${BASE}/accumulate/projects/${encodeURIComponent(facilityType)}/${encodeURIComponent(competitionId)}`,
+    { method: 'DELETE' },
+  )
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || '삭제 실패')
+  return r.json()
+}
+
 export async function getPattern(facilityType) {
   const r = await fetch(`${BASE}/patterns/${facilityType}`)
   return r.json()
@@ -362,6 +371,12 @@ export async function listBriefs() {
   if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
   const r = await fetch(`${BASE}/brief/list`, { headers })
   if (!r.ok) throw new Error(await r.text())
+  return r.json()
+}
+
+export async function deleteBrief(briefId) {
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}`, { method: 'DELETE' })
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || '삭제 실패')
   return r.json()
 }
 

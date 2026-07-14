@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, buildBriefPlaybook, listBriefs, analyzeSite, getBriefSiteImageUrl, getBriefSiteContext } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, buildBriefPlaybook, listBriefs, analyzeSite, getBriefSiteImageUrl, getBriefSiteContext, deleteBrief } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -138,9 +138,23 @@ export default function BriefMode() {
   const [siteViewId, setSiteViewId] = useState(null)          // 이력 카드 대지분석 보기 열린 brief_id
   const [siteViewData, setSiteViewData] = useState({})        // { [brief_id]: siteContext }
   const [history, setHistory] = useState([])
+  const [deletingBriefId, setDeletingBriefId] = useState(null)
 
   const loadHistory = () => listBriefs().then(setHistory).catch(() => {})
   useEffect(() => { loadHistory() }, [])
+
+  const handleDeleteBrief = async (item) => {
+    const name = item.brief_name || item.brief_id
+    if (!window.confirm(`"${name}" 지침서 분석을 삭제할까요?\n리포트·제안서·처방 등 관련 파일이 모두 지워지고 되돌릴 수 없습니다.`)) return
+    setDeletingBriefId(item.brief_id)
+    try {
+      await deleteBrief(item.brief_id)
+      loadHistory()
+    } catch (e) {
+      alert(`삭제 실패: ${e.message}`)
+    }
+    setDeletingBriefId(null)
+  }
 
   // 결과 화면에서 has_site_context이지만 siteResult가 없으면 자동 로드
   useEffect(() => {
@@ -876,6 +890,16 @@ export default function BriefMode() {
                     }}
                   >
                     🛰 {item.has_site_context ? '재분석' : '대지분석'}
+                  </button>
+                  <button
+                    style={{ ...s.historyBtn(false), color: 'var(--color-danger)',
+                      borderColor: 'var(--color-danger)', marginLeft: 'auto',
+                      ...(deletingBriefId === item.brief_id ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                    onClick={() => deletingBriefId === item.brief_id ? undefined : handleDeleteBrief(item)}
+                    disabled={deletingBriefId === item.brief_id}
+                    title="이 지침서 분석을 영구 삭제"
+                  >
+                    {deletingBriefId === item.brief_id ? '삭제 중...' : '삭제'}
                   </button>
                 </div>
               </div>

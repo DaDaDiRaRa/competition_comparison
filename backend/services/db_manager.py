@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -89,6 +90,25 @@ def make_competition_id(project_number: str, name: str) -> str:
 
 def get_competition_dir(facility_type: str, competition_id: str) -> Path:
     return settings.db_path / facility_type / competition_id
+
+
+def delete_project(facility_type: str, competition_id: str) -> bool:
+    """저장된 프로젝트 폴더(제출물·비교·리포트 전체) 삭제. 존재해서 지웠으면 True.
+
+    path traversal 방지 — facility_type/competition_id 에 경로 구분자가 있으면 거부.
+    호출측이 삭제 후 패턴 재구축·아카이브 재인덱싱 책임(제출물이 시설 패턴에서 빠지도록).
+    """
+    if Path(facility_type).name != facility_type or Path(competition_id).name != competition_id:
+        raise ValueError("잘못된 facility_type / competition_id")
+    comp_dir = get_competition_dir(facility_type, competition_id)
+    # 반드시 db_path 하위인지 재확인 (심볼릭/상대경로 방어)
+    db_root = settings.db_path.resolve()
+    if db_root not in comp_dir.resolve().parents:
+        raise ValueError("DB 경로 밖 삭제 시도")
+    if not comp_dir.exists():
+        return False
+    shutil.rmtree(comp_dir)
+    return True
 
 
 def save_project_meta(
