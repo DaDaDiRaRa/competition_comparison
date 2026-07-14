@@ -113,6 +113,7 @@ export default function BriefMode() {
 
   const [facilityType, setFacilityType] = useState('')
   const [briefName, setBriefName] = useState('')
+  const [siteAddress, setSiteAddress] = useState('')  // 선택 — 지침서 주소 못 읽거나 틀릴 때 직접 고정
   const [briefFiles, setBriefFiles] = useState([])  // 복수 파일 지원
   const [running, setRunning] = useState(false)
   const [events, setEvents] = useState([])
@@ -185,6 +186,7 @@ export default function BriefMode() {
     briefFiles.forEach(f => fd.append('brief_pdf', f))
     fd.append('include_insight', includeInsight ? 'true' : 'false')
     fd.append('include_proposal', includeProposal ? 'true' : 'false')
+    if (siteAddress.trim()) fd.append('site_address', siteAddress.trim())
 
     try {
       for await (const ev of runBriefAnalyze(fd)) {
@@ -363,6 +365,20 @@ export default function BriefMode() {
             value={briefName}
             onChange={e => setBriefName(e.target.value)}
             placeholder="예: 영등포구 신청사 건립 공모 지침서"
+          />
+        </div>
+        <div style={s.group}>
+          <label style={s.label}>
+            대지 주소
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)', marginLeft: 4 }}>
+              (선택 — 지침서에서 주소를 못 읽거나 잘못 읽을 때 직접 고정)
+            </span>
+          </label>
+          <input
+            style={s.input}
+            value={siteAddress}
+            onChange={e => setSiteAddress(e.target.value)}
+            placeholder="예: 서울특별시 영등포구 당산동3가 385 (비우면 지침서에서 자동 추출)"
           />
         </div>
       </div>

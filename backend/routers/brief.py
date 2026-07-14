@@ -246,6 +246,7 @@ async def analyze_brief(
     brief_pdf_refs: str | None = Form(None),   # JSON 배열 — 복수 파일 청크 업로드용
     include_insight: bool = Form(True),
     include_proposal: bool = Form(False),      # 켜면 분석 한 방에 수주 제안서까지(대지·법 융합, 비용·지연 추가)
+    site_address: str = Form(""),              # 선택 — 지침서에서 주소를 못 읽거나 틀릴 때 직접 고정(비우면 추출값)
 ):
     """
     지침서 분석 + 체크리스트 내보내기. 단일 파일 또는 복수 파일(혼합 포맷 가능) 지원.
@@ -510,6 +511,14 @@ async def analyze_brief(
             #   (b) measured = 터읽기 실측(인구지수·수급진단·재해·설계드라이버) — 형제앱, 키 무관·graceful
             brief_data["_site_context"] = None
             fe_sites = (brief_data.get("feasibility_export") or {}).get("sites") or []
+            # 사용자 확정 주소(선택) — 지침서 추출을 신뢰 못 할 때 고정. 첫 부지 주소를 대체(envelope
+            #   유지 → law 작동), 부지 테이블 없으면(청사류) 주소만 합성 부지(vision+measured, law skip).
+            _addr_override = (site_address or "").strip()
+            if _addr_override:
+                if fe_sites:
+                    fe_sites = [dict(fe_sites[0], address=_addr_override), *fe_sites[1:]]
+                else:
+                    fe_sites = [{"site_id": "부지1", "address": _addr_override}]
             addressed = [s for s in fe_sites if s.get("address")]
             if addressed:
                 sc: dict = {}
