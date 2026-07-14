@@ -53,13 +53,7 @@ _MASS_SVGS = [
 _CIRCLE_NUMS = "①②③④⑤⑥⑦⑧⑨⑩"
 
 _PROPOSAL_CSS = """
-:root{
-  --ink:#141414;--text:#3a3a3a;--muted:#6f6b66;--faint:#a9a5a0;--line:#dcdad6;
-  --soft:#f6f4f1;--accent:#e60012;
-  --high:#c0202a;--med:#b7791f;--low:#4e7d3e;--ai:#2a6496;
-  --serif:'Noto Serif KR','Nanum Myeongjo',Georgia,'Batang',serif;
-  --sans:'Montserrat','Pretendard','Malgun Gothic',system-ui,-apple-system,'Segoe UI',sans-serif;
-}
+/*__THEME__*/
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:#eceae7;color:var(--text);
@@ -358,6 +352,10 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
   .place-dias{grid-template-columns:1fr}.place-zones{grid-template-columns:1fr}
 }
 """
+
+from services.report_theme import THEME_VARS
+# 제안서 = 디자인 기준. :root 를 공유 토큰 단일 소스로 대체 (값 동일, 드리프트 차단).
+_PROPOSAL_CSS = _PROPOSAL_CSS.replace("/*__THEME__*/", THEME_VARS)
 
 _CONF_LABEL = {"high": "높음", "medium": "보통", "low": "낮음 (근거 부족)"}
 _SEV_LABEL   = {"high": "높음", "medium": "중간",  "low": "낮음"}

@@ -14,8 +14,9 @@ _RESULT_BADGE = {
 
 _CSS = """
 <style>
+/*__THEME__*/
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
+body { font-family: var(--sans);
        background: #fafafa; color: #1f2937; padding: 24px; font-size: 14px; }
 .wrap { max-width: 1100px; margin: 0 auto; }
 .hdr { background: #ffffff; border-radius: 12px; padding: 24px 28px; margin-bottom: 20px;
@@ -38,12 +39,12 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 .kv-unit { font-size: 11px; color: #4b5563; font-weight: 400; }
 
 .concept-card { background: #f9fafb; border-radius: 8px; padding: 16px; margin-bottom: 10px; }
-.concept-name { font-size: 18px; font-weight: 700; color: #1e3a8a; margin-bottom: 6px; }
-.concept-type { font-size: 12px; color: #1e40af; background: #dbeafe;
+.concept-name { font-size: 18px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+.concept-type { font-size: 12px; color: var(--accent); background: rgba(230,0,18,0.08);
                 padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
 .concept-strategy { font-size: 13px; color: #374151; line-height: 1.7; }
 .keywords { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.kw { background: #eff6ff; color: #1e3a8a; font-size: 12px; padding: 3px 10px;
+.kw { background: #eff6ff; color: var(--ink); font-size: 12px; padding: 3px 10px;
       border-radius: 20px; border: 1px solid #bfdbfe; }
 
 .floor-table { width: 100%; border-collapse: collapse; }
@@ -80,6 +81,10 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 24px; padding: 12px; }
 </style>
 """
+
+from services.report_theme import THEME_VARS
+# 공유 디자인 토큰(건원 RED + 명조/Montserrat) 주입 — 단일 소스.
+_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
 
 
 def _safe_list(val) -> list:
@@ -570,8 +575,8 @@ def _kv_card(label: str, value, unit: str = '', hl: bool = False) -> str:
     if isinstance(value, float) and value == int(value):
         value = int(value)
     disp = f'{value:,}' if isinstance(value, (int, float)) else str(value)
-    col = '#1e3a8a' if hl else '#1f2937'
-    brd = ';border:1px solid #1e3a8a33' if hl else ''
+    col = 'var(--ink)' if hl else '#1f2937'
+    brd = ';border:1px solid var(--ink)33' if hl else ''
     u = f' <span style="font-size:11px;color:#4b5563">{unit}</span>' if unit else ''
     return (
         f'<div style="background:#f9fafb;border-radius:6px;padding:12px 16px{brd}">'
@@ -598,7 +603,7 @@ def _kv_grid(*blocks: str, cols: int = 3) -> str:
 def _sec_open(title: str, icon: str = '', badge: str = '') -> str:
     """섹션 열기 (기존 sec + sec-title CSS 재사용)."""
     b = (
-        f'<span style="font-size:10px;background:#dbeafe;color:#1e40af;'
+        f'<span style="font-size:10px;background:rgba(230,0,18,0.08);color:var(--accent);'
         f'padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:400">{badge}</span>'
     ) if badge else ''
     ic = f'<span style="opacity:0.7;margin-right:6px">{icon}</span>' if icon else ''
@@ -634,19 +639,19 @@ def _render_key_message(branding_list: list, concept_list: list) -> str:
     name_html = ''
     if name_ko:
         name_html = (
-            f'<div style="font-size:26px;font-weight:800;color:#1e3a8a;'
+            f'<div style="font-size:26px;font-weight:800;color:var(--ink);'
             f'letter-spacing:-0.01em;margin-bottom:2px">{name_ko}</div>'
             + (f'<div style="font-size:13px;color:#6b7280;margin-bottom:8px">{name_en}</div>'
                if name_en and name_en != name_ko else '')
         )
     elif name_en:
-        name_html = f'<div style="font-size:24px;font-weight:800;color:#1e3a8a;margin-bottom:8px">{name_en}</div>'
+        name_html = f'<div style="font-size:24px;font-weight:800;color:var(--ink);margin-bottom:8px">{name_en}</div>'
 
     # ── 슬로건 ──
     slogan = brand.get('main_slogan', '')
     slogan_html = (
         f'<div style="font-size:14px;color:#1f2937;font-style:italic;padding:8px 12px;'
-        f'border-left:3px solid #1e3a8a;margin-bottom:12px;background:#f0f4ff;'
+        f'border-left:3px solid var(--ink);margin-bottom:12px;background:#f0f4ff;'
         f'border-radius:0 4px 4px 0">{slogan}</div>'
     ) if slogan else ''
 
@@ -654,7 +659,7 @@ def _render_key_message(branding_list: list, concept_list: list) -> str:
     massing = concept.get('massing_type', '')
     metaphor = concept.get('metaphor_reference', '')
     badges = (
-        (f'<span style="background:#dbeafe;color:#1e40af;font-size:11px;'
+        (f'<span style="background:rgba(230,0,18,0.08);color:var(--accent);font-size:11px;'
          f'padding:3px 9px;border-radius:3px;margin-right:6px">매스: {massing}</span>'
          if massing else '')
         + (f'<span style="background:#ede9fe;color:#a78bfa;font-size:11px;'
@@ -751,7 +756,7 @@ def _render_business_viability(bv_list: list) -> str:
                 + (f'<span style="color:#4b5563">기준 {fb}</span>' if fb else '')
                 + (f'<span style="color:#6b7280">→</span><span style="color:#334155">+인센티브 {fi}</span>' if fi else '')
                 + (f'<span style="color:#6b7280">→</span>'
-                   f'<span style="font-weight:700;color:#1e3a8a">최종 {ff}</span>' if ff else '')
+                   f'<span style="font-weight:700;color:var(--ink)">최종 {ff}</span>' if ff else '')
                 + '</div></div>'
             )
 
@@ -993,9 +998,9 @@ def _render_unit_plan_penthouse(upp_list: list) -> str:
 
         cards.append(
             '<div style="background:#f0f4ff;border-radius:8px;padding:18px 20px;'
-            'border:2px solid #bfdbfe;border-top:4px solid #1e3a8a">'
+            'border:2px solid #bfdbfe;border-top:4px solid var(--ink)">'
             f'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">'
-            f'<div style="font-size:20px;font-weight:800;color:#1e3a8a">{u_type}</div>'
+            f'<div style="font-size:20px;font-weight:800;color:var(--ink)">{u_type}</div>'
             f'<span style="background:#b7791f;color:#fefcbf;font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700">펜트하우스</span>'
             f'</div>'
             + (f'<div style="font-size:32px;font-weight:800;color:#1f2937;margin-bottom:6px">'
@@ -1003,7 +1008,7 @@ def _render_unit_plan_penthouse(upp_list: list) -> str:
                + (f' <span style="font-size:13px;color:#4b5563">({actual_s:.2f}㎡)</span>' if actual_s else '')
                + '</div>' if actual_p else '')
             + (f'<div style="margin:10px 0">{area_rows}</div>' if area_rows else '')
-            + (_tag_cluster(spec_tags, '#1e3a8a') if spec_tags else '')
+            + (_tag_cluster(spec_tags, 'var(--ink)') if spec_tags else '')
             + (_tag_cluster(sig, '#ea580c') if sig else '')
             + (_tag_cluster(lux, '#a78bfa') if lux else '')
             + '</div>'
@@ -1509,10 +1514,10 @@ def generate_submission_report(sub_doc: dict) -> str:
 {_CSS}
 </head>
 <body>
-<div id="dl-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1e3a8a;border-bottom:2px solid #3b82f6;padding:8px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.2)">
-  <span style="color:#ffffff;font-weight:700;font-size:13px;flex:1">개별 제안서 리포트 · {company}</span>
-  <button id="btn-dl-html" style="background:#ffffff;color:#1e3a8a;border:none;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">HTML 저장</button>
-  <button onclick="window.print()" style="background:transparent;color:#ffffff;border:1px solid #ffffff;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">PDF 저장</button>
+<div id="dl-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#ffffff;border-bottom:2px solid var(--accent);padding:8px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.08);font-family:var(--sans)">
+  <span style="color:var(--accent);font-weight:800;font-size:13px;flex:1">개별 제안서 리포트 · {company}</span>
+  <button id="btn-dl-html" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700;font-family:var(--sans)">HTML 저장</button>
+  <button onclick="window.print()" style="background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700;font-family:var(--sans)">PDF 저장</button>
 </div>
 <style>body{{padding-top:52px}}@media print{{#dl-toolbar{{display:none!important}}}}</style>
 <script>

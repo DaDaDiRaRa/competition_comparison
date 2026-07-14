@@ -16,13 +16,14 @@ _STATUS_KR = {"yes": "충족", "partial": "부분충족", "no": "미충족", "un
 
 _CSS = """
 <style>
+/*__THEME__*/
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
+body { font-family: var(--sans);
        background: #fafafa; color: #1f2937; padding: 24px; font-size: 14px; }
 .wrap { max-width: 1000px; margin: 0 auto; }
 
 .hdr { background: #ffffff; border-radius: 12px; padding: 24px 28px; margin-bottom: 20px;
-       border-left: 5px solid #7c3aed; display: flex; align-items: center; gap: 24px; }
+       border-left: 5px solid var(--accent); display: flex; align-items: center; gap: 24px; }
 .hdr-ring { width: 100px; height: 100px; border-radius: 50%; border-width: 5px;
             border-style: solid; display: flex; flex-direction: column;
             align-items: center; justify-content: center; flex-shrink: 0; }
@@ -95,6 +96,9 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 </style>
 """
 
+from services.report_theme import THEME_VARS
+# 공유 디자인 토큰(건원 RED + 명조/Montserrat) 주입 — 단일 소스.
+_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
 
 from services.grade_helpers import GRADE_RING_COLORS as _GRADE_RING_COLORS, to_grade as _to_grade_base
 from services.citation_check import flags_band_html as citation_flags_band

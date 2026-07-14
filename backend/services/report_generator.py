@@ -19,6 +19,7 @@ COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미�
 from services.grade_helpers import GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade
 from services.citation_check import flags_band_html as citation_flags_band
 from services.report_badges import ai_badge as _ai_badge, fact_interp_legend as _fact_interp_legend
+from services.report_theme import THEME_VARS
 
 
 def _grade_badge(grade) -> str:
@@ -326,6 +327,7 @@ def _insight_box(title: str, items: list[str]) -> str:
 
 _CSS = """
 <style>
+/*__THEME__*/
 :root {
   /* surfaces — 화이트 톤 */
   --bg-base:        #fafafa;
@@ -341,10 +343,10 @@ _CSS = """
   --text-muted:     #4b5563;
   --text-faint:     #6b7280;
   --text-fade:      #9ca3af;
-  /* accents — 네이비 + 골드 */
-  --accent-blue:    #334155;
-  --accent-gold:    #0d9488;
-  --accent-gold-soft: rgba(13,148,136,0.10);
+  /* accents — 공유 테마(건원 RED)로 통일. blue 는 중립 ink, mint/coral 은 등급 시맨틱 유지 */
+  --accent-blue:    var(--ink);
+  --accent-gold:    var(--accent);
+  --accent-gold-soft: rgba(230,0,18,0.08);
   --accent-mint:    #16a34a;
   --accent-coral:   #dc2626;
   /* tag palette (light bg + dark text for white theme) */
@@ -364,7 +366,7 @@ _CSS = """
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: 'Pretendard', 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
+  font-family: var(--sans);
   background: var(--bg-base); color: var(--text-secondary);
   padding: 24px; font-size: 14px; line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -808,6 +810,9 @@ body {
 </style>
 """
 
+# 공유 디자인 토큰(건원 RED + 명조/Montserrat) 주입 — 단일 소스(report_theme).
+_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
+
 
 def _generate_dashboard_section(
     comp_subs: dict,
@@ -1237,10 +1242,10 @@ def generate_comparison_report(
 {_CSS}
 </head>
 <body>
-<div id="dl-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#1a2138;border-bottom:2px solid #d4af37;padding:8px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.4)">
-  <span style="color:#d4af37;font-weight:700;font-size:13px;flex:1">비교분석 리포트</span>
-  <button id="btn-dl-html" style="background:#d4af37;color:#1a2138;border:none;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">HTML 저장</button>
-  <button onclick="window.print()" style="background:transparent;color:#d4af37;border:1px solid #d4af37;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">PDF 저장</button>
+<div id="dl-toolbar" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#ffffff;border-bottom:2px solid var(--accent);padding:8px 24px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.08);font-family:var(--sans)">
+  <span style="color:var(--accent);font-weight:800;font-size:13px;flex:1">비교분석 리포트</span>
+  <button id="btn-dl-html" style="background:var(--accent);color:#fff;border:none;border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700;font-family:var(--sans)">HTML 저장</button>
+  <button onclick="window.print()" style="background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700;font-family:var(--sans)">PDF 저장</button>
 </div>
 <style>body{{padding-top:52px}}@media print{{#dl-toolbar{{display:none!important}}}}</style>
 <script>

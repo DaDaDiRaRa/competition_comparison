@@ -43,7 +43,7 @@ _CSS = """
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:#fff;color:var(--text);
-  font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-family:var(--sans);
   font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased}
 .wrap{max-width:920px;margin:0 auto;padding:52px 30px 110px}
 header.doc{margin-bottom:8px;padding-bottom:22px;border-bottom:2px solid var(--ink)}
@@ -96,6 +96,10 @@ section.sec>h2 .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius
 ul.list{margin:6px 0 0;padding-left:18px}ul.list li{margin:4px 0;font-size:13px;color:var(--text)}
 .caveats{margin-top:14px;font-size:12.5px;color:var(--muted)}
 """
+
+from services.report_theme import THEME_VARS
+# 공유 디자인 토큰(--sans/--serif 등) 주입 — 단일 소스. playbook 로컬 :root 는 근접 값 유지.
+_CSS = THEME_VARS + _CSS
 
 
 def _conf_chip(conf: str) -> str:

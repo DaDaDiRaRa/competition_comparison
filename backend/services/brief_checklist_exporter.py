@@ -948,7 +948,7 @@ _HTML_CSS = """
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:#fff;color:var(--text);
-  font-family:'Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  font-family:var(--sans);
   font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased}
 .wrap{max-width:900px;margin:0 auto;padding:52px 30px 110px}
 header.doc{margin-bottom:8px;padding-bottom:22px;border-bottom:2px solid var(--ink)}
@@ -1079,6 +1079,10 @@ footer.doc{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);col
 @media(max-width:560px){dl.kv{grid-template-columns:1fr}dl.kv dt{padding-bottom:0}.wrap{padding:32px 18px 64px}
   nav.top .ttl{display:none}nav.top .inner{padding:8px 18px}}
 """
+
+from services.report_theme import THEME_VARS
+# 공유 디자인 토큰(--sans/--serif 등) 주입 — 단일 소스. 로컬 :root 근접 값 유지.
+_HTML_CSS = THEME_VARS + _HTML_CSS
 
 
 def _esc(v: Any) -> str:

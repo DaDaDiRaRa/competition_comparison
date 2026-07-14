@@ -53,6 +53,7 @@ _ROLE_LABEL = {
 
 _CSS = """
 <style>
+/*__THEME__*/
 :root {
   --accent: #e60012;
   --accent-soft: rgba(230,0,18,0.06);
@@ -69,7 +70,7 @@ _CSS = """
   --info:    #0891b2;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
+body { font-family: var(--sans);
        background: var(--bg); color: var(--text); padding: 24px;
        font-size: 14px; line-height: 1.6; }
 .wrap { max-width: 1100px; margin: 0 auto; }
@@ -169,6 +170,10 @@ body { font-family: 'Segoe UI', 'Malgun Gothic', Arial, sans-serif;
 }
 </style>
 """
+
+from services.report_theme import THEME_VARS
+# 공유 디자인 토큰 주입 — 단일 소스(myproject 는 이미 건원 RED, 폰트·중립 팔레트 통일).
+_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
 
 
 def _esc(s) -> str:
