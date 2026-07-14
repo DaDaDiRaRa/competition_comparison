@@ -104,6 +104,7 @@ export default function AccumulateMode() {
   const [events, setEvents] = useState([])
   const [result, setResult] = useState(null)
   const [briefExports, setBriefExports] = useState(null)  // {md_filename, xlsx_filename}
+  const [runCompare, setRunCompare] = useState(true)  // 추출 후 비교분석까지 한 방에 (기본 ON)
 
   useEffect(() => {
     getFacilityTypes().then(setFacilityTypes)
@@ -156,6 +157,7 @@ export default function AccumulateMode() {
       submissions.map(s => ({ company: s.company, result: s.result }))
     ))
     submissions.forEach(s => fd.append('submission_pdfs', s.file))
+    fd.append('run_compare', runCompare ? 'true' : 'false')
 
     try {
       for await (const ev of runAccumulatePipeline(fd)) {
@@ -179,8 +181,8 @@ export default function AccumulateMode() {
       <div style={s.title}>경쟁 공모 등록</div>
       <div style={{ fontSize: 13, color: 'var(--color-text-faint)', lineHeight: 1.6, marginBottom: 20 }}>
         <strong style={{ color: 'var(--color-text-body)' }}>한 공모에 참여한 여러 회사의 제안서</strong>를 한꺼번에 등록합니다.<br />
-        PDF를 분석해 구조화된 데이터로 저장하며, <strong style={{ color: 'var(--color-accent)' }}>비교분석·리포트</strong>는
-        저장 후 상단 목록의 "비교분석 실행" 버튼으로 별도 실행합니다.<br />
+        PDF를 분석해 구조화된 데이터로 저장하며, 아래 옵션을 켜면 <strong style={{ color: 'var(--color-accent)' }}>비교분석·리포트</strong>까지
+        한 번에 만듭니다. 끄면 저장만 하고 상단 목록의 "비교분석 실행" 버튼으로 나중에 실행합니다.<br />
         <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
           * 우리 회사 단독 등록은 상단 "내 프로젝트 등록" 탭을 이용하세요.
         </span>
@@ -251,12 +253,31 @@ export default function AccumulateMode() {
         ))}
       </div>
 
+      <label style={{
+        display: 'flex', alignItems: 'flex-start', gap: 8, margin: '4px 0 12px', cursor: 'pointer',
+        fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)',
+      }}>
+        <input
+          type="checkbox"
+          checked={runCompare}
+          onChange={e => setRunCompare(e.target.checked)}
+          disabled={running}
+          style={{ marginTop: 2, cursor: 'pointer' }}
+        />
+        <span>
+          비교분석까지 한 번에
+          <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', marginLeft: 6 }}>
+            추출 직후 당선/낙선 비교분석·리포트까지 생성합니다 (제안서 2개 이상, 시간·API 비용 추가). 끄면 저장만 하고 나중에 "비교분석 실행"으로.
+          </span>
+        </span>
+      </label>
+
       <button
         style={{ ...s.btn, ...(canRun ? {} : s.btnDisabled) }}
         onClick={canRun ? runPipeline : undefined}
         disabled={!canRun}
       >
-        {running ? '추출 중...' : '데이터 추출 시작'}
+        {running ? '추출 중...' : (runCompare ? '데이터 추출 + 비교분석 시작' : '데이터 추출 시작')}
       </button>
 
       {(events.length > 0) && (

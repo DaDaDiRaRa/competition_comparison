@@ -496,11 +496,13 @@ async def run_pipeline(
     submissions_json: str = Form(...),
     submission_pdfs: list[UploadFile] | None = File(None),
     submission_pdf_refs: str | None = Form(None),  # JSON array of file_refs
+    run_compare: bool = Form(False),  # 켜면 추출 직후 비교분석까지 한 방에 (제안서 2개↑)
 ):
     """
     submissions_json: JSON array of {company, result} matching submission_pdfs order.
     brief_pdf / brief_pdf_ref: 지침서 PDF (선택). 둘 중 하나.
     submission_pdfs / submission_pdf_refs: 제안서 PDFs. 둘 중 하나.
+    run_compare: 켜면 추출 후 비교분석(2-pass)+패턴+리포트까지 같은 run 에서 수행.
     Streams SSE progress events.
     """
     if not settings.has_api_key():
@@ -655,11 +657,58 @@ async def run_pipeline(
                 yield sse({"type": "done", "step": "submission",
                            "company": company, "_timestamp": ts})
 
+            # ── 비교분석 (옵션, run_compare) — 추출과 같은 run 에서 한 방에 ──────
+            comparison = None
+            report_available = False
+            if run_compare and len(processed_submissions) >= 2:
+                # 비교 실패는 비치명 — 추출물은 이미 저장됐으므로 경고만 하고 complete 는 진행.
+                try:
+                    yield sse({"type": "stage", "stage": "compare",
+                               "msg": "비교분석 중 (시간이 걸릴 수 있습니다)", "_timestamp": ts})
+                    comparison = await compare_submissions(brief_data, processed_submissions, facility_type)
+                    comparison["competition_id"] = cid
+                    save_comparison(facility_type, cid, comparison)
+
+                    yield sse({"type": "stage", "stage": "pattern",
+                               "msg": "당선 패턴 업데이트 중", "_timestamp": ts})
+                    build_pattern(facility_type)
+
+                    yield sse({"type": "stage", "stage": "report",
+                               "msg": "HTML 리포트 생성 중", "_timestamp": ts})
+                    _meta = load_project_meta(facility_type, cid) or {
+                        "competition_name": competition_name, "facility_type": facility_type,
+                        "project_number": project_number, "client": client, "location": location}
+                    report_subs = [
+                        {"company": s["company"], "result": s["result"],
+                         "total_pages": s["total_pages"]}
+                        for s in processed_submissions
+                    ]
+                    html = generate_comparison_report(_meta, report_subs, comparison)
+                    save_report(facility_type, cid, html)
+                    report_available = True
+
+                    try: _rebuild_archive_index()
+                    except Exception as e: logger.warning("archive 인덱스 갱신 실패: %s", e)
+
+                    yield sse({"type": "done", "step": "report", "_timestamp": ts})
+                except Exception as e:
+                    logger.warning("한 방 비교분석 실패 (추출물은 유지): %s", traceback.format_exc())
+                    comparison = None
+                    yield sse({"type": "compare_error",
+                               "message": f"추출은 완료됐으나 비교분석에 실패했습니다: {_user_error_msg(e)} "
+                                          f"— 저장된 프로젝트에서 '비교분석 실행'으로 재시도하세요.",
+                               "_timestamp": ts})
+            elif run_compare and len(processed_submissions) < 2:
+                yield sse({"type": "compare_skipped",
+                           "message": "비교분석은 제안서가 2개 이상일 때 가능합니다.",
+                           "_timestamp": ts})
+
             yield sse({
                 "type": "complete",
                 "competition_id": cid,
                 "facility_type": facility_type,
-                "report_available": False,
+                "report_available": report_available,
+                **({"comparison": comparison} if comparison else {}),
                 "_timestamp": ts,
                 "submissions": [
                     {"company": s["company"], "result": s["result"],
