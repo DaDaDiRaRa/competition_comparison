@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, crossCompare, getCrossCompareReportUrl, listCrossCompareReports } from '../../api/client'
+import { getProjects, crossCompare, getCrossCompareReportUrl, listCrossCompareReports, rerenderCrossCompareReport } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 import { useMeta } from '../../hooks/useMeta'
@@ -175,6 +175,19 @@ export default function CrossCompareMode() {
 
   const loadPastReports = () => listCrossCompareReports().then(setPastReports).catch(() => {})
 
+  const [rerendering, setRerendering] = useState('')
+  const handleRerender = async (filename) => {
+    setRerendering(filename)
+    try {
+      await rerenderCrossCompareReport(filename)
+      window.open(getCrossCompareReportUrl(filename) + '?t=' + Date.now(), '_blank', 'noreferrer')
+    } catch (e) {
+      alert(e.message || '재렌더 실패')
+    } finally {
+      setRerendering('')
+    }
+  }
+
   useEffect(() => {
     getProjects().then(p => { setProjects(p); setLoading(false) })
     loadPastReports()
@@ -273,19 +286,13 @@ export default function CrossCompareMode() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {pastReports.map(rep => (
-              <a
+              <div
                 key={rep.filename}
-                href={getCrossCompareReportUrl(rep.filename)}
-                target="_blank"
-                rel="noreferrer"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 'var(--gap-md)',
                   padding: '10px 14px', background: 'var(--color-bg-surface)',
                   border: '1px solid var(--color-border)', borderRadius: 6,
-                  textDecoration: 'none', transition: 'all 0.15s',
                 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-accent-hover)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: 'var(--color-text-body)', fontWeight: 'var(--font-weight-medium)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -295,8 +302,25 @@ export default function CrossCompareMode() {
                     {rep.created_at}
                   </div>
                 </div>
-                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)' }}>열기 →</div>
-              </a>
+                {rep.has_data && (
+                  <button
+                    onClick={() => handleRerender(rep.filename)}
+                    disabled={rerendering === rep.filename}
+                    title="저장된 데이터로 리포트를 다시 생성합니다 (AI 재분석 없음)"
+                    style={{
+                      fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)',
+                      background: 'transparent', border: '1px solid var(--color-border)',
+                      borderRadius: 5, padding: '4px 10px', cursor: 'pointer',
+                    }}
+                  >{rerendering === rep.filename ? '재렌더 중…' : '재렌더'}</button>
+                )}
+                <a
+                  href={getCrossCompareReportUrl(rep.filename)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)', textDecoration: 'none' }}
+                >열기 →</a>
+              </div>
             ))}
           </div>
         </div>

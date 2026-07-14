@@ -108,6 +108,42 @@ def validate_quantitative(q: "dict | None") -> list:
     return flags
 
 
+# ── 렌더 헬퍼 (LLM 0 · 인라인 스타일 자체완결 — 리포트 generator 공유) ──────────
+
+def flags_band_html(flags: "list | None", limit: int = 12) -> str:
+    """`_quantitative_flags` 를 경고 밴드로. 없으면 ''. 자체완결 인라인 스타일(CSS 무의존).
+
+    추출 수치의 내부 모순(건폐율≠건축/대지 등)을 투명하게 노출 — error=빨강, warn=주황.
+    숫자 수정 0, 플래그만. 리포트 generator 공용 (citation_check.flags_band_html 와 동형).
+    """
+    import html
+    flags = [f for f in (flags or []) if isinstance(f, dict) and f.get("detail")]
+    if not flags:
+        return ""
+    errors = [f for f in flags if f.get("severity") == "error"]
+    warns = [f for f in flags if f.get("severity") == "warn"]
+    rows = []
+    for f in (errors + warns)[:limit]:
+        is_err = f.get("severity") == "error"
+        chip = "모순" if is_err else "주의"
+        color = "#c0392b" if is_err else "#b8860b"
+        detail = html.escape(str(f.get("detail") or ""))
+        rows.append(
+            f'<li style="margin:3px 0"><span style="display:inline-block;font-size:11px;'
+            f'font-weight:700;color:#fff;background:{color};border-radius:4px;'
+            f'padding:1px 6px;margin-right:6px">{chip}</span>{detail}</li>'
+        )
+    return (
+        '<section style="border:1px solid #f0b6b6;background:#fff6f6;border-radius:8px;'
+        'padding:14px 18px;margin:18px 0">'
+        '<div style="font-weight:700;color:#c0392b;font-size:14px;margin-bottom:8px">'
+        '⚠ 정량 데이터 정합성 경고 — 추출 수치 간 모순 (추출 오류 가능, 원문 확인 필요)</div>'
+        '<ul style="margin:0;padding-left:20px;font-size:13px;color:#333">'
+        + "".join(rows) +
+        '</ul></section>'
+    )
+
+
 def has_errors(flags) -> bool:
     """error 심각도 플래그가 하나라도 있으면 True."""
     return any(isinstance(f, dict) and f.get("severity") == "error" for f in (flags or []))

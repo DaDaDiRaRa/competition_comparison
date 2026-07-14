@@ -1,9 +1,19 @@
 import asyncio
 import json
+import logging
 
 from config import settings, axes_for, axes_keys_for, build_axis_rubric_block, RUBRIC_VERSION
 from services.llm_client import call_messages
 from services.utils import parse_json_response
+from services.citation_check import (
+    check_comparison as check_citations_comparison,
+    check_diagnosis as check_citations_diagnosis,
+)
+
+logger = logging.getLogger(__name__)
+
+# 모델 출력 토큰 상한 (Sonnet). Pass 2 리빌 max_tokens 산정 시 이 값을 넘지 않게 클램프.
+_MODEL_OUTPUT_CAP = 32000
 
 
 def _build_axes_strings(facility_type: str) -> dict:
@@ -56,6 +66,9 @@ def _make_blind_static(facility_type: str) -> str:
         "Do NOT speculate about competition outcomes.\n"
         "\n"
         "COMPARE_EACH_SUBMISSION_AGAINST_BRIEF_AND_EACH_OTHER per axis.\n"
+        "If a submission's data contains a '_brief_context' field, judge THAT submission's "
+        "brief_compliance against its own '_brief_context' (its competition's requirements); "
+        "otherwise use the shared BRIEF_DATA block.\n"
         "\n"
         "─────────── AXIS RUBRIC (시설유형 맞춤 룰북) ───────────\n"
         "각 제출물에 등급을 부여할 때 아래 rubric을 엄격히 적용한다.\n"
@@ -230,6 +243,9 @@ def _trim_extracted(data: dict) -> dict:
         "business_viability", "area_increase", "view_analysis",
         "community_program", "company_portfolio", "construction_plan",
         "unit_plan_penthouse", "site_context", "landscape",
+        # 교차비교 전용: 제출물이 서로 다른 공모 소속이라 공통 지침서가 없을 때,
+        # 각 제출물에 자기 공모 지침서 요약을 실어 보낸다 (단일 공모 flow엔 부재).
+        "_brief_context",
     }
     trimmed = {k: v for k, v in data.items() if k in keep_keys}
     # _by_type 등 내부 집계 키 제거
@@ -393,24 +409,34 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
     axis_count = len(axes_keys_for(ft))
     sub_count = len(submissions)
     concept_chars_estimate = axis_count * (250 + 60 * sub_count)
-    reveal_max_tokens = min(32000, max(8192, int(concept_chars_estimate * 2.5) + 1500))
-    reveal_raw = call_messages(
-        model=settings.model_id,
-        max_tokens=reveal_max_tokens,
-        temperature=0,
-        system=_ANALYST_SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": reveal_static, "cache_control": {"type": "ephemeral"}},
-                {"type": "text", "text": reveal_dynamic, "cache_control": {"type": "ephemeral"}},
-            ],
-        }],
-    )
+    full_estimate = int(concept_chars_estimate * 2.5) + 1500
+    reveal_max_tokens = min(_MODEL_OUTPUT_CAP, max(8192, full_estimate))
+    # 오버플로우 가드: 산정 토큰이 모델 출력 상한을 넘으면 컨셉 서술이 축약될 수 있음 — 사용자 고지.
+    capped = full_estimate > _MODEL_OUTPUT_CAP
+
+    reveal_result: dict = {}
+    coverage_note = ""
     try:
+        reveal_raw = call_messages(
+            model=settings.model_id,
+            max_tokens=reveal_max_tokens,
+            temperature=0,
+            system=_ANALYST_SYSTEM,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": reveal_static, "cache_control": {"type": "ephemeral"}},
+                    {"type": "text", "text": reveal_dynamic, "cache_control": {"type": "ephemeral"}},
+                ],
+            }],
+        )
         reveal_result = parse_json_response(reveal_raw)
     except Exception as e:
-        raise ValueError(f"리빌 분석 JSON 파싱 실패: {e}\n원문(앞 200자): {reveal_raw[:200]}")
+        # Pass 2 실패를 치명적으로 두지 않는다 — Pass 1(축별 등급·강점·약점·블라인드 순위)은
+        # 유효하므로 사후 분석만 비우고 사용자에게 고지 (전부 잃지 않게). 대규모 교차비교 방어.
+        logger.warning("Pass 2 리빌 분석 실패 — Pass 1 결과로 축소 진행: %s", e)
+        coverage_note = ("제출물·축 규모가 커 사후 분석(컨셉 비교·차별화 요약)을 완성하지 "
+                         "못했습니다. 축별 등급·강점·약점은 정상입니다.")
 
     # ── 병합 ─────────────────────────────────────────────────────────────────
     results_map = {s["company"]: s.get("result", "unknown") for s in submissions}
@@ -419,7 +445,16 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
         blind_ranking, results_map, reveal_result.get("gap_notes", "")
     )
 
-    return {
+    # concept_comparison 전 축 키 보장 (부분·잘린 응답 방어 — 누락 축은 "")
+    concept = reveal_result.get("concept_comparison")
+    concept = concept if isinstance(concept, dict) else {}
+    for k in axes_keys_for(ft):
+        concept.setdefault(k, "")
+    if capped and not coverage_note:
+        coverage_note = ("제출물 수가 많아 일부 축의 컨셉 비교가 축약됐을 수 있습니다 "
+                         "(전체 축·전체 제출물은 모두 포함).")
+
+    result = {
         "submissions": blind_result.get("submissions", {}),
         # ranking/blind_ranking: 결과 화면에는 더 이상 노출하지 않음(2026-07-01) —
         # gap_analysis 계산용으로만 내부 유지. archive_search/pattern_builder 등
@@ -427,11 +462,20 @@ def _run_compare_sync(brief_data: dict, submissions: list[dict], facility_type: 
         "ranking": blind_ranking,
         "blind_ranking": blind_ranking,
         "key_differentiators": reveal_result.get("key_differentiators", []),
-        "concept_comparison": reveal_result.get("concept_comparison", {}) or {},
+        "concept_comparison": concept,
         "winner_strengths": reveal_result.get("winner_strengths", []),
         "loser_weaknesses": reveal_result.get("loser_weaknesses", []),
         "gap_analysis": gap_analysis,
     }
+    if coverage_note:
+        result["_coverage_note"] = coverage_note
+    # 인용 사후검증 (LLM 0): (p.N)이 실재 페이지인지 코드로 확인, 환각 쪽번호만 flag.
+    # 비치명 — 실패해도 비교 결과 유지.
+    try:
+        result["_citation_flags"] = check_citations_comparison(result, submissions)
+    except Exception:
+        result["_citation_flags"] = []
+    return result
 
 
 async def compare_submissions(brief_data: dict, submissions: list[dict], facility_type: str = "") -> dict:
@@ -474,9 +518,15 @@ def _run_diagnose_sync(
         }],
     )
     try:
-        return parse_json_response(raw_text)
+        result = parse_json_response(raw_text)
     except Exception as e:
         raise ValueError(f"진단 JSON 파싱 실패: {e}\n원문(앞 200자): {raw_text[:200]}")
+    # 인용 사후검증 (LLM 0): 환각 쪽번호만 flag. 비치명.
+    try:
+        result["_citation_flags"] = check_citations_diagnosis(result, submission_data)
+    except Exception:
+        result["_citation_flags"] = []
+    return result
 
 
 async def diagnose_submission(

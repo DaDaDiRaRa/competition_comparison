@@ -97,6 +97,7 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 
 
 from services.grade_helpers import GRADE_RING_COLORS as _GRADE_RING_COLORS, to_grade as _to_grade_base
+from services.citation_check import flags_band_html as citation_flags_band
 
 
 def _to_grade(d) -> str | None:
@@ -352,6 +353,7 @@ def generate_diagnosis_report(diagnosis: dict) -> str:
     body += _render_requirement_mapping(diagnosis.get("requirement_mapping") or [], axes_meta)
     body += _render_axes(diagnosis.get("axes") or {}, axes_meta)
     body += _render_recommendations(diagnosis.get("recommendations") or [])
+    body += citation_flags_band(diagnosis.get("_citation_flags"))
 
     comp_name = _esc(diagnosis.get("competition_name") or "")
     footer = f'<div class="footer">Competition Analyzer · {comp_name} · {generated_at}</div>'

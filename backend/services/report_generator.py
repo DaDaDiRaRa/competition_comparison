@@ -17,6 +17,7 @@ COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미�
 
 
 from services.grade_helpers import GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade
+from services.citation_check import flags_band_html as citation_flags_band
 
 
 def _grade_badge(grade) -> str:
@@ -1208,6 +1209,17 @@ def generate_comparison_report(
         if winner_boxes else ""
     )
 
+    # 인용 사후검증 밴드 (문서 쪽수 벗어난 (p.N) 노출, 없으면 '')
+    citation_section = citation_flags_band(comparison.get("_citation_flags"))
+
+    # 커버리지 고지 (대규모 교차비교 시 컨셉 비교 축약·사후 분석 실패 알림, 없으면 '')
+    _cov = comparison.get("_coverage_note")
+    coverage_section = (
+        '<div style="border:1px solid #ddd;background:#fafafa;border-radius:8px;'
+        'padding:12px 16px;margin:16px 0;font-size:13px;color:#555">'
+        f'ℹ {re.sub(r"[<>]", "", str(_cov))}</div>'
+    ) if _cov else ""
+
     # ── 최종 조합 ─────────────────────────────────────────
     return f"""<!DOCTYPE html>
 <html lang="ko">
@@ -1244,10 +1256,12 @@ document.getElementById('btn-dl-html').addEventListener('click', function() {{
 {table_section}
 {floor_matrix_section}
 {quant_table_section}
+{coverage_section}
 {concept_section}
 {ws_section}
 {lw_section}
 {winner_section}
+{citation_section}
 <div class="footer">Competition Analyzer — 자동 생성 비교 리포트 · {comp_name}</div>
 </div>
 {_dashboard_js(axes_with_data)}

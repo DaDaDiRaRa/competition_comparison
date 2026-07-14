@@ -16,6 +16,7 @@ from config import settings, axes_keys_for, facility_label, build_axis_rubric_bl
 from services.comparator import _trim_extracted, _trim_brief
 from services.llm_client import call_messages
 from services.utils import parse_json_response
+from services.citation_check import check_myproject as check_citations_myproject
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,20 @@ def _build_prompt(
 
     extracted_json = json.dumps(_trim_extracted(extracted or {}), ensure_ascii=False)
     brief_json = json.dumps(_trim_brief(brief or {}), ensure_ascii=False) if brief else "{}"
+
+    # 정량 정합성 경고 (결정론·quant_validator, 추출 직후 부착됨) — error 만 프롬프트에 주입해
+    # LLM 이 모순된 추출 수치 위에 강한 정량 주장을 짓지 않게 한다. 숫자 수정 없음.
+    _qerrs = [f for f in (extracted or {}).get("_quantitative_flags") or []
+              if isinstance(f, dict) and f.get("severity") == "error" and f.get("detail")]
+    quant_caution = ""
+    if _qerrs:
+        _details = "; ".join(str(f["detail"]) for f in _qerrs)
+        quant_caution = (
+            "\n─────────── 정량 데이터 경고 (결정론 검증) ───────────\n"
+            "아래 추출 수치는 내부 정합성 검증에서 모순이 발견됐다 (추출 오류 가능):\n"
+            f"{_details}\n"
+            "이 수치를 사실로 단정하지 말고, 관련 정량 주장은 신중히·불확실성을 명시하라.\n"
+        )
     meta_json = json.dumps({
         "procurement_type": meta_extra.get("procurement_type", ""),
         "project_phase": meta_extra.get("project_phase", ""),
@@ -78,6 +93,7 @@ def _build_prompt(
         f"BRIEF (지침서 — 있을 수 있음): {brief_json}\n"
         "\n"
         f"EXTRACTED_SUBMISSION_DATA: {extracted_json}\n"
+        f"{quant_caution}"
         "\n"
         "─────────── INSTRUCTIONS ───────────\n"
         "1) 평가축별 심층 분석: 각 축마다 strengths 5~10개, weaknesses 3~8개. "
@@ -182,6 +198,11 @@ async def deep_analyze(
         parsed.setdefault("search_keywords", [])
         parsed.setdefault("auto_meta", {})
         parsed["rubric_version"] = RUBRIC_VERSION
+        # 인용 사후검증 (LLM 0): 환각 쪽번호만 flag. 비치명.
+        try:
+            parsed["_citation_flags"] = check_citations_myproject(parsed, extracted_data)
+        except Exception:
+            parsed["_citation_flags"] = []
         return parsed
     except Exception as e:
         logger.exception("[myproject_analyzer] deep_analyze 실패: %s", e)

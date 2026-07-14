@@ -522,6 +522,27 @@ def get_cross_compare_report_path(filename: str) -> Path | None:
     return path if path.exists() else None
 
 
+def save_cross_compare_data(filename: str, data: dict) -> Path:
+    """교차비교 구조화 데이터(meta·items·submissions·comparison)를 HTML 옆에 저장.
+
+    HTML(사람용)과 달리 이 JSON 은 LLM 재호출 없이 재렌더·이력·검색을 가능케 한다.
+    filename 은 .html 이름 — 같은 stem 의 .json 으로 저장. GCSFUSE fsync 위해 _atomic_write.
+    """
+    cross_dir = settings.db_path / "_cross_reports"
+    cross_dir.mkdir(parents=True, exist_ok=True)
+    path = cross_dir / (Path(filename).stem + ".json")
+    _atomic_write(path, data)
+    return path
+
+
+def load_cross_compare_data(filename: str) -> dict:
+    """저장된 교차비교 구조화 데이터. 없으면 {} (구 리포트 = HTML만)."""
+    path = settings.db_path / "_cross_reports" / (Path(filename).stem + ".json")
+    if path.exists():
+        return _read_json(path)
+    return {}
+
+
 def list_cross_compare_reports() -> list[dict]:
     """저장된 교차비교 리포트 목록 (최신순)."""
     cross_dir = settings.db_path / "_cross_reports"
@@ -544,6 +565,8 @@ def list_cross_compare_reports() -> list[dict]:
             "created_at": ts,
             "labels": labels,
             "size": f.stat().st_size,
+            # 구조화 JSON 동반 여부 — 재렌더 가능한 신 리포트 구분 (구 리포트 = HTML만)
+            "has_data": f.with_suffix(".json").exists(),
         })
     return sorted(items, key=lambda x: x["filename"], reverse=True)
 

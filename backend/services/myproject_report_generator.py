@@ -12,6 +12,8 @@ from config import facility_label as _facility_label, axes_for as _axes_for
 
 
 from services.grade_helpers import GRADE_COLORS as _GRADE_COLOR
+from services.citation_check import flags_band_html as citation_flags_band
+from services.quant_validator import flags_band_html as quant_flags_band
 
 _RESULT_BADGE = {
     "win":        ('<span style="background:#dcfce7;color:#15803d;font-size:13px;'
@@ -302,6 +304,11 @@ def generate_myproject_report(
     user_tags = meta.get("tags") if isinstance(meta.get("tags"), list) else []
     memo = meta.get("memo") or ""
 
+    # 인용 사후검증 밴드 (문서 쪽수 벗어난 (p.N) 노출, 없으면 '')
+    citation_band = citation_flags_band(deep.get("_citation_flags"))
+    # 정량 정합성 밴드 (추출 수치 모순, quant_validator, 없으면 '')
+    quant_band = quant_flags_band((sub_doc.get("extracted_data") or {}).get("_quantitative_flags"))
+
     diff_cards = "".join(f'<div class="diff-card">{_esc(d)}</div>'
                          for d in differentiators if d) or '<div class="empty">—</div>'
     imp_cards = "".join(f'<div class="imp-card">{_esc(i)}</div>'
@@ -371,6 +378,8 @@ def generate_myproject_report(
   <div class="sec-title">아카이브 검색 키워드 ({len(keywords)})</div>
   <div class="kw-row">{kw_html}</div>
 </div>
+{quant_band}
+{citation_band}
 
 </div></body></html>
 """

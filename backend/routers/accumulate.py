@@ -54,7 +54,8 @@ from services.db_manager import (
     save_submission, save_comparison, load_comparison, load_brief, load_project_meta,
     list_projects, list_submissions, load_submission, save_report, get_report_path, load_pattern,
     save_submission_report, get_submission_report_path,
-    save_cross_compare_report, get_cross_compare_report_path, list_cross_compare_reports, _slugify,
+    save_cross_compare_report, get_cross_compare_report_path, list_cross_compare_reports,
+    save_cross_compare_data, load_cross_compare_data, _slugify,
     update_submission, has_comparison,
     save_myproject_deep, save_myproject_report, get_myproject_report_path,
     update_project_meta,
@@ -237,6 +238,22 @@ def get_cross_compare_report(filename: str):
     if path is None or not path.exists():
         raise HTTPException(404, "Cross-compare report not found")
     return FileResponse(path, media_type="text/html", filename=filename)
+
+
+@router.post("/cross-compare/reports/{filename}/rerender")
+def rerender_cross_compare_report(filename: str):
+    """저장된 구조화 데이터로 교차비교 HTML 재생성 (LLM 0). 템플릿 개선 반영·재열람용.
+
+    구 리포트(HTML만, has_data=false)는 원본 데이터가 없어 재렌더 불가 → 404.
+    """
+    data = load_cross_compare_data(filename)
+    if not data or not data.get("comparison"):
+        raise HTTPException(404, "재렌더할 구조화 데이터가 없습니다 (구 리포트는 HTML만 보유)")
+    html = generate_comparison_report(
+        data.get("meta") or {}, data.get("submissions") or [], data["comparison"]
+    )
+    save_cross_compare_report(filename, html)
+    return {"report_filename": filename, "rerendered": True}
 
 
 # ── 제안서 단건 추가 ──────────────────────────────────────────────────────────
@@ -897,6 +914,24 @@ async def run_single_pipeline(
 
 # ── 교차 비교 ──────────────────────────────────────────────────────────────────
 
+def _brief_digest(brief: dict) -> dict:
+    """교차비교용 제출물별 지침서 요약 — 자기 공모의 요구사항·정량 한도만 컴팩트하게.
+
+    다공모 교차비교에서 각 제출물에 자기 지침서를 실어 comparator가
+    brief_compliance를 올바른 지침서로 판정하게 한다. 없으면 빈 dict.
+    """
+    if not brief:
+        return {}
+    digest: dict = {}
+    reqs = brief.get("_requirements")
+    if reqs:
+        digest["_requirements"] = reqs
+    quant = brief.get("_quantitative")
+    if quant:
+        digest["_quantitative"] = quant
+    return digest
+
+
 @router.post("/cross-compare")
 async def cross_compare(
     items_json: str = Form(...),  # [{facility_type, competition_id, company}]
@@ -916,12 +951,23 @@ async def cross_compare(
             submissions = []
             brief_data = {}
             file_parts = []  # 파일명 구성용: [(proj_label, company), ...]
+
+            # 교차비교는 서로 다른 공모의 제출물을 비교하므로 공통 지침서가 없을 수 있다.
+            # (구버그: 첫 공모 지침서를 전체 공통 기준으로 오적용 → 나머지 공모의
+            #  brief_compliance·요구사항 비교가 엉뚱한 지침서로 판정됨.)
+            # 단일 공모면 그 지침서를 공통 기준으로, 다공모면 제출물별 자기 지침서를 부착한다.
+            distinct_briefs = {(it["facility_type"], it["competition_id"]) for it in items}
+            multi_competition = len(distinct_briefs) > 1
+            brief_cache: dict = {}
+
             for item in items:
                 ft = item["facility_type"]
                 cid = item["competition_id"]
                 company = item["company"]
-                if not brief_data:
-                    brief_data = load_brief(ft, cid) or {}
+                if (ft, cid) not in brief_cache:
+                    brief_cache[(ft, cid)] = load_brief(ft, cid) or {}
+                this_brief = brief_cache[(ft, cid)]
+
                 sub = load_submission(ft, cid, company)
                 if not sub:
                     continue
@@ -938,8 +984,21 @@ async def cross_compare(
                 if duplicate:
                     sub = {**sub, "company": f"{company} ({proj_label})"}
 
+                # 다공모: 제출물마다 자기 공모 지침서 요약을 실어 comparator가
+                # 각 제출물을 자기 지침서로 판정하게 한다 (첫 지침서 전체 적용 버그 제거).
+                if multi_competition:
+                    digest = _brief_digest(this_brief)
+                    if digest:
+                        sub = {**sub, "extracted_data": {
+                            **sub.get("extracted_data", {}), "_brief_context": digest}}
+
                 submissions.append(sub)
                 file_parts.append((proj_label, company))
+
+            # 단일 공모면 그 지침서를 공통 기준으로 전달; 다공모면 공통 기준 없음
+            # (제출물별 _brief_context 사용).
+            if not multi_competition and distinct_briefs:
+                brief_data = brief_cache.get(next(iter(distinct_briefs)), {})
 
             if len(submissions) < 2:
                 yield sse({"type": "error",
@@ -968,6 +1027,17 @@ async def cross_compare(
             }
             html = generate_comparison_report(synthetic_meta, submissions, comparison)
             save_cross_compare_report(filename, html)
+            # 구조화 데이터도 저장 — 같은 조합 재렌더/이력을 LLM 재호출 없이. 비치명.
+            try:
+                save_cross_compare_data(filename, {
+                    "meta": synthetic_meta,
+                    "items": items,
+                    "submissions": submissions,
+                    "comparison": comparison,
+                    "created_at": stamp,
+                })
+            except Exception:
+                logger.warning("교차비교 구조화 데이터 저장 실패 (무시)", exc_info=True)
 
             yield sse({
                 "type": "complete",

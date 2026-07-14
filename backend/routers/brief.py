@@ -18,6 +18,7 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -226,9 +227,15 @@ def download_export(filename: str):
         ".html": "text/html; charset=utf-8",
     }[ext]
     if ext == ".html":
-        # 인라인 표시 — filename 지정 시 attachment 가 되므로 생략하고 헤더 직접 설정
+        # 인라인 표시 — filename 지정 시 attachment 가 되므로 생략하고 헤더 직접 설정.
+        # ⚠ brief_id 는 한글 포함 가능(_slugify 가 가-힣 보존)이라 파일명을 헤더에 그대로 넣으면
+        #   ASGI 헤더 latin-1 인코딩에서 UnicodeEncodeError → 500. RFC 6266 방식으로
+        #   ascii fallback + filename*=UTF-8'' 퍼센트 인코딩(순수 ASCII 헤더값).
         resp = FileResponse(path, media_type=media_type)
-        resp.headers["Content-Disposition"] = f'inline; filename="{safe_name}"'
+        ascii_name = safe_name.encode("ascii", "ignore").decode() or "report.html"
+        resp.headers["Content-Disposition"] = (
+            f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe_name)}"
+        )
     else:
         resp = FileResponse(path, media_type=media_type, filename=safe_name)
     resp.headers["Cache-Control"] = "no-store"

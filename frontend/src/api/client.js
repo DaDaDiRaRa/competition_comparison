@@ -117,6 +117,12 @@ export async function listCrossCompareReports() {
   return r.json()
 }
 
+export async function rerenderCrossCompareReport(filename) {
+  const r = await fetch(`${BASE}/accumulate/cross-compare/reports/${encodeURIComponent(filename)}/rerender`, { method: 'POST' })
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || '재렌더 실패')
+  return r.json()
+}
+
 export function rerunCompare(facilityType, competitionId) {
   return streamSSE(`${BASE}/accumulate/projects/${facilityType}/${competitionId}/rerun-compare`)
 }
