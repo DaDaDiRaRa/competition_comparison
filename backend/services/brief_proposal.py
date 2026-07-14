@@ -118,6 +118,10 @@ _PROPOSAL_INSTRUCTION = (
     "    수준까지만** 쓰고 confidence 를 낮춰라(진단이 VWorld 자동조회·추정으로 채운 값). (4) limit_mismatch 가\n"
     "    있으면 open_questions/risks 에 'brief 건폐/용적 수치 재확인' 을 넣어라. (5) 진단에 **없는** 새 숫자(정밀\n"
     "    일조사선 각도·층수 확정 등) 발명 금지 — floors_above 는 애초에 추정 입력이라 층수 판정은 참고만.\n"
+    "  site_context.sites (다부지, 있으면): **부지별** vision analysis·measured 배열(site_id·address).\n"
+    "    다부지면 placement 의 각 zone 은 그 zone.site 부지에 해당하는 sites[] 항목의 향·접도·조망·\n"
+    "    measured 를 근거로 써라 — 대표(첫 부지) analysis 로 **다른 부지의 방위·조망을 판단하지 마라**\n"
+    "    (부지마다 접도·향이 다름). sites 없으면(단일부지) 상위 analysis/measured 사용.\n"
     "\n"
     "[출력 JSON — 정확히 이 키만, 다른 키 추가 금지]\n"
     "{\n"
@@ -364,7 +368,8 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     # 대지 맥락 — vision(VWorld 위성·지적도 판독) + measured(터읽기 실측 board_brief) +
     # law_diagnosis(건축법 진단 골격). 셋 중 하나만 있어도 실음.
     sc = brief_data.get("_site_context")
-    if sc and isinstance(sc, dict) and (sc.get("analysis") or sc.get("measured") or sc.get("law_diagnosis")):
+    if sc and isinstance(sc, dict) and (sc.get("analysis") or sc.get("measured")
+                                        or sc.get("law_diagnosis") or sc.get("sites")):
         site_ctx = {
             "matched_address": sc.get("matched_address", ""),
             "lat":             sc.get("lat"),
@@ -380,6 +385,14 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
         law = [d for d in (sc.get("law_diagnosis") or []) if isinstance(d, dict)]
         if law:
             site_ctx["law_diagnosis"] = law
+        # 다부지: 부지별 vision/measured — 대표(첫 부지) analysis 로 다른 부지 판단 금지.
+        per_site = [x for x in (sc.get("sites") or []) if isinstance(x, dict)]
+        if len(per_site) > 1:
+            site_ctx["sites"] = [
+                {"site_id": x.get("site_id"), "address": x.get("address"),
+                 "analysis": x.get("analysis"), "measured": _measured_digest(x.get("measured"))}
+                for x in per_site
+            ]
         payload["site_context"] = site_ctx
 
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)

@@ -510,49 +510,57 @@ async def analyze_brief(
             #   (b) measured = 터읽기 실측(인구지수·수급진단·재해·설계드라이버) — 형제앱, 키 무관·graceful
             brief_data["_site_context"] = None
             fe_sites = (brief_data.get("feasibility_export") or {}).get("sites") or []
-            site_address = next((s.get("address") for s in fe_sites if s.get("address")), None)
-            if site_address:
+            addressed = [s for s in fe_sites if s.get("address")]
+            if addressed:
                 sc: dict = {}
-                if settings.has_vworld_key():
-                    yield sse({
-                        "type": "stage", "stage": "site_analysis",
-                        "msg": f"대지·맥락 분석 중 ({site_address})", "_timestamp": ts,
-                    })
+
+                # 부지별 vision(VWorld) + measured(터읽기) — 다부지 비대칭 해소: 전 부지 각각(병렬).
+                #   첫 부지 이미지만 히어로로 저장({brief_id}_site.jpg). vision 은 VWorld 키 있을 때만.
+                #   sc 대표값(analysis·measured·matched_address…)=첫 부지(단일부지·기존 소비자 호환),
+                #   sc["sites"]=전 부지 [{site_id, address, analysis, measured}].
+                async def _analyze_site(idx: int, s: dict) -> dict:
+                    addr = s.get("address")
+                    out: dict = {"site_id": s.get("site_id"), "address": addr}
+                    if settings.has_vworld_key():
+                        try:
+                            from services.vworld_analyzer import run_site_analysis
+                            r = await run_site_analysis(
+                                address=addr,
+                                vworld_key=settings.vworld_api_key,
+                                vworld_domain=settings.vworld_domain,
+                                save_image_path=(briefs_dir / f"{brief_id}_site.jpg") if idx == 0 else None,
+                            )
+                            out["_vision"] = {k: v for k, v in r.items() if k != "image_jpeg_b64"}
+                            out["analysis"] = r.get("analysis")
+                        except Exception as se:
+                            logger.warning("대지 vision 분석 실패 (비치명, %s): %s", addr, se)
                     try:
-                        from services.vworld_analyzer import run_site_analysis
-                        site_result = await run_site_analysis(
-                            address=site_address,
-                            vworld_key=settings.vworld_api_key,
-                            vworld_domain=settings.vworld_domain,
-                            save_image_path=briefs_dir / f"{brief_id}_site.jpg",
-                        )
-                        sc.update({k: v for k, v in site_result.items() if k != "image_jpeg_b64"})
-                        yield sse({"type": "done", "step": "site_analysis", "_timestamp": ts})
-                    except Exception as se:
-                        logger.warning("대지 분석 자동 실행 실패 (비치명): %s", se)
-                        yield sse({
-                            "type": "site_analysis_error",
-                            "message": str(se)[:300], "_timestamp": ts,
-                        })
-                # 터읽기 실측 대지 맥락 (형제앱 /board — 상상 아닌 실측)
-                try:
-                    from services.teoilgi_client import fetch_board_context, use_type_for
-                    yield sse({
-                        "type": "stage", "stage": "measured_context",
-                        "msg": f"실측 대지 맥락 조회 중 ({site_address})", "_timestamp": ts,
-                    })
-                    measured = await fetch_board_context(site_address, use_type=use_type_for(facility_type))
-                    if measured:
-                        sc["measured"] = measured
-                        yield sse({"type": "done", "step": "measured_context", "_timestamp": ts})
-                    else:
-                        yield sse({
-                            "type": "measured_context_error",
-                            "message": "터읽기 실측 맥락 미확보 (형제앱 응답 없음) — vision 만으로 진행",
-                            "_timestamp": ts,
-                        })
-                except Exception as me:
-                    logger.warning("터읽기 실측 맥락 실패 (비치명): %s", me)
+                        from services.teoilgi_client import fetch_board_context, use_type_for
+                        m = await fetch_board_context(addr, use_type=use_type_for(facility_type))
+                        if m:
+                            out["measured"] = m
+                    except Exception as me:
+                        logger.warning("터읽기 실측 실패 (비치명, %s): %s", addr, me)
+                    return out
+
+                yield sse({
+                    "type": "stage", "stage": "site_analysis",
+                    "msg": f"대지·맥락 분석 중 ({len(addressed)}개 부지)", "_timestamp": ts,
+                })
+                _sr = await asyncio.gather(
+                    *[_analyze_site(i, s) for i, s in enumerate(addressed)],
+                    return_exceptions=True,
+                )
+                site_results = [r for r in _sr if isinstance(r, dict)]
+                if site_results:
+                    first = site_results[0]
+                    sc.update(first.get("_vision") or {})   # 첫 부지 대표: matched_address·lat·lng·radius_m·analysis
+                    if first.get("measured"):
+                        sc["measured"] = first["measured"]
+                    sc["sites"] = [{"site_id": r.get("site_id"), "address": r.get("address"),
+                                    "analysis": r.get("analysis"), "measured": r.get("measured")}
+                                   for r in site_results]
+                yield sse({"type": "done", "step": "site_analysis", "_timestamp": ts})
 
                 # 건축법 진단 되받기 (arch-law-diagnose) — 배치의 '법적 골격'.
                 #   feasibility_export 허용 한도로 최대 매스 역산 → 진단 → 정북 일조사선·가로구역
