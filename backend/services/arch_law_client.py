@@ -95,9 +95,9 @@ def digest_diagnosis(diag: dict, site: dict | None = None) -> dict | None:
     """진단 응답 → 배치 근거용 최소 다이제스트 (null 가드 + 신뢰도 캡처).
 
     매스·단면을 규정하는 필드만 추림: envelope(건폐/용적 한도) · 정북 일조사선 후퇴 ·
-    가로구역 최고높이 · 심의(REQUIRED) 여부. pass:null / source '미확인·추정·시행령' 은
-    low_confidence 로 표시(불변식 2: degrade 신호를 신뢰도로 캡처). site 를 주면 brief 의
-    건폐/용적 한도와 진단 limit_pct 를 대조해 불일치(재확인 신호)를 붙인다.
+    가로구역 최고높이 · 심의(REQUIRED) 여부. source 에 '미확인·추정' 토큰이 있거나 건폐율·
+    용적률 pass:null(zone 미해결) 이면 low_confidence(불변식 2: degrade 신호를 신뢰도로 캡처).
+    site 를 주면 brief 의 건폐/용적 한도와 진단 limit_pct 를 대조해 불일치(재확인 신호)를 붙인다.
     """
     if not isinstance(diag, dict):
         return None
@@ -124,15 +124,18 @@ def digest_diagnosis(diag: dict, site: dict | None = None) -> dict | None:
         "parcel_north_depth_m": hs.get("parcel_north_depth_m"),
     }
 
-    # 심의 vs 법정 — REQUIRED 만 (CONDITIONAL/NONE 제외)
+    # 심의 vs 법정 — REQUIRED 만 (MAYBE/NONE 제외).
+    # ⚠ applicable_reviews 는 배열이 아니라 dict {items[], required_count, maybe_count} — items[] 순회.
+    _reviews = diag.get("applicable_reviews")
+    _items = _reviews.get("items", []) if isinstance(_reviews, dict) else []
     reviews_required = [
         {"name": rv.get("name"), "law_ref": rv.get("law_ref"),
          "reasons": [str(x) for x in (rv.get("triggered_reasons") or [])]}
-        for rv in (diag.get("applicable_reviews") or [])
+        for rv in _items
         if isinstance(rv, dict) and rv.get("severity") == "REQUIRED"
     ]
 
-    # 신뢰도 — pass:null 또는 source 에 미확인/추정/시행령 = degrade 신호
+    # 신뢰도 — source 에 미확인/추정 토큰 = degrade 신호 (전체 카테고리)
     low_conf = False
     source_notes: dict[str, str] = {}
     for k, r in results.items():
@@ -143,8 +146,11 @@ def digest_diagnosis(diag: dict, site: dict | None = None) -> dict | None:
             source_notes[k] = src.strip()
             if any(t in src for t in _LOW_CONF_TOKENS):
                 low_conf = True
-        if r.get("pass") is None:
-            low_conf = True
+    # pass:null 은 한도 미확인(zone 미해결) 신호로서만 유효 — 건폐율·용적률에 한정.
+    # 높이_일조.pass 는 envelope 모드에서 항상 None(실이격 미입력)이고 정보성 카드(설비·조경·
+    # 인증 등)도 pass=None 이 정상이라, 전체 카테고리에 걸면 low_confidence 가 상시 True 가 됨.
+    if bcr.get("pass") is None or far.get("pass") is None:
+        low_conf = True
 
     # brief 건폐/용적 한도 vs 진단 limit_pct 대조 (다르면 brief 수치 재확인 신호)
     limit_mismatch: list[dict] = []

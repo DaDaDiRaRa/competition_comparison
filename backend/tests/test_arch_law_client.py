@@ -90,16 +90,26 @@ def _full_diag():
     return {
         "signal": "GREEN",
         "overall_score": 8.3,
-        "applicable_reviews": [
-            {"name": "건축위원회 심의", "severity": "REQUIRED", "triggered_reasons": ["규모"], "law_ref": "건축법 §4"},
-            {"name": "경관 심의", "severity": "CONDITIONAL"},
-        ],
+        # 실제 구조: dict + items[], severity 는 REQUIRED/MAYBE/NONE
+        "applicable_reviews": {
+            "items": [
+                {"name": "건축위원회 심의", "severity": "REQUIRED",
+                 "triggered_reasons": ["규모"], "law_ref": "건축법 §4"},
+                {"name": "경관심의", "severity": "MAYBE"},
+                {"name": "교통영향평가", "severity": "NONE"},
+            ],
+            "required_count": 1, "maybe_count": 1,
+        },
         "results": {
-            "건폐율": {"limit_pct": 60.0, "actual_pct": 60.0, "pass": True, "source": "조례"},
-            "용적률": {"limit_pct": 460.0, "actual_pct": 460.0, "pass": True, "source": "조례"},
-            "높이_일조": {"north_setback_m": 3.5, "shadow_setback_rule": "정북 h/2",
-                        "shadow_min_setback_m": 1.5, "road_height_limit_m": 90.0,
-                        "parcel_north_depth_m": 40.0, "pass": True, "law_refs": []},
+            "건폐율": {"limit_pct": 60.0, "actual_pct": 60.0, "pass": True, "source": "🏛 조례"},
+            "용적률": {"limit_pct": 460.0, "actual_pct": 460.0, "pass": True, "source": "🏛 조례"},
+            # envelope 모드 현실 반영: 높이_일조.pass 는 None
+            "높이_일조": {"north_setback_m": None, "shadow_applies": True,
+                        "shadow_setback_rule": "정북 h/2", "shadow_min_setback_m": 1.5,
+                        "road_height_limit_m": 90.0, "parcel_north_depth_m": 40.0,
+                        "pass": None, "law_refs": []},
+            # 정보성 카드도 pass:None — low_confidence 오탐 유발 여부 회귀
+            "설비_소방": {"pass": None, "source": "AI 정성판단"},
         },
     }
 
@@ -108,11 +118,24 @@ def test_digest_extracts_skeleton():
     d = alc.digest_diagnosis(_full_diag())
     assert d["signal"] == "GREEN" and d["overall_score"] == 8.3
     assert d["envelope"] == {"bcr_limit_pct": 60.0, "far_limit_pct": 460.0}
-    assert d["height_solar"]["north_setback_m"] == 3.5
+    assert d["height_solar"]["north_setback_m"] is None       # envelope 모드 현실
+    assert d["height_solar"]["shadow_min_setback_m"] == 1.5
     assert d["height_solar"]["road_height_limit_m"] == 90.0
+    # 패치 1 회귀 가드: applicable_reviews dict items[] 에서 REQUIRED 만 뽑아야 함
     assert d["has_required_review"] is True
-    assert [r["name"] for r in d["reviews_required"]] == ["건축위원회 심의"]  # REQUIRED 만
+    assert [r["name"] for r in d["reviews_required"]] == ["건축위원회 심의"]  # REQUIRED 만 (MAYBE/NONE 제외)
+    # 패치 2 회귀 가드: 높이_일조·설비_소방 pass:None 이 있어도 건폐/용적 pass:True 라 저신뢰 아님
     assert d["low_confidence"] is False
+
+
+def test_digest_info_card_null_pass_not_low_conf():
+    """정보성 카드(설비_소방 등) pass:None 만으로는 low_confidence 를 켜면 안 됨 (패치 2 회귀).
+
+    건폐율·용적률 pass 가 True 이고 source 에 미확인/추정 토큰이 없으면 나머지 카테고리가
+    전부 pass:None 이어도 저신뢰가 아니다 — envelope 모드에서 상시 True 로 켜지던 버그 방지.
+    """
+    diag = _full_diag()  # 높이_일조·설비_소방 pass=None, 건폐/용적 pass=True
+    assert alc.digest_diagnosis(diag)["low_confidence"] is False
 
 
 def test_digest_low_confidence_on_null_pass_and_source_token():
