@@ -40,8 +40,9 @@ jobs:
             --add-volume-mount volume=db,mount-path=/data \
             --update-env-vars DB_PATH=/data,PYTHONUNBUFFERED=1,ARCH_LAW_API_URL=https://arch-law-diagnose-30350777436.asia-northeast3.run.app \
             --remove-env-vars ANTHROPIC_API_KEY \
-            --memory 2Gi \
+            --memory 8Gi \
             --cpu 2 \
+            --concurrency 8 \
             --timeout 3600 \
             --max-instances 1 \
             --allow-unauthenticated
