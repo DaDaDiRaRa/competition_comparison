@@ -120,7 +120,7 @@ export default function BriefMode() {
   const [result, setResult] = useState(null)   // complete 이벤트 payload
   const [flags, setFlags] = useState([])        // validate done의 flag_list
   const [includeInsight, setIncludeInsight] = useState(true)  // AI 종합 해설 포함 여부
-  const [includeProposal, setIncludeProposal] = useState(false)  // 수주 제안서(대지·법 융합)까지 한 방에
+  const [includeProposal, setIncludeProposal] = useState(true)  // 기본 ON — 수주 제안서(대지·법 융합)까지 한 방에
   const [regening, setRegening] = useState(false)             // 해설 재생성 진행 중
   const [regenErr, setRegenErr] = useState('')
   const [proposing, setProposing] = useState(false)           // 수주 제안서 생성 진행 중

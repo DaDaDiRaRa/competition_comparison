@@ -245,7 +245,7 @@ async def analyze_brief(
     brief_pdf_ref: str | None = Form(None),
     brief_pdf_refs: str | None = Form(None),   # JSON 배열 — 복수 파일 청크 업로드용
     include_insight: bool = Form(True),
-    include_proposal: bool = Form(False),      # 켜면 분석 한 방에 수주 제안서까지(대지·법 융합, 비용·지연 추가)
+    include_proposal: bool = Form(True),       # 기본 ON — 분석 한 방에 수주 제안서까지(대지·법 융합; 끄면 비용·지연 절감)
     site_address: str = Form(""),              # 선택 — 지침서에서 주소를 못 읽거나 틀릴 때 직접 고정(비우면 추출값)
 ):
     """
