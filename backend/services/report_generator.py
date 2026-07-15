@@ -76,6 +76,34 @@ def _strip_grade_tail(notes: str) -> str:
     return stripped or notes
 
 
+def _render_keydiff_card(text: str, axis_labels: dict) -> str:
+    """핵심 차별화 문장 → 구조화 카드: 축 헤더 + 본문(당선/낙선 색강조) + 💡 인과 하이라이트.
+
+    LLM 이 '<축>: 당선작은 …, 낙선작은 … — 인과' 포맷으로 뱉으므로 ':'·'—' 로 분해.
+    포맷이 다르면(파싱 실패) 문장 그대로 본문으로 렌더(무손실 폴백).
+    """
+    t = str(text).strip()
+    axis = ""
+    if ":" in t:
+        head, rest = t.split(":", 1)
+        head = head.strip()
+        axis = axis_labels.get(head, head)   # 축 키면 한글 라벨, 아니면 원문
+        t = rest.strip()
+    body, insight = t, ""
+    for sep in (" — ", " – ", "—", "–", " - "):
+        if sep in t:
+            body, insight = t.split(sep, 1)
+            break
+    body_h = html.escape(body.strip())
+    # 당선작/낙선작 키워드 색강조 (escape 후 — 주입 HTML 은 내부 상수라 안전)
+    body_h = body_h.replace("당선작", '<b style="color:var(--tag-strength)">당선작</b>')
+    body_h = body_h.replace("낙선작", '<b style="color:var(--tag-weakness)">낙선작</b>')
+    axis_h = f'<div class="kd-axis">{html.escape(axis)}</div>' if axis else ""
+    insight_h = (f'<div class="kd-insight">💡 {html.escape(insight.strip())}</div>'
+                 if insight.strip() else "")
+    return f'<li class="keydiff-item">{axis_h}<div class="kd-body">{body_h}</div>{insight_h}</li>'
+
+
 def _sec_title(num: int, text: str) -> str:
     return (
         f'<div class="sec-title">'
@@ -685,13 +713,17 @@ body {
 .summ-subh { font-size: 13px; font-weight: 800; color: var(--text-primary);
   margin: 6px 0 10px; letter-spacing: 0.02em; }
 .keydiff-list { margin: 0 0 18px; padding: 0; list-style: none; counter-reset: kd; }
-.keydiff-item { position: relative; padding: 11px 15px 11px 42px; margin-bottom: 8px;
-  background: var(--bg-card); border-left: 3px solid var(--accent); border-radius: 4px;
-  font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 1.55; }
+.keydiff-item { position: relative; padding: 12px 15px 12px 42px; margin-bottom: 10px;
+  background: var(--bg-card); border-left: 3px solid var(--accent); border-radius: 5px; }
 .keydiff-item::before { counter-increment: kd; content: counter(kd); position: absolute;
-  left: 13px; top: 11px; width: 20px; height: 20px; border-radius: 50%;
+  left: 13px; top: 12px; width: 20px; height: 20px; border-radius: 50%;
   background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
   text-align: center; line-height: 20px; }
+.kd-axis { font-size: 11px; font-weight: 800; color: var(--text-muted);
+  letter-spacing: 0.03em; margin-bottom: 5px; }
+.kd-body { font-size: 13.5px; color: var(--text-primary); line-height: 1.55; }
+.kd-insight { margin-top: 9px; font-size: 13px; font-weight: 700; color: var(--text-primary);
+  background: var(--bg-deep); border-radius: 5px; padding: 8px 11px; line-height: 1.5; }
 .summ-contrast { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .summ-col-h { font-size: 12px; font-weight: 800; margin-bottom: 8px; letter-spacing: 0.03em; }
 .summ-win  { color: var(--tag-strength); }
@@ -710,10 +742,16 @@ body {
   font-size: 14px; font-weight: 700; color: var(--accent-gold);
   margin-bottom: 14px; letter-spacing: 0.05em;
 }
-.w-axis { margin-bottom: 16px; }
+.w-axis { margin-bottom: 18px; }
 .w-axis-label { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;
                 letter-spacing: 0.02em; }
-/* 판정 헤드라인 — 굵게 + 등급색 좌측 바 (border-left-color 인라인). 근거 태그는 아래 연하게 */
+.w-axis-grade { font-size: 11px; font-weight: 800; margin-left: 4px; }
+/* 강점 헤드라인 — 대표 강점 굵게 + 등급색 좌측 바. 나머지 강점은 아래 불릿(부정 표현 없음) */
+.w-axis-lead { font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.5;
+               padding-left: 11px; border-left: 3px solid var(--border-strong); margin-bottom: 6px; }
+.w-axis-points { margin: 0; padding-left: 27px; list-style: disc; }
+.w-axis-points li { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 2px 0; }
+/* 옛 판정/태그 클래스 잔존 호환 */
 .w-axis-verdict { font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.5;
                   padding-left: 11px; border-left: 3px solid var(--border-strong); margin-bottom: 7px; }
 .w-axis-tags { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -1115,7 +1153,7 @@ def generate_comparison_report(
     #   ① key_differentiators(그동안 미렌더) ② 당선요인↔낙선함정 2열 대조
     #   ③ 정합성 노트(블라인드 예측 vs 실제). 전부 결과 공개 후 사후 추론(AI 해석).
     _kd_items = "".join(
-        f'<li class="keydiff-item">{html.escape(str(k))}</li>'
+        _render_keydiff_card(k, _axis_labels_ko)
         for k in key_differentiators if str(k).strip()
     )
     ws_items = "".join(f'<div class="diff-item diff-win">{html.escape(str(w))}</div>' for w in winner_strengths)
@@ -1159,22 +1197,22 @@ def generate_comparison_report(
         axis_items = ""
         for axis in _axis_list:
             ax        = wd.get(axis, {})
-            strengths = ax.get("strengths", [])
-            notes     = ax.get("notes", "")
+            strengths = [str(s) for s in (ax.get("strengths") or []) if str(s).strip()]
             grade     = _to_grade(ax)
-            if not strengths and not notes:
+            # 강점만 집중 — balanced notes(좋았으나 나빴음)는 쓰지 않음. 강점 없으면 스킵.
+            if not strengths:
                 continue
             label     = _axis_labels_ko.get(axis, axis)
-            grade_txt = f" [{_grade_label(grade)}]" if grade else ""
-            tags      = "".join(f'<span class="tag tag-strength">{html.escape(str(t))}</span>' for t in strengths)
-            # notes = 판정 한 줄 → 축 라벨 아래 헤드라인(굵게 + 등급색 바, 꼬리 절삭). 태그는 근거.
-            _verdict  = _strip_grade_tail(str(notes)) if notes else ""
+            grade_txt = (f' <span class="w-axis-grade" style="color:{_grade_label_ring(grade)}">'
+                         f'{_grade_label(grade)}</span>') if grade else ""
             _gc       = _grade_label_ring(grade)
+            lead      = html.escape(strengths[0])            # 대표 강점 = 헤드라인
+            rest      = "".join(f'<li>{html.escape(s)}</li>' for s in strengths[1:])
             axis_items += (
-                f'<div class="w-axis"><div class="w-axis-label">{label}{grade_txt}</div>'
-                + (f'<div class="w-axis-verdict" style="border-left-color:{_gc}">{html.escape(_verdict)}</div>'
-                   if _verdict else "")
-                + f'<div class="w-axis-tags">{tags}</div>'
+                f'<div class="w-axis">'
+                f'<div class="w-axis-label">{label}{grade_txt}</div>'
+                f'<div class="w-axis-lead" style="border-left-color:{_gc}">{lead}</div>'
+                + (f'<ul class="w-axis-points">{rest}</ul>' if rest else "")
                 + "</div>"
             )
         if axis_items:

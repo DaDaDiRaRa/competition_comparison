@@ -59,8 +59,8 @@ class TestDashboardReadability:
         assert "전면폭 &lt;3m" in html and "&gt; 400%" in html
         assert "전면폭 <3m" not in html   # raw 없음
 
-    def test_verdict_headline_rendered(self):
-        # notes(판정 한 줄)가 굵은 판정 헤드라인(db-card-verdict/w-axis-verdict)으로 승격
+    def test_dashboard_verdict_headline(self):
+        # 대시보드 카드: notes → 판정 헤드라인(db-card-verdict), 꼬리 "B 수준" 절삭 + (p.N) 보존
         cell = {"grade": "B", "strengths": ["좋음 (p.3)"], "weaknesses": [],
                 "brief_compliance": "partial",
                 "notes": "역상 전략 독창적이나 집중도 분산되어 B 수준 (p.7)"}
@@ -71,10 +71,37 @@ class TestDashboardReadability:
                 "concept_comparison": {}, "winner_strengths": [], "loser_weaknesses": [],
                 "gap_analysis": {}}
         html = generate_comparison_report(meta, subs, comp)
-        assert 'class="db-card-verdict"' in html and 'class="w-axis-verdict"' in html
-        # 꼬리 "B 수준" 절삭 + (p.N) 보존 (렌더된 요소 기준 — CSS 정의 아님)
+        assert 'class="db-card-verdict"' in html
         verdict = html.split('class="db-card-verdict"')[1].split("</div>")[0]
         assert "집중도 분산" in verdict and "B 수준" not in verdict and "(p.7)" in verdict
+
+    def test_winner_box_strengths_only(self):
+        # 당선작 강점 분석: 강점만(대표 강점 헤드라인 + 나머지 불릿), balanced notes·약점 제거
+        cell = {"grade": "A", "strengths": ["역상 포디움 랜드마크 (p.8)", "UAM 미래 프로그램 (p.17)"],
+                "weaknesses": ["약점제거 (p.9)"],
+                "notes": "컨셉 명확하나 집중도분산 미흡 (p.7)", "brief_compliance": "partial"}
+        meta = {"competition_name": "t", "facility_type": "public"}
+        subs = [{"company": "건원", "result": "win", "total_pages": 10, "extracted_data": {}}]
+        comp = {"submissions": {"건원": {AX: dict(cell)}}, "concept_comparison": {},
+                "key_differentiators": [], "winner_strengths": [], "loser_weaknesses": [],
+                "gap_analysis": {}}
+        html = generate_comparison_report(meta, subs, comp)
+        wb = html.split("★ 건원")[1].split("db-wrap")[0]   # 당선박스 ~ 대시보드 직전
+        assert "w-axis-lead" in wb and "역상 포디움" in wb and "UAM 미래" in wb  # 강점만
+        assert "집중도분산" not in wb and "약점제거" not in wb                   # 부정·약점 없음
+        assert "w-axis-verdict" not in wb                                       # 옛 balanced 판정 없음
+
+    def test_keydiff_structured_card(self):
+        # 핵심 차별화: 축 헤더 + 본문(당선/낙선 색강조) + 💡 인과 하이라이트로 구조화
+        from services.report_generator import _render_keydiff_card
+        c = _render_keydiff_card(
+            "concept_clarity: 당선작은 명확(p.7), 낙선작은 산만(p.3) — 컨셉 완성도가 갈랐다",
+            {"concept_clarity": "컨셉·아이덴티티"})
+        assert "kd-axis" in c and "컨셉·아이덴티티" in c
+        assert "var(--tag-strength)\">당선작" in c and "var(--tag-weakness)\">낙선작" in c
+        assert "kd-insight" in c and "컨셉 완성도가 갈랐다" in c
+        # 폴백: 축·인과 구분자 없으면 본문만
+        assert "kd-insight" not in _render_keydiff_card("그냥 한 문장", {})
 
     def test_summary_top_block(self):
         # 핵심 요약(핵심 차별화 + 당선요인↔낙선함정 + 정합성 노트)이 대시보드 아코디언보다 위
