@@ -208,7 +208,9 @@ def delete_brief(brief_id: str):
     `{brief_id}_*` 만 지워 다른 지침서(더 긴 slug)를 건드리지 않는다(구분자 경계).
     """
     safe_id = Path(brief_id).name
-    if safe_id != brief_id or not safe_id:
+    # 경로 구분자 + glob 메타문자(* ? [ ]) 거부 — Path().name 은 슬래시만 막고 glob 은 못 막는다.
+    # (막지 않으면 DELETE /brief/* 가 glob("*.*") 로 확장돼 전 지침서를 삭제 — 정상 brief_id 엔 무해)
+    if safe_id != brief_id or not safe_id or any(c in safe_id for c in "*?[]"):
         raise HTTPException(400, "잘못된 brief_id 입니다.")
 
     briefs_dir = settings.db_path / "_briefs"

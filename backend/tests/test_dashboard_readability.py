@@ -45,6 +45,20 @@ class TestDashboardReadability:
         html = _html()
         assert "메타포 명확" in html and "연결 약함" in html
 
+    def test_strength_text_html_escaped(self):
+        # LLM 강점/약점/notes 의 '<'·'>' 가 escape 되어 카드 마크업이 안 깨짐
+        cell = {"grade": "B", "strengths": ["전면폭 <3m 우려 (p.3)"],
+                "weaknesses": [], "brief_compliance": "partial", "notes": "용적률 > 400%"}
+        meta = {"competition_name": "t", "facility_type": "public"}
+        subs = [{"company": "A", "result": "win", "total_pages": 10, "extracted_data": {}},
+                {"company": "B", "result": "lose", "total_pages": 10, "extracted_data": {}}]
+        comp = {"submissions": {"A": {AX: dict(cell)}, "B": {AX: dict(cell)}},
+                "concept_comparison": {}, "winner_strengths": [], "loser_weaknesses": [],
+                "gap_analysis": {}}
+        html = generate_comparison_report(meta, subs, comp)
+        assert "전면폭 &lt;3m" in html and "&gt; 400%" in html
+        assert "전면폭 <3m" not in html   # raw 없음
+
     def test_grid_guarantees_min_card_width(self):
         # 밀도 개선: 회사 수만큼 균등분할(repeat(N,1fr)) → 최소폭 260px 보장 + 가로스크롤
         html = _html()

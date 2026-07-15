@@ -17,6 +17,11 @@ class TestBadgeHelpers:
     def test_ai_badge_default_label(self):
         assert "AI 해석" in ai_badge()
 
+    def test_ai_badge_uses_theme_token(self):
+        # AI 해석 색은 테마 --ai(파랑)로 통일 — 앰버 하드코딩 아님 (제안서·플레이북과 일치)
+        assert "var(--ai)" in ai_badge()
+        assert "#b8860b" not in ai_badge() and "#b8860b" not in fact_interp_legend()
+
     def test_ai_badge_custom_label(self):
         assert "추론" in ai_badge("추론")
 

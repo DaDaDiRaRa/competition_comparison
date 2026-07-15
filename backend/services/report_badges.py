@@ -10,7 +10,9 @@ report_badges.py — 사실/해석 2층 분리 렌더 헬퍼 (LLM 0 · 인라인
 """
 from __future__ import annotations
 
-_ACCENT = "#b8860b"   # AI 해석 강조색(앰버 계열) — 사실(중립)과 구분
+# AI 해석 강조색 = 테마 공유 토큰 --ai(#2a6496 파랑). 제안서·플레이북의 AI 칩과 통일
+# (리포트가 THEME_VARS 주입 → var(--ai) 해석됨). 사실(중립 텍스트)과 구분.
+_ACCENT = "var(--ai)"
 
 
 def ai_badge(label: str = "AI 해석") -> str:

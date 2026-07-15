@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getFacilityTypes, runAccumulatePipeline, getBriefExportUrl } from '../../api/client'
+import { getFacilityTypes, runAccumulatePipeline, getBriefExportUrl, getReportUrl } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
@@ -292,17 +292,30 @@ export default function AccumulateMode() {
           <div style={{
             background: 'var(--color-success-bg)', border: '1px solid var(--color-success)', borderRadius: 10,
             padding: '14px 18px', marginBottom: 20,
-            display: 'flex', alignItems: 'center', gap: 14,
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
           }}>
             <span style={{ fontSize: 22, color: 'var(--color-success)' }}>✓</span>
-            <div>
+            <div style={{ flex: 1, minWidth: 200 }}>
               <div style={{ fontWeight: 'var(--font-weight-bold)', color: 'var(--color-success)', fontSize: 'var(--font-size-base)', marginBottom: 3 }}>
-                추출 완료 — 상단 목록에서 "비교분석 실행"을 눌러주세요
+                {result.report_available ? '추출 + 비교분석 완료' : '추출 완료 — 상단 목록에서 "비교분석 실행"을 눌러주세요'}
               </div>
               <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-                프로젝트가 상단 저장 목록에 추가됐습니다. 비교분석·리포트는 목록 카드의 버튼으로 별도 실행합니다.
+                {result.report_available
+                  ? '프로젝트가 상단 저장 목록에 추가되고 비교 리포트까지 생성됐습니다.'
+                  : '프로젝트가 상단 저장 목록에 추가됐습니다. 비교분석·리포트는 목록 카드의 버튼으로 별도 실행합니다.'}
               </div>
             </div>
+            {result.report_available && result.competition_id && (
+              <a
+                href={getReportUrl(result.facility_type, result.competition_id) + '?t=' + Date.now()}
+                target="_blank" rel="noreferrer"
+                style={{
+                  background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', borderRadius: 6,
+                  padding: '8px 16px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
+                  textDecoration: 'none',
+                }}
+              >비교 리포트 열기</a>
+            )}
           </div>
 
           {briefExports && (
@@ -347,6 +360,22 @@ export default function AccumulateMode() {
               <PageDistChart distribution={sub.page_distribution} total={sub.total_pages} />
             </div>
           ))}
+          {result.comparison?._coverage_note && (
+            <div style={{
+              border: '1px solid var(--color-border)', background: 'var(--color-bg-surface-alt)',
+              borderRadius: 8, padding: '10px 14px', marginTop: 16, marginBottom: 4,
+              fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)',
+            }}>ℹ {result.comparison._coverage_note}</div>
+          )}
+          {result.comparison?._citation_flags?.length > 0 && (
+            <div style={{
+              border: '1px solid var(--color-danger)', background: 'var(--color-danger-bg)',
+              borderRadius: 8, padding: '10px 14px', marginTop: 16, marginBottom: 4,
+              fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)',
+            }}>
+              ⚠ 근거 미확인 인용 {result.comparison._citation_flags.length}건 — 문서 실제 쪽수를 벗어난 (p.N) 인용이 있습니다. 비교 리포트에서 상세를 확인하세요.
+            </div>
+          )}
           {result.comparison && (
             <ComparisonDashboard comparison={result.comparison} facilityType={result.facility_type} />
           )}

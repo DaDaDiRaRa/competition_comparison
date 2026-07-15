@@ -1,3 +1,4 @@
+import html
 import json
 import re
 from config import facility_label, axes_for
@@ -874,13 +875,14 @@ def _generate_dashboard_section(
                 f'<div class="db-card-score">{_grade_badge(grade)}</div>'
             ) if grade else ''
 
-            notes_html = f'<div class="db-card-notes">{notes}</div>' if notes else ''
+            notes_html = f'<div class="db-card-notes">{html.escape(str(notes))}</div>' if notes else ''
 
             # 강점=초록 알약, 약점=빨강 알약 (전 항목, 회색 중복 줄 제거 → 대비↑·길이↓)
+            # LLM 텍스트라 '<'·'>' 포함 가능 → escape (마크업 깨짐 방지)
             tags_html = ''.join(
-                f'<span class="db-card-tag db-tag-str">▲ {s}</span>' for s in strengths
+                f'<span class="db-card-tag db-tag-str">▲ {html.escape(str(s))}</span>' for s in strengths
             ) + ''.join(
-                f'<span class="db-card-tag db-tag-weak">▼ {w}</span>' for w in weaknesses
+                f'<span class="db-card-tag db-tag-weak">▼ {html.escape(str(w))}</span>' for w in weaknesses
             )
 
             comp_label = COMP_LABEL_MAP.get(compliance, '')
@@ -1106,8 +1108,8 @@ def generate_comparison_report(
             compliance = ax.get("brief_compliance", "unclear")
             notes      = ax.get("notes", "")
 
-            s_tags  = "".join(f'<span class="tag tag-strength">{t}</span>' for t in strengths)
-            w_tags  = "".join(f'<span class="tag tag-weakness">{t}</span>' for t in weaknesses)
+            s_tags  = "".join(f'<span class="tag tag-strength">{html.escape(str(t))}</span>' for t in strengths)
+            w_tags  = "".join(f'<span class="tag tag-weakness">{html.escape(str(t))}</span>' for t in weaknesses)
             cell_bg = "rgba(246,216,96,0.03)" if company in winners else ""
             cells  += (
                 f'<td style="background:{cell_bg}">'
@@ -1115,7 +1117,7 @@ def generate_comparison_report(
                 f'<div style="margin-top:6px">{_compliance_tag(compliance)}</div>'
                 f'<div style="margin-top:5px">{s_tags}</div>'
                 f'<div style="margin-top:3px">{w_tags}</div>'
-                + (f'<div class="notes">{notes}</div>' if notes else "")
+                + (f'<div class="notes">{html.escape(str(notes))}</div>' if notes else "")
                 + "</td>"
             )
 
@@ -1151,7 +1153,7 @@ def generate_comparison_report(
     concept_blocks = "".join(
         f'<div class="concept-block">'
         f'<div class="concept-block-label">{_axis_labels_ko.get(axis, axis)}</div>'
-        f'<div class="concept-block-text">{text}</div>'
+        f'<div class="concept-block-text">{html.escape(str(text))}</div>'
         f'</div>'
         for axis in _axis_list
         if (text := (concept_comparison.get(axis) or "").strip())
@@ -1163,8 +1165,8 @@ def generate_comparison_report(
     )
 
     # ── 당선/낙선 요약 ────────────────────────────────────
-    ws_items   = "".join(f'<div class="diff-item diff-win">{w}</div>' for w in winner_strengths)
-    lw_items   = "".join(f'<div class="diff-item diff-lose">{w}</div>' for w in loser_weaknesses)
+    ws_items   = "".join(f'<div class="diff-item diff-win">{html.escape(str(w))}</div>' for w in winner_strengths)
+    lw_items   = "".join(f'<div class="diff-item diff-lose">{html.escape(str(w))}</div>' for w in loser_weaknesses)
     # 당선작 우월 요인·낙선작 공통 약점 = 결과 공개 후 사후 추론(AI 해석) — 배지로 사실과 구분.
     ws_section = (
         f'<div class="sec">{_sec_title(_next_n(), "당선작 우월 요인")}{_ai_badge()}'
@@ -1194,11 +1196,11 @@ def generate_comparison_report(
                 continue
             label     = _axis_labels_ko.get(axis, axis)
             grade_txt = f" [{grade}]" if grade else ""
-            tags      = "".join(f'<span class="tag tag-strength">{t}</span>' for t in strengths)
+            tags      = "".join(f'<span class="tag tag-strength">{html.escape(str(t))}</span>' for t in strengths)
             axis_items += (
                 f'<div class="w-axis"><div class="w-axis-label">{label}{grade_txt}</div>'
                 f'<div>{tags}</div>'
-                + (f'<div class="notes">{notes}</div>' if notes else "")
+                + (f'<div class="notes">{html.escape(str(notes))}</div>' if notes else "")
                 + "</div>"
             )
 

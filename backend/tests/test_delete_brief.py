@@ -54,6 +54,18 @@ class TestDeleteBrief:
         r = c.delete("/api/brief/does_not_exist")
         assert r.status_code == 404
 
+    def test_glob_metachar_injection_blocked(self, client):
+        # DELETE /brief/* 는 glob 확장으로 전 지침서를 지울 수 있었음 — 400 으로 거부, 파일 무손상
+        c, db = client
+        _make_brief(db, "20260714_120000_public_a")
+        _make_brief(db, "20260714_120000_public_b")
+        for bad in ("*", "20260714_120000_public_%2A", "a?", "a[bc]"):
+            r = c.delete(f"/api/brief/{bad}")
+            assert r.status_code in (400, 404), f"{bad} not rejected"
+        # 아무 것도 안 지워졌는지
+        assert (db / "_briefs" / "20260714_120000_public_a.json").exists()
+        assert (db / "_briefs" / "20260714_120000_public_b.json").exists()
+
     def test_path_traversal_blocked(self, client):
         c, db = client
         _make_brief(db, "x")
