@@ -76,6 +76,40 @@ class TestDashboardReadability:
         verdict = html.split('class="db-card-verdict"')[1].split("</div>")[0]
         assert "집중도 분산" in verdict and "B 수준" not in verdict and "(p.7)" in verdict
 
+    def test_summary_top_block(self):
+        # 핵심 요약(핵심 차별화 + 당선요인↔낙선함정 + 정합성 노트)이 대시보드 아코디언보다 위
+        meta = {"competition_name": "t", "facility_type": "public"}
+        subs = [{"company": "건원", "result": "win", "total_pages": 10, "extracted_data": {}},
+                {"company": "B사", "result": "lose", "total_pages": 10, "extracted_data": {}}]
+        cell = {"grade": "B", "strengths": ["좋음 (p.3)"], "weaknesses": ["약함 (p.5)"],
+                "brief_compliance": "partial", "notes": "컨셉 명확 (p.7)"}
+        comp = {"submissions": {"건원": {AX: dict(cell)}, "B사": {AX: dict(cell)}},
+                "concept_comparison": {},
+                "key_differentiators": ["당선작은 컨셉 명확성에서 앞섰다 (p.7)"],
+                "winner_strengths": ["배치 우수 (p.3)"], "loser_weaknesses": ["동선 미흡 (p.5)"],
+                "gap_analysis": {"blind_top1": "건원", "actual_winners": ["건원"],
+                                 "top1_matches_winner": True}}
+        html = generate_comparison_report(meta, subs, comp)
+        # key_differentiators 렌더(그동안 버려지던 신호)
+        assert "keydiff-item" in html and "컨셉 명확성에서 앞섰다" in html
+        # 당선요인 ↔ 낙선함정 2열
+        assert "당선 요인" in html and "낙선 함정" in html
+        # 정합성 노트
+        assert "설계 품질이" in html
+        # 순서: 핵심 요약 < 당선작 강점 분석 < 대시보드(설계 축별 비교 분석)
+        assert 0 < html.find("핵심 요약") < html.find("당선작 강점 분석") < html.find("설계 축별 비교 분석")
+
+    def test_gap_note_diverged(self):
+        # 블라인드 1위 ≠ 실제 당선 → 설계 외 요인 경고
+        meta = {"competition_name": "t", "facility_type": "public"}
+        subs = [{"company": "A", "result": "win", "total_pages": 10, "extracted_data": {}}]
+        comp = {"submissions": {"A": {}}, "concept_comparison": {},
+                "key_differentiators": ["차별 (p.3)"], "winner_strengths": [], "loser_weaknesses": [],
+                "gap_analysis": {"blind_top1": "B", "actual_winners": ["A"],
+                                 "top1_matches_winner": False}}
+        html = generate_comparison_report(meta, subs, comp)
+        assert "설계 외 요인" in html
+
     def test_strip_grade_tail(self):
         assert _strip_grade_tail("집중도 분산되어 B 수준 (p.7)") == "집중도 분산 (p.7)"
         assert _strip_grade_tail("MEP 정량 미흡으로 B 수준 (p.43)") == "MEP 정량 미흡 (p.43)"

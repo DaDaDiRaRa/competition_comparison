@@ -66,12 +66,14 @@ class TestCompareReport:
                       "winner_strengths": ws, "loser_weaknesses": lw, "gap_analysis": {}}
         return generate_comparison_report(meta, subs, comparison)
 
-    def test_inference_sections_badged_and_legend(self):
+    def test_inference_section_badged_and_legend(self):
+        # 당선요인/낙선함정은 최상단 "핵심 요약" 한 섹션으로 통합(배지 1) + 범례(배지 1)
         html = self._report(["배치 우수 (p.3)"], ["동선 미흡 (p.5)"])
         assert "제출물에서 직접 관찰" in html      # 범례
-        assert html.count("AI 해석") == 3          # 범례 + 당선 + 낙선
+        assert "핵심 요약" in html and "당선 요인" in html and "낙선 함정" in html
+        assert html.count("AI 해석") == 2          # 범례 + 핵심 요약
 
     def test_legend_absent_without_inference(self):
         html = self._report([], [])
-        assert "제출물에서 직접 관찰" not in html   # 사후 요약 없으면 범례도 없음
+        assert "제출물에서 직접 관찰" not in html   # 사후 요약·당선분석 없으면 범례도 없음
         assert "AI 해석" not in html

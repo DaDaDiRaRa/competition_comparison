@@ -674,6 +674,26 @@ body {
 .diff-win  { border-left-color: var(--accent-mint); }
 .diff-lose { border-left-color: var(--accent-coral); }
 
+/* 핵심 요약 (최상단 executive summary — 무엇이 당락을 갈랐나) */
+.sec-summary { border-top: 3px solid var(--accent); }
+.summ-subh { font-size: 13px; font-weight: 800; color: var(--text-primary);
+  margin: 6px 0 10px; letter-spacing: 0.02em; }
+.keydiff-list { margin: 0 0 18px; padding: 0; list-style: none; counter-reset: kd; }
+.keydiff-item { position: relative; padding: 11px 15px 11px 42px; margin-bottom: 8px;
+  background: var(--bg-card); border-left: 3px solid var(--accent); border-radius: 4px;
+  font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 1.55; }
+.keydiff-item::before { counter-increment: kd; content: counter(kd); position: absolute;
+  left: 13px; top: 11px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
+  text-align: center; line-height: 20px; }
+.summ-contrast { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.summ-col-h { font-size: 12px; font-weight: 800; margin-bottom: 8px; letter-spacing: 0.03em; }
+.summ-win  { color: var(--tag-strength); }
+.summ-lose { color: var(--tag-weakness); }
+.summ-gap { margin-top: 16px; font-size: 12.5px; color: var(--text-muted);
+  background: var(--bg-deep); border-radius: 6px; padding: 10px 14px; line-height: 1.6; }
+@media (max-width: 700px) { .summ-contrast { grid-template-columns: 1fr; } }
+
 /* Winner highlight */
 .winner-box {
   background: var(--accent-gold-soft);
@@ -1051,6 +1071,8 @@ def generate_comparison_report(
     concept_comparison = comparison.get("concept_comparison", {}) or {}
     winner_strengths = comparison.get("winner_strengths", [])
     loser_weaknesses = comparison.get("loser_weaknesses", [])
+    key_differentiators = comparison.get("key_differentiators", []) or []
+    gap_analysis     = comparison.get("gap_analysis", {}) or {}
     winners          = [s["company"] for s in submissions if s.get("result") in ("win", "contracted")]
 
     _axes_meta      = axes_for(facility_type)
@@ -1082,6 +1104,85 @@ def generate_comparison_report(
         <span>참여 제안서 <strong>{len(submissions)}개</strong></span>
       </div>
     </div>"""
+
+    # ── 핵심 요약 (최상단) — 무엇이 당락을 갈랐나 ─────────────────
+    #   ① key_differentiators(그동안 미렌더) ② 당선요인↔낙선함정 2열 대조
+    #   ③ 정합성 노트(블라인드 예측 vs 실제). 전부 결과 공개 후 사후 추론(AI 해석).
+    _kd_items = "".join(
+        f'<li class="keydiff-item">{html.escape(str(k))}</li>'
+        for k in key_differentiators if str(k).strip()
+    )
+    ws_items = "".join(f'<div class="diff-item diff-win">{html.escape(str(w))}</div>' for w in winner_strengths)
+    lw_items = "".join(f'<div class="diff-item diff-lose">{html.escape(str(w))}</div>' for w in loser_weaknesses)
+    _empty = '<div class="empty" style="color:var(--text-faint);font-size:13px">—</div>'
+    _contrast = (
+        '<div class="summ-contrast">'
+        f'<div><div class="summ-col-h summ-win">▲ 당선 요인</div>'
+        f'<div class="diff-list">{ws_items or _empty}</div></div>'
+        f'<div><div class="summ-col-h summ-lose">▼ 낙선 함정</div>'
+        f'<div class="diff-list">{lw_items or _empty}</div></div>'
+        '</div>'
+    ) if (ws_items or lw_items) else ""
+
+    # 정합성 노트 (결정론) — 블라인드 1위 vs 실제 당선
+    _blind_top1 = gap_analysis.get("blind_top1")
+    _actual_win = gap_analysis.get("actual_winners", []) or []
+    _gap_note = ""
+    if _blind_top1 and _actual_win:
+        if gap_analysis.get("top1_matches_winner"):
+            _gap_note = ("블라인드(익명) 채점 1위가 실제 당선작과 일치 — 설계 품질이 "
+                         "당락을 주도했을 가능성이 높습니다.")
+        else:
+            _gap_note = (f"블라인드 채점 1위({_blind_top1})와 실제 당선"
+                         f"({', '.join(_actual_win)})이 달라 — 설계 외 요인"
+                         f"(발주처 선호·정무적 요인 등)이 개입했을 수 있습니다.")
+
+    summary_section = (
+        f'<div class="sec sec-summary">{_sec_title(_next_n(), "핵심 요약")}{_ai_badge()}'
+        + ('<div class="summ-subh">무엇이 당락을 갈랐나</div>'
+           f'<ol class="keydiff-list">{_kd_items}</ol>' if _kd_items else '')
+        + _contrast
+        + (f'<div class="summ-gap">ℹ {html.escape(_gap_note)}</div>' if _gap_note else '')
+        + '</div>'
+    ) if (_kd_items or _contrast) else ""
+
+    # ── 당선작 강점 분석 (회사별 상세) — 핵심 요약 바로 아래 ─────────
+    winner_boxes = ""
+    for winner in winners:
+        wd         = comp_subs.get(winner, {})
+        axis_items = ""
+        for axis in _axis_list:
+            ax        = wd.get(axis, {})
+            strengths = ax.get("strengths", [])
+            notes     = ax.get("notes", "")
+            grade     = _to_grade(ax)
+            if not strengths and not notes:
+                continue
+            label     = _axis_labels_ko.get(axis, axis)
+            grade_txt = f" [{grade}]" if grade else ""
+            tags      = "".join(f'<span class="tag tag-strength">{html.escape(str(t))}</span>' for t in strengths)
+            # notes = 판정 한 줄 → 축 라벨 아래 헤드라인(굵게 + 등급색 바, 꼬리 절삭). 태그는 근거.
+            _verdict  = _strip_grade_tail(str(notes)) if notes else ""
+            _gc       = _GRADE_COLORS.get(grade, ('#6b7280', ''))[0]
+            axis_items += (
+                f'<div class="w-axis"><div class="w-axis-label">{label}{grade_txt}</div>'
+                + (f'<div class="w-axis-verdict" style="border-left-color:{_gc}">{html.escape(_verdict)}</div>'
+                   if _verdict else "")
+                + f'<div class="w-axis-tags">{tags}</div>'
+                + "</div>"
+            )
+        if axis_items:
+            winner_boxes += (
+                f'<div class="winner-box"><div class="winner-box-title">★ {winner} — 당선 강점 분석</div>'
+                f'{axis_items}</div>'
+            )
+    winner_section = (
+        f'<div class="sec">{_sec_title(_next_n(), "당선작 강점 분석")}{winner_boxes}</div>'
+        if winner_boxes else ""
+    )
+
+    # 사실/해석 범례 — AI 해석 섹션(핵심 요약·당선작 분석)이 실제로 렌더될 때만.
+    legend_section = _fact_interp_legend() if (summary_section or winner_section) else ""
 
     # ── 아코디언 대시보드 ─────────────────────────────────
     dashboard_section = _generate_dashboard_section(
@@ -1194,60 +1295,7 @@ def generate_comparison_report(
         if concept_blocks else ""
     )
 
-    # ── 당선/낙선 요약 ────────────────────────────────────
-    ws_items   = "".join(f'<div class="diff-item diff-win">{html.escape(str(w))}</div>' for w in winner_strengths)
-    lw_items   = "".join(f'<div class="diff-item diff-lose">{html.escape(str(w))}</div>' for w in loser_weaknesses)
-    # 당선작 우월 요인·낙선작 공통 약점 = 결과 공개 후 사후 추론(AI 해석) — 배지로 사실과 구분.
-    ws_section = (
-        f'<div class="sec">{_sec_title(_next_n(), "당선작 우월 요인")}{_ai_badge()}'
-        f'<div class="diff-list">{ws_items}</div></div>'
-        if ws_items else ""
-    )
-    lw_section = (
-        f'<div class="sec">{_sec_title(_next_n(), "낙선작 공통 약점")}{_ai_badge()}'
-        f'<div class="diff-list">{lw_items}</div></div>'
-        if lw_items else ""
-    )
-
-    # 사실/해석 범례 — AI 해석 섹션(당선/낙선 사후 요약)이 있을 때만 노출.
-    legend_section = _fact_interp_legend() if (ws_items or lw_items) else ""
-
-    # ── 당선작 강점 분석 ──────────────────────────────────
-    winner_boxes = ""
-    for winner in winners:
-        wd         = comp_subs.get(winner, {})
-        axis_items = ""
-        for axis in _axis_list:
-            ax        = wd.get(axis, {})
-            strengths = ax.get("strengths", [])
-            notes     = ax.get("notes", "")
-            grade     = _to_grade(ax)
-            if not strengths and not notes:
-                continue
-            label     = _axis_labels_ko.get(axis, axis)
-            grade_txt = f" [{grade}]" if grade else ""
-            tags      = "".join(f'<span class="tag tag-strength">{html.escape(str(t))}</span>' for t in strengths)
-            # notes = 판정 한 줄 → 축 라벨 아래 헤드라인(굵게 + 등급색 바, 꼬리 절삭). 태그는 근거.
-            _verdict  = _strip_grade_tail(str(notes)) if notes else ""
-            _gc       = _GRADE_COLORS.get(grade, ('#6b7280', ''))[0]
-            axis_items += (
-                f'<div class="w-axis"><div class="w-axis-label">{label}{grade_txt}</div>'
-                + (f'<div class="w-axis-verdict" style="border-left-color:{_gc}">{html.escape(_verdict)}</div>'
-                   if _verdict else "")
-                + f'<div class="w-axis-tags">{tags}</div>'
-                + "</div>"
-            )
-
-        if axis_items:
-            winner_boxes += (
-                f'<div class="winner-box"><div class="winner-box-title">★ {winner} — 당선 강점 분석</div>'
-                f'{axis_items}</div>'
-            )
-
-    winner_section = (
-        f'<div class="sec">{_sec_title(_next_n(), "당선작 강점 분석")}{winner_boxes}</div>'
-        if winner_boxes else ""
-    )
+    # 핵심 요약(당선요인↔낙선함정)·당선작 강점 분석은 헤더 직후 최상단에서 이미 빌드됨(위 참조).
 
     # 인용 사후검증 밴드 (문서 쪽수 벗어난 (p.N) 노출, 없으면 '')
     citation_section = citation_flags_band(comparison.get("_citation_flags"))
@@ -1292,6 +1340,8 @@ document.getElementById('btn-dl-html').addEventListener('click', function() {{
 <div class="page-wrap">
 {header}
 {legend_section}
+{summary_section}
+{winner_section}
 {dashboard_section}
 {sub_section}
 {table_section}
@@ -1299,9 +1349,6 @@ document.getElementById('btn-dl-html').addEventListener('click', function() {{
 {quant_table_section}
 {coverage_section}
 {concept_section}
-{ws_section}
-{lw_section}
-{winner_section}
 {citation_section}
 <div class="footer">Competition Analyzer — 자동 생성 비교 리포트 · {comp_name}</div>
 </div>

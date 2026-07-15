@@ -129,10 +129,19 @@ def _make_reveal_static(facility_type: str) -> str:
         "captured in BLIND_GRADES.submissions[company] as your evidence. Preserve original page citations\n"
         "(p.N) when quoting. Do NOT invent new facts or page numbers.\n"
         "\n"
+        "SPECIFICITY RULE (applies to all lists below): cite the CONCRETE design move / number / strategy,\n"
+        "never generic praise. BAD: '공간 구성이 우수'. GOOD: '남향 배치율 87%로 채광 극대화 (p.12)'.\n"
+        "Every item ends with a (p.N) citation reused verbatim from BLIND_GRADES. Do NOT invent facts or pages.\n"
+        "\n"
         "Your task:\n"
-        "1. winner_strengths: aggregate the strongest recurring strengths of actual winner(s) from BLIND_GRADES\n"
-        "2. loser_weaknesses: aggregate common weaknesses of actual losers from BLIND_GRADES\n"
-        "3. key_differentiators: what separated winners from losers (cite axes where winners earned 상 while losers earned 하)\n"
+        "1. winner_strengths: the strongest RECURRING, SPECIFIC strengths of actual winner(s) from BLIND_GRADES.\n"
+        "2. loser_weaknesses: the common, SPECIFIC weaknesses of actual losers from BLIND_GRADES.\n"
+        "3. key_differentiators (MOST IMPORTANT — this is the report's headline): for each axis that actually\n"
+        "   SEPARATED win from lose, write ONE explicit CONTRAST — winner's move vs losers' move — then why it\n"
+        "   decided the outcome. Format: '<축 라벨>: 당선작은 ~한 무브(p.N)로 앞섰고, 낙선작은 ~한 한계(p.M) —\n"
+        "   이 대비가 당락을 갈랐다.' Only include axes where the winner's grade clearly beats the losers'\n"
+        "   (winner 상 vs loser 하). Rank by decisiveness, MOST decisive first. Ground BOTH sides strictly in\n"
+        "   BLIND_GRADES (winner strengths + loser weaknesses) and reuse their (p.N). Never invent.\n"
         "4. gap_notes: brief reflection on whether the blind ranking matched the actual outcome\n"
         "   - If aligned (blind top == actual winner): note that design quality likely drove the decision\n"
         "   - If diverged: hypothesize undocumented external factors (정무적·발주처 선호·시공사 관계 등)\n"
@@ -147,15 +156,15 @@ def _make_reveal_static(facility_type: str) -> str:
         "\n"
         f"axis_keys: {ax['axes_key_str']}\n"
         "\n"
-        "key_differentiators: max_{max_global} sentences (~{global_chars} chars each)\n"
-        "winner_strengths: max_{max_global} sentences (~{global_chars} chars each)\n"
-        "loser_weaknesses: max_{max_global} sentences (~{global_chars} chars each)\n"
+        "key_differentiators: max_{max_kd} items (~{kd_chars} chars each) — the decisive win↔lose contrasts, most decisive first\n"
+        "winner_strengths: max_{max_wl} items (~{wl_chars} chars each), SPECIFIC + (p.N)\n"
+        "loser_weaknesses: max_{max_wl} items (~{wl_chars} chars each), SPECIFIC + (p.N)\n"
         "gap_notes: 1-2 sentences (~80 chars total) in Korean\n"
         "concept_comparison: one entry per axis_key, each ~150-250 chars Korean, citing every submission that has data\n"
         "\n"
         "OUTPUT_ONLY_JSON:\n"
         "{\n"
-        '  "key_differentiators": ["<max_3>"],\n'
+        '  "key_differentiators": ["<max_4 contrast statements>"],\n'
         '  "winner_strengths": ["<max_3>"],\n'
         '  "loser_weaknesses": ["<max_3>"],\n'
         '  "gap_notes": "<Korean ~80chars>",\n'
@@ -317,8 +326,10 @@ def _build_reveal_prompt_parts(
     원본 extracted_data·brief는 재전송하지 않음 — Pass 1 결과 내부 strengths/weaknesses가 근거."""
     results_map = {s["company"]: s.get("result", "unknown") for s in submissions}
     static = (_make_reveal_static(facility_type)
-              .replace("{max_global}", "3")
-              .replace("{global_chars}", "35"))
+              .replace("{max_kd}", "4")       # key_differentiators — 헤드라인 대비, 여유
+              .replace("{kd_chars}", "70")
+              .replace("{max_wl}", "3")        # winner_strengths/loser_weaknesses — 구체·간결
+              .replace("{wl_chars}", "45"))
     dynamic = (
         "ACTUAL_RESULTS:\n" + _compact(results_map) + "\n\n"
         "BLIND_GRADES (from Pass 1, identities now revealed):\n" + _compact(blind_result)

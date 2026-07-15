@@ -17,6 +17,31 @@ FT = "public"
 AXES = axes_keys_for(FT)
 
 
+class TestRevealPromptSharpening:
+    """Layer 2 — 리빌 프롬프트 심화(대비·구체성·인과)가 되돌려지지 않게 잠금."""
+
+    def _prompt(self):
+        static, _ = comp._build_reveal_prompt_parts(
+            [{"company": "A", "result": "win"}, {"company": "B", "result": "lose"}],
+            {"submissions": {}}, FT)
+        return static
+
+    def test_no_unreplaced_placeholders(self):
+        import re
+        assert re.search(r"\{max_\w+\}|\{kd_chars\}|\{wl_chars\}|\{global_chars\}", self._prompt()) is None
+
+    def test_contrast_and_specificity_rules(self):
+        p = self._prompt()
+        assert "SPECIFICITY RULE" in p            # 일반론 금지·구체 무브 인용
+        assert "당락을 갈랐다" in p                 # 명시적 win↔lose 대비 포맷
+        assert "Never invent" in p and "(p.N)" in p   # 환각·인용 가드 유지
+
+    def test_sizes_tuned(self):
+        p = self._prompt()
+        assert "max_4" in p and "70 chars" in p    # key_differentiators 여유
+        assert "45 chars" in p                     # winner/loser 간결·구체
+
+
 # ── 순수 함수 ─────────────────────────────────────────────────────────────────
 
 class TestAnonymize:
