@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { GRADE_COLOR, GRADE_BG, toGrade } from '../../constants'
+import { toGrade, gradeLabel, gradeLabelColor, gradeLabelBg } from '../../constants'
 import { useMeta } from '../../hooks/useMeta'
 
 const TRANSITION_MS = 240
@@ -202,8 +202,8 @@ const s = {
     minWidth: 22,
     padding: '1px 7px',
     borderRadius: 10,
-    background: grade ? GRADE_BG[grade] : 'var(--color-bg-surface-alt)',
-    color: grade ? GRADE_COLOR[grade] : 'var(--color-text-faint)',
+    background: grade ? gradeLabelBg(grade) : 'var(--color-bg-surface-alt)',
+    color: grade ? gradeLabelColor(grade) : 'var(--color-text-faint)',
     fontWeight: 'var(--font-weight-bold)',
     fontSize: 'var(--font-size-xs)',
     textAlign: 'center',
@@ -275,7 +275,7 @@ function AxisAccordion({ axisKey, axisData, label }) {
         title={hasDetail ? '클릭하여 상세 보기' : undefined}
       >
         <span style={s.axisName} title={label}>{label}</span>
-        <span style={s.gradeBadge(grade)}>{grade || '—'}</span>
+        <span style={s.gradeBadge(grade)}>{gradeLabel(grade) || '—'}</span>
         {hasDetail && <span style={s.chevron(open)}>▼</span>}
       </div>
       {open && hasDetail && (

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { GRADE_COLOR, GRADE_BG, toGrade } from '../../constants'
+import { toGrade, gradeLabel, gradeLabelColor, gradeLabelBg } from '../../constants'
 import { useMeta } from '../../hooks/useMeta'
 
 /**
@@ -91,10 +91,10 @@ function AxisCard({ axisId, axisData, companies, colors, selected }) {
                 <div style={{ marginBottom: 6 }}>
                   <span style={{
                     display: 'inline-block', padding: '3px 12px', borderRadius: 14,
-                    background: GRADE_BG[toGrade(d)], color: GRADE_COLOR[toGrade(d)],
-                    fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-size-base)', letterSpacing: 1,
+                    background: gradeLabelBg(toGrade(d)), color: gradeLabelColor(toGrade(d)),
+                    fontWeight: 'var(--font-weight-bold)', fontSize: 'var(--font-size-sm)', letterSpacing: 0.5,
                   }}>
-                    {toGrade(d)}
+                    {gradeLabel(toGrade(d))}
                   </span>
                 </div>
               )}

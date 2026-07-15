@@ -3,7 +3,7 @@ import { getFacilityTypes, runMyProjectPipeline, getMyProjectDeepReportUrl, getB
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 import PageDistChart from '../common/PageDistChart'
-import { GRADE_COLOR, GRADE_BG, toGrade } from '../../constants'
+import { toGrade, gradeLabel, gradeLabelColor, gradeLabelBg } from '../../constants'
 
 const RESULT_OPTIONS = [
   { value: 'win', label: '당선', color: 'var(--color-success)', bg: 'var(--color-success-bg)' },
@@ -67,9 +67,9 @@ const s = {
   },
   gradePill: (grade) => ({
     display: 'inline-block', padding: '3px 12px', borderRadius: 14,
-    background: GRADE_BG[grade] || 'var(--color-border)',
-    color: GRADE_COLOR[grade] || 'var(--color-text-faint)',
-    fontWeight: 'var(--font-weight-bold)', fontSize: 13, letterSpacing: 1,
+    background: gradeLabelBg(grade),
+    color: gradeLabelColor(grade),
+    fontWeight: 'var(--font-weight-bold)', fontSize: 13, letterSpacing: 0.5,
   }),
   listItem: {
     fontSize: 13, color: '#374151', padding: '3px 0', lineHeight: 1.5,
@@ -103,7 +103,7 @@ function DiagnosisPanel({ diagnosis }) {
                 {AXIS_KR[axis] || axis}
               </div>
               <div style={{ flex: 1 }}>
-                {grade ? <span style={s.gradePill(grade)}>{grade}</span> : <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>-</span>}
+                {grade ? <span style={s.gradePill(grade)}>{gradeLabel(grade)}</span> : <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>-</span>}
               </div>
               {compliance && (
                 <div style={{

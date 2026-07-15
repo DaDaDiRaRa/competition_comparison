@@ -17,19 +17,25 @@ PALETTE = [
 COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미충족', 'unclear': '불명'}
 
 
-from services.grade_helpers import GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade
+from services.grade_helpers import (
+    GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade,
+    grade_label as _grade_label, grade_label_colors as _grade_label_colors,
+    grade_label_ring as _grade_label_ring,
+)
 from services.citation_check import flags_band_html as citation_flags_band
 from services.report_badges import ai_badge as _ai_badge, fact_interp_legend as _fact_interp_legend
 from services.report_theme import inject_theme
 
 
 def _grade_badge(grade) -> str:
-    if grade not in _GRADE_COLORS:
+    # 표시는 3단계 라벨(우수/보통/미흡), 내부 등급은 A~E 유지.
+    label = _grade_label(grade)
+    if not label:
         return '<span style="color:#6b7280;font-size:13px">-</span>'
-    fg, bg = _GRADE_COLORS[grade]
+    fg, bg = _grade_label_colors(grade)
     return (
         f'<span style="display:inline-block;padding:3px 12px;border-radius:14px;'
-        f'background:{bg};color:{fg};font-weight:700;font-size:14px;letter-spacing:1px">{grade}</span>'
+        f'background:{bg};color:{fg};font-weight:700;font-size:13px;letter-spacing:0.5px">{label}</span>'
     )
 
 
@@ -921,7 +927,7 @@ def _generate_dashboard_section(
             # notes = 축별 판정 한 줄 → 카드 헤드라인으로 승격(굵게 + 등급색 좌측 바, 꼬리 절삭).
             # 강점/약점 알약은 그 아래 근거로. "다 글" → 판정 먼저 스캔.
             verdict = _strip_grade_tail(str(notes)) if notes else ''
-            _gc = _GRADE_COLORS.get(grade, ('#6b7280', ''))[0]
+            _gc = _grade_label_ring(grade)
             verdict_html = (
                 f'<div class="db-card-verdict" style="border-left-color:{_gc}">{html.escape(verdict)}</div>'
                 if verdict else ''
@@ -1159,11 +1165,11 @@ def generate_comparison_report(
             if not strengths and not notes:
                 continue
             label     = _axis_labels_ko.get(axis, axis)
-            grade_txt = f" [{grade}]" if grade else ""
+            grade_txt = f" [{_grade_label(grade)}]" if grade else ""
             tags      = "".join(f'<span class="tag tag-strength">{html.escape(str(t))}</span>' for t in strengths)
             # notes = 판정 한 줄 → 축 라벨 아래 헤드라인(굵게 + 등급색 바, 꼬리 절삭). 태그는 근거.
             _verdict  = _strip_grade_tail(str(notes)) if notes else ""
-            _gc       = _GRADE_COLORS.get(grade, ('#6b7280', ''))[0]
+            _gc       = _grade_label_ring(grade)
             axis_items += (
                 f'<div class="w-axis"><div class="w-axis-label">{label}{grade_txt}</div>'
                 + (f'<div class="w-axis-verdict" style="border-left-color:{_gc}">{html.escape(_verdict)}</div>'

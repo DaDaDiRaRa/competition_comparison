@@ -27,7 +27,7 @@ body { font-family: var(--sans);
 .hdr-ring { width: 100px; height: 100px; border-radius: 50%; border-width: 5px;
             border-style: solid; display: flex; flex-direction: column;
             align-items: center; justify-content: center; flex-shrink: 0; }
-.hdr-ring-score { font-size: 30px; font-weight: 700; }
+.hdr-ring-score { font-size: 20px; font-weight: 700; }
 .hdr-ring-label { font-size: 11px; color: #6b7280; }
 .hdr-info { flex: 1; }
 .hdr-title { font-size: 22px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
@@ -68,7 +68,7 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 .axis-ring { width: 60px; height: 60px; border-radius: 50%; border-width: 4px; border-style: solid;
              display: flex; flex-direction: column; align-items: center;
              justify-content: center; flex-shrink: 0; }
-.axis-ring-score { font-size: 20px; font-weight: 700; }
+.axis-ring-score { font-size: 14px; font-weight: 700; }
 .axis-ring-sub { font-size: 9px; color: #6b7280; }
 .axis-body { flex: 1; min-width: 0; }
 .axis-name { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
@@ -100,7 +100,10 @@ from services.report_theme import inject_theme
 # 공유 디자인 토큰(건원 RED + 명조/Montserrat) 주입 — 단일 소스.
 _CSS = inject_theme(_CSS)
 
-from services.grade_helpers import GRADE_RING_COLORS as _GRADE_RING_COLORS, to_grade as _to_grade_base
+from services.grade_helpers import (
+    GRADE_RING_COLORS as _GRADE_RING_COLORS, to_grade as _to_grade_base,
+    grade_label as _grade_label, grade_label_ring as _grade_label_ring,
+)
 from services.citation_check import flags_band_html as citation_flags_band
 from services.report_badges import ai_badge as _ai_badge, fact_interp_legend as _fact_interp_legend
 
@@ -110,7 +113,8 @@ def _to_grade(d) -> str | None:
 
 
 def _grade_color(grade) -> str:
-    return _GRADE_RING_COLORS.get(grade, "#6b7280")
+    # 3단계 라벨색(우수=초록·보통=앰버·미흡=빨강)으로 링·뱃지 색 통일. 내부 등급은 A~E 유지.
+    return _grade_label_ring(grade) if grade else "#6b7280"
 
 
 def _esc(text) -> str:
@@ -125,7 +129,7 @@ def _render_header(diagnosis: dict, facility_type_label: str) -> str:
     color = _grade_color(grade)
     score_html = (
         f'<div class="hdr-ring" style="border-color:{color}">'
-        f'<span class="hdr-ring-score" style="color:{color}">{grade}</span>'
+        f'<span class="hdr-ring-score" style="color:{color}">{_grade_label(grade)}</span>'
         f'<span class="hdr-ring-label">종합등급</span>'
         f'</div>'
     ) if grade else ""
@@ -281,7 +285,7 @@ def _render_axes(axes: dict, axes_meta: dict) -> str:
         color = _grade_color(grade)
         ring = (
             f'<div class="axis-ring" style="border-color:{color}">'
-            f'<span class="axis-ring-score" style="color:{color}">{grade}</span>'
+            f'<span class="axis-ring-score" style="color:{color}">{_grade_label(grade)}</span>'
             f'<span class="axis-ring-sub">등급</span>'
             f'</div>'
         ) if grade else ""

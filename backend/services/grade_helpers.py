@@ -15,6 +15,28 @@ GRADE_COLORS: dict[str, tuple[str, str]] = {
 # fg-only variant — used by diagnosis ring/donut charts
 GRADE_RING_COLORS: dict[str, str] = {k: fg for k, (fg, _) in GRADE_COLORS.items()}
 
+# ── 3단계 표시 라벨 (내부는 A~E 유지, 임원용 표시만 단어) ──────────────────────
+# A~E 5단계는 순위·차별화·패턴 계산의 내부 신호로 그대로 두고, 리포트/UI 뱃지에만
+# 우수/보통/미흡 3단계를 노출한다(임원 정밀도 논쟁 최소화, 2026-07 임원 요청).
+# 같은 단어에 다른 색이 붙지 않도록 색도 3단계로 collapse (우수=A색·보통=C색·미흡=E색).
+GRADE_LABEL_3: dict[str, str] = {"A": "우수", "B": "우수", "C": "보통", "D": "미흡", "E": "미흡"}
+_LABEL_COLOR_KEY: dict[str, str] = {"A": "A", "B": "A", "C": "C", "D": "E", "E": "E"}
+
+
+def grade_label(grade) -> str:
+    """A~E → '우수|보통|미흡' 표시 라벨. 알 수 없으면 ''."""
+    return GRADE_LABEL_3.get(grade, "")
+
+
+def grade_label_colors(grade) -> tuple[str, str]:
+    """3단계 라벨 색 (fg, bg). 우수=초록·보통=앰버·미흡=빨강. 알 수 없으면 회색."""
+    return GRADE_COLORS.get(_LABEL_COLOR_KEY.get(grade, ""), ("#6b7280", "#f3f4f6"))
+
+
+def grade_label_ring(grade) -> str:
+    """3단계 라벨 링/전경색."""
+    return grade_label_colors(grade)[0]
+
 
 def to_grade(d, *, check_overall: bool = False) -> str | None:
     """Extract A-E grade from an axis or diagnosis dict.

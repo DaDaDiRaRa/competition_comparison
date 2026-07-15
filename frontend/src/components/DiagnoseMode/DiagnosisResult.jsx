@@ -1,4 +1,4 @@
-import { COMPLIANCE_COLOR, GRADE_COLOR, toGrade } from '../../constants'
+import { COMPLIANCE_COLOR, toGrade, gradeLabel, gradeLabelColor } from '../../constants'
 import { useMeta } from '../../hooks/useMeta'
 import PageDistChart from '../common/PageDistChart'
 
@@ -173,14 +173,14 @@ function RequirementMapping({ mapping, axisLabel }) {
 
 function GradeRing({ grade }) {
   if (!grade) return null
-  const color = GRADE_COLOR[grade] || 'var(--color-text-faint)'
+  const color = gradeLabelColor(grade)
   return (
     <div style={{
       width: 64, height: 64, borderRadius: '50%',
       border: `4px solid ${color}`, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     }}>
-      <span style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 'var(--font-weight-bold)', color }}>{grade}</span>
+      <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-bold)', color }}>{gradeLabel(grade)}</span>
       <span style={{ fontSize: 9, color: 'var(--color-text-faint)' }}>등급</span>
     </div>
   )
@@ -264,7 +264,7 @@ export default function DiagnosisResult({ data, pattern }) {
   const axisLabel = (key) => _axisLabel(ft, key)
 
   const overallGrade = toGrade(data)
-  const overallColor = GRADE_COLOR[overallGrade] || 'var(--color-text-faint)'
+  const overallColor = gradeLabelColor(overallGrade)
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -279,8 +279,8 @@ export default function DiagnosisResult({ data, pattern }) {
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            <span style={{ fontSize: 36, fontWeight: 'var(--font-weight-bold)', color: overallColor }}>
-              {overallGrade}
+            <span style={{ fontSize: 24, fontWeight: 'var(--font-weight-bold)', color: overallColor }}>
+              {gradeLabel(overallGrade)}
             </span>
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-faint)' }}>종합등급</span>
           </div>

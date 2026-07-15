@@ -11,7 +11,10 @@ import html
 from config import facility_label as _facility_label, axes_for as _axes_for
 
 
-from services.grade_helpers import GRADE_COLORS as _GRADE_COLOR
+from services.grade_helpers import (
+    GRADE_COLORS as _GRADE_COLOR,
+    grade_label as _grade_label, grade_label_colors as _grade_label_colors,
+)
 from services.citation_check import flags_band_html as citation_flags_band
 from services.quant_validator import flags_band_html as quant_flags_band
 
@@ -183,11 +186,13 @@ def _esc(s) -> str:
 
 
 def _grade_badge(grade: str | None) -> str:
-    if not grade or grade not in _GRADE_COLOR:
+    # 표시는 3단계 라벨(우수/보통/미흡), 내부 등급 A~E 유지.
+    label = _grade_label(grade)
+    if not label:
         return ('<span style="color:#adb5bd;font-size:13px">—</span>')
-    fg, bg = _GRADE_COLOR[grade]
+    fg, bg = _grade_label_colors(grade)
     return (f'<span class="grade-pill" style="color:{fg};background:{bg}">'
-            f'{_esc(grade)}</span>')
+            f'{_esc(label)}</span>')
 
 
 def _bullet_list(items, css_class: str = "bullet-list") -> str:
