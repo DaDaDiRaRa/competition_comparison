@@ -1,6 +1,6 @@
 # 설계공모 경쟁분석 시스템 — SPEC.md
 
-> **작성 기준일:** 2026-07-01 · **개정:** 2026-07-14 (대지·법 연동 반영)  
+> **작성 기준일:** 2026-07-01 · **개정:** 2026-07-15 (한 방 비교·프로젝트/지침서 삭제·인용 사후검증·디자인 토큰 단일소스·아카이브 BM25·OOM 8Gi 대응)  
 > 이 문서는 소스 코드 직접 분석과 CLAUDE.md(ground truth)를 근거로 작성됩니다. 코드에서 직접 확인되지 않은 사항은 **(추정)** 으로 표시합니다.
 
 ---
@@ -94,7 +94,7 @@ competition_comparison/
 │   │   ├── myproject_analyzer.py          # MyProject deep analysis (LLM 1콜)
 │   │   ├── myproject_report_generator.py  # deep HTML (LLM 0)
 │   │   └── brief_proposal_report_generator.py  # 제안서 HTML (LLM 0)
-│   └── tests/                    # 479 테스트 (2026-07-14)
+│   └── tests/                    # 581 테스트 (2026-07-15)
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx               # 7탭 구조, MetaProvider/ApiKeyGate 래핑
@@ -123,7 +123,9 @@ competition_comparison/
 4. **저장:** `db_manager._atomic_write()` (JSON), `_sync_write()` (HTML). 개별 제출물 리포트 즉시 생성.
 5. **SSE 이벤트:** `stage` / `progress` (page 번호 포함) / `done` / `error`. 모든 이벤트에 `_timestamp` (epoch ms) 필수.
 
-비교분석은 추출과 분리되어 있음 — `POST /api/accumulate/projects/{ft}/{cid}/rerun-compare`를 별도 호출해야 합니다. `POST /api/accumulate/projects/{ft}/{cid}/rerender-report`는 LLM 없이 HTML만 재생성합니다.
+**한 방 비교(`run`의 `run_compare` 폼, 기본 OFF·프론트 체크박스 기본 ON):** 켜져 있고 제출물 2개↑이면 추출 직후 같은 `run` 안에서 `compare_submissions`(2-pass)+패턴+비교리포트+아카이브 재인덱싱까지 수행하고 `complete`에 `comparison`을 동봉(`report_available:true`). 비교 실패는 비치명(`compare_error` 이벤트, 추출물 유지), <2면 `compare_skipped`. 껐을 때 비교분석은 분리 — `POST /api/accumulate/projects/{ft}/{cid}/rerun-compare`를 별도 호출. `POST .../rerender-report`는 LLM 없이 HTML만 재생성.
+
+**프로젝트 삭제:** `DELETE /api/accumulate/projects/{ft}/{cid}` → `db_manager.delete_project`(폴더 rmtree, path traversal 가드) 후 시설 패턴·아카이브 인덱스 재구축.
 
 **MyProject 심층 분석:** `POST /api/accumulate/run-single` 엔드포인트 경유. 단일 등록 시 `myproject_analyzer.deep_analyze()` 호출 → `_deep.json` + `_deep.html` 생성. LLM 1콜 (`max_tokens=16000`, `temperature=0.3`), 축 당 5-10 강점, 3-8 약점, 각 항목 `(p.N)` 페이지 인용 포함.
 
@@ -242,7 +244,9 @@ competition_comparison/
 
 **엔드포인트:** `POST /api/accumulate/cross-compare` (SSE)
 
-여러 프로젝트에서 선택한 제출물들을 교차 비교합니다. `crossCompare(items)` 클라이언트 함수가 items 배열을 JSON 문자열로 FormData에 `items_json`으로 전송합니다. 결과는 `_cross_reports/*.html`로 저장되며, `GET /api/accumulate/cross-compare/reports`로 목록 조회, `GET /cross-compare/reports/{filename}`으로 개별 리포트를 서빙합니다.
+여러 프로젝트에서 선택한 제출물들을 교차 비교합니다. `crossCompare(items)` 클라이언트 함수가 items 배열을 JSON 문자열로 FormData에 `items_json`으로 전송합니다. 결과는 `_cross_reports/*.html`로 저장되며, `GET /api/accumulate/cross-compare/reports`로 목록 조회(`has_data` 플래그 포함), `GET /cross-compare/reports/{filename}`으로 개별 리포트를 서빙합니다.
+
+**다공모 지침서:** 서로 다른 공모 제출물이면 공통 지침서가 없으므로, 제출물별로 자기 공모 지침서 요약(`_brief_digest`)을 `extracted_data._brief_context`에 실어 `comparator`가 각 제출물을 **자기 지침서로** 판정(단일 공모면 그 지침서를 공통 기준). **구조화 persist:** HTML 옆에 `save_cross_compare_data`로 `{stem}.json`(meta·items·submissions·comparison) 저장 → `POST /cross-compare/reports/{filename}/rerender`로 **LLM 재호출 없이** 재렌더.
 
 ### 3.6 아카이브 검색 (Archive)
 
@@ -252,6 +256,7 @@ competition_comparison/
 - **테이블 컬럼:** `competition_id, facility_type, ranking, key_differentiators, winner_patterns, concept_keywords, gap_analysis_alignment, extra_meta`.
 - **토크나이저:** trigram (SQLite 3.34+ 필요) 시도 후 OperationalError 시 unicode61 폴백.
 - **검색 흐름:** 2자 이하 → 전체 리스트 반환. 3자 이상 → Claude (`settings.model_id_classify`, `max_tokens=300`) 가 2-5개 FTS 키워드 추출 → FTS5 OR 쿼리 (키워드 각각 쌍따옴표 감쌈, `_fts_escape()` 처리). LLM 실패 시 직접 키워드 검색 폴백.
+- **BM25 관련도 랭킹:** `_ranked_match`가 `ORDER BY bm25(archive_fts, _BM25_WEIGHTS)`로 best-first 정렬(컬럼 가중치=시설유형·컨셉키워드 우대), bm25 미지원 SQLite면 무순 폴백. keyword·natural 검색 공유. ⚠trigram은 2자 미만 미매칭(병원·시청 단독 무결과).
 - **extra_meta:** MyProject deep analysis 텍스트 (`concept_narrative`, `search_keywords` 등) + 조달 유형 동의어 + 사업 단계 동의어 포함.
 - **result_filter:** `'win'` (gap_analysis.actual_winners truthy), `'lose'` (falsy), `'all'`.
 
@@ -494,7 +499,7 @@ Brief 결과에는 미부착. `error` 필드는 `pattern_builder._build_quant_st
 
 ### 6.3 테스트 커버리지
 
-**백엔드 테스트 스위트:** `backend/tests/`, 총 479건 (pytest 확인, 2026-07-14). arch-law 연동은 `test_arch_law_client.py`(20, 네트워크 0 — ⚠mock 은 실제 응답 형태로: applicable_reviews dict·높이_일조.pass null·law_refs), 대지·법 렌더는 `test_brief_pipeline.py`(TestSiteLawSection·TestSiteLawXlsx)·`test_brief_proposal_report.py`(법적 골격 패널·다부지·조문 각주).
+**백엔드 테스트 스위트:** `backend/tests/`, 총 581건 (pytest 확인, 2026-07-15). arch-law 연동은 `test_arch_law_client.py`(20, 네트워크 0 — ⚠mock 은 실제 응답 형태로: applicable_reviews dict·높이_일조.pass null·law_refs), 대지·법 렌더는 `test_brief_pipeline.py`(TestSiteLawSection·TestSiteLawXlsx)·`test_brief_proposal_report.py`(법적 골격 패널·다부지·조문 각주).
 
 | 테스트 파일 | 케이스 수 | 주요 커버리지 |
 |------------|----------|-------------|
@@ -571,7 +576,7 @@ PyWebView 통합: `target='_blank'` 링크 클릭 시 `window.pywebview.api.open
 - 노출 인터페이스: `ready`, `facilityLabel(key)`, `facilityGroup(key)`, `facilityTypes`, `pageTypeLabel(key)`, `axesFor(facility_type)`, `axisLabel(facility_type, axis_key)`.
 - `GET /api/settings/meta`가 단일 소스. 하드코딩 금지.
 
-**비교 리포트 HTML:** 독립 문서 — `report_generator.py::_CSS`의 `:root` CSS 변수 26개로 별도 관리.
+**자체완결 리포트 HTML:** 독립 문서(프론트 `kunwon-tokens.css` 못 씀) — **`report_theme.py::THEME_VARS` 단일 소스**(건원 RED + 명조/Montserrat)를 7개 generator(비교·진단·개별·MyProject·제안서·플레이북·체크리스트)가 `inject_theme()`(`/*__THEME__*/` 마커, 없으면 예외) 또는 prepend로 주입. 색·폰트는 `var(--accent)` 등 공유 토큰 참조, 레이아웃 CSS만 각자 보유. LLM 텍스트는 `html.escape` 필수. 진단·비교 리포트는 `report_badges`(AI 해석 배지=`var(--ai)`)로 사실/추론 구분, 경고 밴드는 `report_theme.warning_band` 공용 shell(`citation_check`·`quant_validator` 공유).
 
 **등급 색상 (`grade_helpers.py::GRADE_COLORS`):**
 - A: 전경 `#16a34a`, 배경 `#dcfce7`

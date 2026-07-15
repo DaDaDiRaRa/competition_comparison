@@ -58,6 +58,18 @@ def _fmt_num(n: int) -> str:
     return f'{n:02d}'
 
 
+# 판정 한 줄 끝의 "…되어 B 수준" 꼬리 절삭 — 등급 배지가 대체(중복 제거). (p.N) 인용은 보존.
+# 연결어미(되어/으로/여/이 되어) 있으면 함께 제거해 자연스러운 명사구로. 못 자르면 원문 유지.
+_GRADE_TAIL = re.compile(r"\s*(?:되어|이\s*되어|으로|여)?\s*[A-E]\s*수준(?=\s*[\(（]|\s*$)")
+
+
+def _strip_grade_tail(notes: str) -> str:
+    if not notes:
+        return notes
+    stripped = _GRADE_TAIL.sub("", notes).strip()
+    return stripped or notes
+
+
 def _sec_title(num: int, text: str) -> str:
     return (
         f'<div class="sec-title">'
@@ -672,8 +684,13 @@ body {
   font-size: 14px; font-weight: 700; color: var(--accent-gold);
   margin-bottom: 14px; letter-spacing: 0.05em;
 }
-.w-axis { margin-bottom: 14px; }
-.w-axis-label { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 5px; }
+.w-axis { margin-bottom: 16px; }
+.w-axis-label { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px;
+                letter-spacing: 0.02em; }
+/* 판정 헤드라인 — 굵게 + 등급색 좌측 바 (border-left-color 인라인). 근거 태그는 아래 연하게 */
+.w-axis-verdict { font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.5;
+                  padding-left: 11px; border-left: 3px solid var(--border-strong); margin-bottom: 7px; }
+.w-axis-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 
 /* ── Dashboard / accordion section ── */
 .db-wrap {
@@ -746,9 +763,15 @@ body {
   font-size: 12px; color: var(--text-secondary);
   line-height: 1.65; margin-bottom: 10px;
 }
+/* 판정 헤드라인 — 카드 맨 위 굵은 한 줄 + 등급색 좌측 바 (border-left-color 인라인) */
+.db-card-verdict {
+  font-size: 13px; font-weight: 700; color: var(--text-primary);
+  line-height: 1.5; margin: 2px 0 11px; padding-left: 10px;
+  border-left: 3px solid var(--border-strong);
+}
 .db-card-tags { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .db-card-tag {
-  font-size: 11.5px; padding: 4px 9px; border-radius: 4px;
+  font-size: 11px; padding: 3px 9px; border-radius: 4px;
   font-weight: 500; line-height: 1.5;
 }
 /* 의미색 알약 — 강점=초록, 약점=빨강 (회사색 대신 의미로 구분, 대비 확보) */
@@ -875,7 +898,14 @@ def _generate_dashboard_section(
                 f'<div class="db-card-score">{_grade_badge(grade)}</div>'
             ) if grade else ''
 
-            notes_html = f'<div class="db-card-notes">{html.escape(str(notes))}</div>' if notes else ''
+            # notes = 축별 판정 한 줄 → 카드 헤드라인으로 승격(굵게 + 등급색 좌측 바, 꼬리 절삭).
+            # 강점/약점 알약은 그 아래 근거로. "다 글" → 판정 먼저 스캔.
+            verdict = _strip_grade_tail(str(notes)) if notes else ''
+            _gc = _GRADE_COLORS.get(grade, ('#6b7280', ''))[0]
+            verdict_html = (
+                f'<div class="db-card-verdict" style="border-left-color:{_gc}">{html.escape(verdict)}</div>'
+                if verdict else ''
+            )
 
             # 강점=초록 알약, 약점=빨강 알약 (전 항목, 회색 중복 줄 제거 → 대비↑·길이↓)
             # LLM 텍스트라 '<'·'>' 포함 가능 → escape (마크업 깨짐 방지)
@@ -894,7 +924,7 @@ def _generate_dashboard_section(
             cards_html += (
                 f'<div class="db-axis-card" data-company="{company}" style="border-top:3px solid {color}">'
                 f'<div class="db-card-company" style="color:{color}">{company}</div>'
-                f'{score_html}{notes_html}'
+                f'{score_html}{verdict_html}'
                 f'<div class="db-card-tags">{tags_html}</div>'
                 f'{comp_badge}'
                 f'</div>'
@@ -1197,10 +1227,14 @@ def generate_comparison_report(
             label     = _axis_labels_ko.get(axis, axis)
             grade_txt = f" [{grade}]" if grade else ""
             tags      = "".join(f'<span class="tag tag-strength">{html.escape(str(t))}</span>' for t in strengths)
+            # notes = 판정 한 줄 → 축 라벨 아래 헤드라인(굵게 + 등급색 바, 꼬리 절삭). 태그는 근거.
+            _verdict  = _strip_grade_tail(str(notes)) if notes else ""
+            _gc       = _GRADE_COLORS.get(grade, ('#6b7280', ''))[0]
             axis_items += (
                 f'<div class="w-axis"><div class="w-axis-label">{label}{grade_txt}</div>'
-                f'<div>{tags}</div>'
-                + (f'<div class="notes">{html.escape(str(notes))}</div>' if notes else "")
+                + (f'<div class="w-axis-verdict" style="border-left-color:{_gc}">{html.escape(_verdict)}</div>'
+                   if _verdict else "")
+                + f'<div class="w-axis-tags">{tags}</div>'
                 + "</div>"
             )
 

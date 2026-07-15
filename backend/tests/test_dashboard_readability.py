@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import axes_for
-from services.report_generator import generate_comparison_report
+from services.report_generator import generate_comparison_report, _strip_grade_tail
 
 AX = list(axes_for("public").keys())[0]
 
@@ -58,6 +58,31 @@ class TestDashboardReadability:
         html = generate_comparison_report(meta, subs, comp)
         assert "전면폭 &lt;3m" in html and "&gt; 400%" in html
         assert "전면폭 <3m" not in html   # raw 없음
+
+    def test_verdict_headline_rendered(self):
+        # notes(판정 한 줄)가 굵은 판정 헤드라인(db-card-verdict/w-axis-verdict)으로 승격
+        cell = {"grade": "B", "strengths": ["좋음 (p.3)"], "weaknesses": [],
+                "brief_compliance": "partial",
+                "notes": "역상 전략 독창적이나 집중도 분산되어 B 수준 (p.7)"}
+        meta = {"competition_name": "t", "facility_type": "public"}
+        subs = [{"company": "건원", "result": "win", "total_pages": 10, "extracted_data": {}},
+                {"company": "B", "result": "lose", "total_pages": 10, "extracted_data": {}}]
+        comp = {"submissions": {"건원": {AX: dict(cell)}, "B": {AX: dict(cell)}},
+                "concept_comparison": {}, "winner_strengths": [], "loser_weaknesses": [],
+                "gap_analysis": {}}
+        html = generate_comparison_report(meta, subs, comp)
+        assert 'class="db-card-verdict"' in html and 'class="w-axis-verdict"' in html
+        # 꼬리 "B 수준" 절삭 + (p.N) 보존 (렌더된 요소 기준 — CSS 정의 아님)
+        verdict = html.split('class="db-card-verdict"')[1].split("</div>")[0]
+        assert "집중도 분산" in verdict and "B 수준" not in verdict and "(p.7)" in verdict
+
+    def test_strip_grade_tail(self):
+        assert _strip_grade_tail("집중도 분산되어 B 수준 (p.7)") == "집중도 분산 (p.7)"
+        assert _strip_grade_tail("MEP 정량 미흡으로 B 수준 (p.43)") == "MEP 정량 미흡 (p.43)"
+        # 문장 중간의 '수준'은 절삭 안 함 (꼬리 아닐 때 보수적)
+        assert _strip_grade_tail("15.5% 미달로 D 수준, BF 미명시 (p.16)").endswith("BF 미명시 (p.16)")
+        # 판정 없으면 원문 유지
+        assert _strip_grade_tail("일반 문장 (p.5)") == "일반 문장 (p.5)"
 
     def test_grid_guarantees_min_card_width(self):
         # 밀도 개선: 회사 수만큼 균등분할(repeat(N,1fr)) → 최소폭 260px 보장 + 가로스크롤
