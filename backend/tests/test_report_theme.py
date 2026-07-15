@@ -8,7 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from services.report_theme import THEME_VARS, ACCENT, SANS, SERIF
+import pytest
+
+from services.report_theme import THEME_VARS, ACCENT, SANS, SERIF, inject_theme, warning_band
 
 import services.report_generator as compare_rg
 import services.diagnosis_report_generator as diag_rg
@@ -40,6 +42,24 @@ class TestTheme:
         assert "--accent:#e60012" in THEME_VARS
         assert "Montserrat" in SANS and "Noto Serif KR" in SERIF
         assert "--serif:" in THEME_VARS and "--sans:" in THEME_VARS
+
+    def test_inject_theme_replaces_marker(self):
+        assert inject_theme("a/*__THEME__*/b") == f"a{THEME_VARS}b"
+
+    def test_inject_theme_raises_on_missing_marker(self):
+        # 마커 유실 → 조용한 no-op 대신 로드타임 실패
+        with pytest.raises(ValueError):
+            inject_theme("body{color:red}")
+
+    def test_warning_band_shared_shell(self):
+        from services.citation_check import flags_band_html as cit
+        from services.quant_validator import flags_band_html as qnt
+        shell = "border:1px solid #f0b6b6;background:#fff6f6"
+        b1 = cit([{"value": "p.9", "field": "f", "bound": 5, "context": "x"}])
+        b2 = qnt([{"severity": "error", "detail": "건축>대지"}])
+        # 두 밴드가 동일 공용 shell(warning_band) 사용
+        assert shell in b1 and shell in b2
+        assert shell in warning_band("t", "<li>r</li>")
 
 
 class TestAllReportsInjectTheme:

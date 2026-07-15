@@ -96,9 +96,9 @@ table.req-table td { padding: 6px 8px; border-bottom: 1px solid #f9fafb; vertica
 </style>
 """
 
-from services.report_theme import THEME_VARS
+from services.report_theme import inject_theme
 # 공유 디자인 토큰(건원 RED + 명조/Montserrat) 주입 — 단일 소스.
-_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
+_CSS = inject_theme(_CSS)
 
 from services.grade_helpers import GRADE_RING_COLORS as _GRADE_RING_COLORS, to_grade as _to_grade_base
 from services.citation_check import flags_band_html as citation_flags_band

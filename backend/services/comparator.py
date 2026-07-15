@@ -521,6 +521,9 @@ def _run_diagnose_sync(
         result = parse_json_response(raw_text)
     except Exception as e:
         raise ValueError(f"진단 JSON 파싱 실패: {e}\n원문(앞 200자): {raw_text[:200]}")
+    if not isinstance(result, dict):
+        # LLM 이 최상위 배열 등 비-dict 반환 시 아래 result[...] 대입이 TypeError → 의도된 에러로 변환
+        raise ValueError(f"진단 JSON 이 객체가 아님 (type={type(result).__name__})\n원문(앞 200자): {raw_text[:200]}")
     # 인용 사후검증 (LLM 0): 환각 쪽번호만 flag. 비치명.
     try:
         result["_citation_flags"] = check_citations_diagnosis(result, submission_data)

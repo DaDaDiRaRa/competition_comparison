@@ -23,6 +23,8 @@ from __future__ import annotations
 import html
 import re
 
+from services.report_theme import warning_band
+
 # (p.12) · (p.12,13) · (p. 12) · (p.?) — 쉼표·공백·물음표 허용
 _CITE = re.compile(r"\(p\.\s*([0-9][0-9,\s]*|\?)\s*\)", re.IGNORECASE)
 
@@ -209,13 +211,8 @@ def flags_band_html(flags: list[dict], limit: int = 20) -> str:
             f'<li style="margin:3px 0"><b>{val}</b>{html.escape(bound_txt)} · '
             f'<span style="color:#666;font-size:12px">{loc}</span>{ctx_txt}</li>'
         )
-    return (
-        '<section style="border:1px solid #f0b6b6;background:#fff6f6;border-radius:8px;'
-        'padding:14px 18px;margin:18px 0">'
-        '<div style="font-weight:700;color:#c0392b;font-size:14px;margin-bottom:8px">'
+    return warning_band(
         '⚠ 근거 미확인 인용 — 아래 (p.N)은 문서 실제 쪽수를 벗어납니다 '
-        '(환각 쪽번호일 수 있으니 원문 확인 필요)</div>'
-        '<ul style="margin:0;padding-left:20px;font-size:13px;color:#333">'
-        + "".join(rows) +
-        '</ul></section>'
+        '(환각 쪽번호일 수 있으니 원문 확인 필요)',
+        "".join(rows),
     )

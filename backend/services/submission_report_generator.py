@@ -82,9 +82,9 @@ body { font-family: var(--sans);
 </style>
 """
 
-from services.report_theme import THEME_VARS
+from services.report_theme import inject_theme
 # 공유 디자인 토큰(건원 RED + 명조/Montserrat) 주입 — 단일 소스.
-_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
+_CSS = inject_theme(_CSS)
 
 
 def _safe_list(val) -> list:
@@ -576,7 +576,8 @@ def _kv_card(label: str, value, unit: str = '', hl: bool = False) -> str:
         value = int(value)
     disp = f'{value:,}' if isinstance(value, (int, float)) else str(value)
     col = 'var(--ink)' if hl else '#1f2937'
-    brd = ';border:1px solid var(--ink)33' if hl else ''
+    # rgba 로 명시 (var(--ink)33 은 --ink 가 6자리 hex 일 때만 유효한 취약 결합 — #141414≈rgb(20,20,20))
+    brd = ';border:1px solid rgba(20,20,20,0.2)' if hl else ''
     u = f' <span style="font-size:11px;color:#4b5563">{unit}</span>' if unit else ''
     return (
         f'<div style="background:#f9fafb;border-radius:6px;padding:12px 16px{brd}">'

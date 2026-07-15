@@ -16,6 +16,8 @@ feasibility_export "추가만/수정 없음" 원칙. 관대하게: 명백한 모
 flag 스키마: {"rule": str, "severity": "error"|"warn", "fields": [str...], "detail": str(한국어)}
 """
 
+from services.report_theme import warning_band
+
 # 허용 오차/범위 (관대 — false positive 회피). 값 수정 시 회귀: tests/test_quant_validator.py
 COVERAGE_TOL_PP = 3.0    # 건폐율 입력 vs 계산 허용 오차(%포인트)
 FAR_TOL_PP = 5.0         # 용적률 입력 vs 지상연면적 계산 허용 오차(%포인트)
@@ -133,14 +135,9 @@ def flags_band_html(flags: "list | None", limit: int = 12) -> str:
             f'font-weight:700;color:#fff;background:{color};border-radius:4px;'
             f'padding:1px 6px;margin-right:6px">{chip}</span>{detail}</li>'
         )
-    return (
-        '<section style="border:1px solid #f0b6b6;background:#fff6f6;border-radius:8px;'
-        'padding:14px 18px;margin:18px 0">'
-        '<div style="font-weight:700;color:#c0392b;font-size:14px;margin-bottom:8px">'
-        '⚠ 정량 데이터 정합성 경고 — 추출 수치 간 모순 (추출 오류 가능, 원문 확인 필요)</div>'
-        '<ul style="margin:0;padding-left:20px;font-size:13px;color:#333">'
-        + "".join(rows) +
-        '</ul></section>'
+    return warning_band(
+        '⚠ 정량 데이터 정합성 경고 — 추출 수치 간 모순 (추출 오류 가능, 원문 확인 필요)',
+        "".join(rows),
     )
 
 

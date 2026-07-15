@@ -171,9 +171,9 @@ body { font-family: var(--sans);
 </style>
 """
 
-from services.report_theme import THEME_VARS
+from services.report_theme import inject_theme
 # 공유 디자인 토큰 주입 — 단일 소스(myproject 는 이미 건원 RED, 폰트·중립 팔레트 통일).
-_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
+_CSS = inject_theme(_CSS)
 
 
 def _esc(s) -> str:

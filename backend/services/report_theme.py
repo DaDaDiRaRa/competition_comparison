@@ -33,3 +33,33 @@ ACCENT = "#e60012"
 def theme_style_block() -> str:
     """`<style>` 태그로 감싼 토큰 블록 — 자체 <style> 이 없는 리포트가 head 에 삽입."""
     return f"<style>{THEME_VARS}</style>"
+
+
+_THEME_MARKER = "/*__THEME__*/"
+
+
+def inject_theme(css: str) -> str:
+    """CSS 안 `/*__THEME__*/` 마커를 THEME_VARS 로 치환. 마커가 없으면 예외.
+
+    각 generator 가 `_CSS.replace(marker, THEME_VARS)` 를 직접 하면 마커를 실수로 지웠을 때
+    조용히 no-op → THEME 미주입인데 에러·테스트 실패도 없어 브랜딩이 소리없이 깨진다.
+    이 헬퍼는 그 드리프트를 로드타임 실패로 바꾼다.
+    """
+    if _THEME_MARKER not in css:
+        raise ValueError(f"THEME 마커({_THEME_MARKER})가 CSS 에 없습니다 — THEME_VARS 미주입")
+    return css.replace(_THEME_MARKER, THEME_VARS)
+
+
+def warning_band(title_html: str, rows_html: str) -> str:
+    """경고 밴드 공용 shell (빨강 계열, 인라인 스타일 자체완결).
+
+    citation_check·quant_validator 의 flags_band_html 이 공유 — 바이트 동일하던 outer
+    chrome 을 한 곳으로 통합(스타일 드리프트 방지). title/rows 는 호출측이 escape 완료해 전달.
+    """
+    return (
+        '<section style="border:1px solid #f0b6b6;background:#fff6f6;border-radius:8px;'
+        'padding:14px 18px;margin:18px 0">'
+        f'<div style="font-weight:700;color:#c0392b;font-size:14px;margin-bottom:8px">{title_html}</div>'
+        f'<ul style="margin:0;padding-left:20px;font-size:13px;color:#333">{rows_html}</ul>'
+        '</section>'
+    )

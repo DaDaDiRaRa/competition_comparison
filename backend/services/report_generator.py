@@ -20,7 +20,7 @@ COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미�
 from services.grade_helpers import GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade
 from services.citation_check import flags_band_html as citation_flags_band
 from services.report_badges import ai_badge as _ai_badge, fact_interp_legend as _fact_interp_legend
-from services.report_theme import THEME_VARS
+from services.report_theme import inject_theme
 
 
 def _grade_badge(grade) -> str:
@@ -813,7 +813,7 @@ body {
 """
 
 # 공유 디자인 토큰(건원 RED + 명조/Montserrat) 주입 — 단일 소스(report_theme).
-_CSS = _CSS.replace("/*__THEME__*/", THEME_VARS)
+_CSS = inject_theme(_CSS)
 
 
 def _generate_dashboard_section(
