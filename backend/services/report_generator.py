@@ -452,7 +452,7 @@ body {
   padding: 14px 18px; margin-top: 16px;
 }
 .insight-title {
-  font-size: 11px; font-weight: 700; color: var(--accent-gold);
+  font-size: 12px; font-weight: 700; color: var(--accent-gold);
   letter-spacing: 0.1em; text-transform: uppercase;
   margin-bottom: 10px;
 }
@@ -486,8 +486,8 @@ body {
 .matrix-table tbody td {
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: top;
-  padding: 7px 10px;
-  font-size: 11px; line-height: 1.55;
+  padding: 9px 12px;
+  font-size: 12px; line-height: 1.55;
 }
 .matrix-table tbody .mtx-floor {
   font-weight: 700; color: var(--text-secondary);
@@ -508,7 +508,7 @@ body {
 .mtx-cat-office    { background: var(--cat-office); }
 .mtx-cat-core      { background: var(--cat-core); }
 .mtx-cat-other     { background: var(--cat-other); }
-.mtx-prog-list { display: flex; flex-direction: column; gap: 2px; }
+.mtx-prog-list { display: flex; flex-direction: column; gap: 4px; }
 .mtx-prog-item { font-size: 11px; }
 
 /* Legend */
@@ -532,8 +532,8 @@ body {
 }
 .qt-table thead th {
   background: var(--bg-deep); color: var(--text-muted);
-  font-weight: 700; font-size: 10px;
-  letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 700; font-size: 11px;
+  letter-spacing: 0.04em;
   border-bottom: 2px solid var(--border-strong);
   white-space: nowrap;
 }
@@ -551,7 +551,7 @@ body {
 }
 .qt-table .qt-val { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .qt-table .qt-val.qt-winner { color: var(--accent-gold); font-weight: 700; }
-.qt-table .qt-empty { color: var(--text-fade); }
+.qt-table .qt-empty { color: var(--text-muted); }
 .qt-table .qt-unit { color: var(--text-faint); font-weight: 400; font-size: 10px; margin-left: 2px; }
 .qt-table thead .qt-rec, .qt-table tbody .qt-rec {
   background: var(--accent-gold-soft);
@@ -611,8 +611,8 @@ body {
   border: 1px solid rgba(160,174,192,0.2);
 }
 .sub-company { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
-.sub-pages { font-size: 11px; color: var(--text-faint); letter-spacing: 0.05em; }
-.sub-pages strong { color: var(--text-secondary); font-weight: 600; }
+.sub-pages { font-size: 13px; color: var(--text-secondary); letter-spacing: 0.03em; }
+.sub-pages strong { color: var(--text-primary); font-weight: 700; }
 
 /* Comparison table */
 .cmp-table { width: 100%; border-collapse: separate; border-spacing: 0; }
@@ -688,7 +688,7 @@ body {
   font-size: 22px; font-weight: 800;
   letter-spacing: -0.015em; color: var(--text-primary);
 }
-.db-count { font-size: 12px; color: var(--text-faint); margin-top: 8px; margin-bottom: 22px; }
+.db-count { font-size: 13px; color: var(--text-secondary); margin-top: 8px; margin-bottom: 22px; }
 
 .db-filter-bar {
   display: flex; gap: 8px; margin-bottom: 22px;
@@ -725,15 +725,15 @@ body {
 .db-axis-header:hover { background: rgba(144,205,244,0.04); }
 .db-axis-icon { font-size: 16px; opacity: 0.7; color: var(--accent-gold); }
 .db-axis-name { font-weight: 600; letter-spacing: 0.02em; color: var(--text-primary); }
-.db-chevron { margin-left: auto; opacity: 0.5; font-size: 11px; transition: transform 0.2s; }
+.db-chevron { margin-left: auto; opacity: 0.85; font-size: 11px; transition: transform 0.2s; }
 .db-axis-content { padding: 0 20px 20px; }
-.db-cards-grid { display: grid; gap: 10px; }
+.db-cards-grid { display: grid; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
 .db-axis-card {
   background: var(--bg-deep); border-radius: 4px; padding: 16px; min-width: 0;
   border: 1px solid var(--border-subtle);
 }
 .db-card-company {
-  font-size: 11px; font-weight: 700; margin-bottom: 8px;
+  font-size: 13px; font-weight: 700; margin-bottom: 8px;
   letter-spacing: 0.05em;
 }
 .db-card-score {
@@ -745,13 +745,14 @@ body {
   font-size: 12px; color: var(--text-secondary);
   line-height: 1.65; margin-bottom: 10px;
 }
-.db-card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.db-card-tags { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .db-card-tag {
-  font-size: 10px; padding: 2px 8px; border-radius: 3px;
-  font-weight: 500;
+  font-size: 11.5px; padding: 4px 9px; border-radius: 4px;
+  font-weight: 500; line-height: 1.5;
 }
-.db-card-strength { font-size: 11px; margin-bottom: 4px; color: var(--text-muted); }
-.db-card-weakness { font-size: 11px; color: var(--text-muted); }
+/* 의미색 알약 — 강점=초록, 약점=빨강 (회사색 대신 의미로 구분, 대비 확보) */
+.db-tag-str  { background: var(--tag-strength-bg); color: var(--tag-strength); }
+.db-tag-weak { background: var(--tag-weakness-bg); color: var(--tag-weakness); }
 .db-compliance-badge {
   font-size: 10px; padding: 3px 9px; border-radius: 3px;
   color: #fff; font-weight: 600; display: inline-block; margin-top: 8px;
@@ -859,7 +860,7 @@ def _generate_dashboard_section(
                 cards_html += (
                     f'<div class="db-axis-card" data-company="{company}" style="border-top:3px solid {color}">'
                     f'<div class="db-card-company" style="color:{color}">{company}</div>'
-                    f'<div style="color:#444;font-size:12px">데이터 없음</div></div>'
+                    f'<div style="color:var(--text-secondary);font-size:12px">데이터 없음</div></div>'
                 )
                 continue
 
@@ -875,21 +876,12 @@ def _generate_dashboard_section(
 
             notes_html = f'<div class="db-card-notes">{notes}</div>' if notes else ''
 
-            all_kws = [f'▲ {s}' for s in strengths[:3]] + [f'▼ {w}' for w in weaknesses[:3]]
+            # 강점=초록 알약, 약점=빨강 알약 (전 항목, 회색 중복 줄 제거 → 대비↑·길이↓)
             tags_html = ''.join(
-                f'<span class="db-card-tag" style="background:{_hex_to_rgba(color, 0.13)};color:{color}">{kw}</span>'
-                for kw in all_kws
+                f'<span class="db-card-tag db-tag-str">▲ {s}</span>' for s in strengths
+            ) + ''.join(
+                f'<span class="db-card-tag db-tag-weak">▼ {w}</span>' for w in weaknesses
             )
-
-            str_html = (
-                f'<div class="db-card-strength"><span style="color:#16a34a;font-weight:600">▲ 강점 </span>'
-                f'<span style="color:#999">{" · ".join(strengths)}</span></div>'
-            ) if strengths else ''
-
-            weak_html = (
-                f'<div class="db-card-weakness"><span style="color:#FF7043;font-weight:600">▼ 약점 </span>'
-                f'<span style="color:#999">{" · ".join(weaknesses)}</span></div>'
-            ) if weaknesses else ''
 
             comp_label = COMP_LABEL_MAP.get(compliance, '')
             comp_badge = (
@@ -902,7 +894,7 @@ def _generate_dashboard_section(
                 f'<div class="db-card-company" style="color:{color}">{company}</div>'
                 f'{score_html}{notes_html}'
                 f'<div class="db-card-tags">{tags_html}</div>'
-                f'{str_html}{weak_html}{comp_badge}'
+                f'{comp_badge}'
                 f'</div>'
             )
 
@@ -914,7 +906,7 @@ def _generate_dashboard_section(
             f'<span class="db-chevron" id="db-chevron-{axis}" style="{chevron_style}">▼</span>'
             f'</button>'
             f'<div class="db-axis-content" id="db-content-{axis}" style="{content_style}">'
-            f'<div class="db-cards-grid" id="db-grid-{axis}" style="grid-template-columns:repeat({n},1fr)">'
+            f'<div class="db-cards-grid" id="db-grid-{axis}" style="grid-template-columns:repeat({n},minmax(260px,1fr))">'
             f'{cards_html}</div></div></div>'
         )
 
@@ -950,7 +942,7 @@ def _dashboard_js(axes: list) -> str:
         card.style.display = show ? '' : 'none';
         if (show) visible++;
       }});
-      grid.style.gridTemplateColumns = 'repeat('+Math.max(visible,1)+', 1fr)';
+      grid.style.gridTemplateColumns = 'repeat('+Math.max(visible,1)+', minmax(260px,1fr))';
     }});
     document.querySelectorAll('.db-filter-btn').forEach(function(btn) {{
       var co = btn.getAttribute('data-company');
@@ -1228,7 +1220,7 @@ def generate_comparison_report(
     _cov = comparison.get("_coverage_note")
     coverage_section = (
         '<div style="border:1px solid #ddd;background:#fafafa;border-radius:8px;'
-        'padding:12px 16px;margin:16px 0;font-size:13px;color:#555">'
+        'padding:12px 16px;margin:16px 0;font-size:13px;color:var(--text-secondary)">'
         f'ℹ {re.sub(r"[<>]", "", str(_cov))}</div>'
     ) if _cov else ""
 
