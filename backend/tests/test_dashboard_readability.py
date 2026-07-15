@@ -102,6 +102,11 @@ class TestDashboardReadability:
         assert "kd-insight" in c and "컨셉 완성도가 갈랐다" in c
         # 폴백: 축·인과 구분자 없으면 본문만
         assert "kd-insight" not in _render_keydiff_card("그냥 한 문장", {})
+        # 가드: 일반 하이픈 ' - '로는 인과 분할 안 함 (본문 내 오분할 방지)
+        assert "kd-insight" not in _render_keydiff_card("당선작은 A-1블록 - 낙선작은 채광 불리", {})
+        # 가드: 콜론이 본문 중간(당선작 포함)이면 축 헤더로 승격 안 함 (내용 손실 방지)
+        g = _render_keydiff_card("당선작은 X전략: Y로 앞섰다", {})
+        assert "kd-axis" not in g and "X전략" in g
 
     def test_summary_top_block(self):
         # 핵심 요약(핵심 차별화 + 당선요인↔낙선함정 + 정합성 노트)이 대시보드 아코디언보다 위
@@ -138,9 +143,12 @@ class TestDashboardReadability:
         assert "설계 외 요인" in html
 
     def test_strip_grade_tail(self):
+        # 꼬리(문장 끝, 선택적 (p.N) 뒤)만 절삭 + 인용 보존
         assert _strip_grade_tail("집중도 분산되어 B 수준 (p.7)") == "집중도 분산 (p.7)"
         assert _strip_grade_tail("MEP 정량 미흡으로 B 수준 (p.43)") == "MEP 정량 미흡 (p.43)"
-        # 문장 중간의 '수준'은 절삭 안 함 (꼬리 아닐 때 보수적)
+        # ⚠ 문장 중간의 'X 수준(p.N)에…'는 절삭 안 함 (over-strip 방지 — 리뷰 지적)
+        assert _strip_grade_tail("A 수준(p.1)에 도달했으나 B동 미흡") == "A 수준(p.1)에 도달했으나 B동 미흡"
+        # 문장 중간의 '수준'(끝 아님)도 유지
         assert _strip_grade_tail("15.5% 미달로 D 수준, BF 미명시 (p.16)").endswith("BF 미명시 (p.16)")
         # 판정 없으면 원문 유지
         assert _strip_grade_tail("일반 문장 (p.5)") == "일반 문장 (p.5)"

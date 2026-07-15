@@ -12,7 +12,6 @@ from config import facility_label as _facility_label, axes_for as _axes_for
 
 
 from services.grade_helpers import (
-    GRADE_COLORS as _GRADE_COLOR,
     grade_label as _grade_label, grade_label_colors as _grade_label_colors,
 )
 from services.citation_check import flags_band_html as citation_flags_band

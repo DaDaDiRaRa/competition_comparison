@@ -87,7 +87,7 @@ function DiagnosisPanel({ diagnosis }) {
         낙선 원인 분석
         {overallGrade && (
           <span style={{ fontSize: 13, fontWeight: 'var(--font-weight-regular)', color: 'var(--color-text-muted)', marginLeft: 10 }}>
-            종합 등급: <span style={s.gradePill(overallGrade)}>{overallGrade}</span>
+            종합 판정: <span style={s.gradePill(overallGrade)}>{gradeLabel(overallGrade)}</span>
           </span>
         )}
       </div>

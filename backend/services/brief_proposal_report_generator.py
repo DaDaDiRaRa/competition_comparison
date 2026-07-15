@@ -67,6 +67,26 @@ header.doc h1{font-family:var(--sans);margin:14px 0 0;font-size:44px;font-weight
 header.doc .meta{font-family:var(--sans);margin-top:16px;color:var(--muted);font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 18px}
 .disclaimer{font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-left:3px solid var(--faint);padding:12px 16px;margin:18px 0 4px;line-height:1.6}
 
+/* ── 컨셉 표지 (오프닝) ───────────────── */
+.cc-cover{margin:26px 0 8px;padding:44px 40px 40px;text-align:center;
+  background:linear-gradient(180deg,#fafafa,#fff);border:1px solid var(--line);border-radius:14px}
+.cc-eyebrow{font-family:var(--sans);font-size:11px;letter-spacing:.24em;font-weight:800;
+  color:var(--muted);text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:20px}
+.cc-keyword{font-family:var(--sans);font-size:64px;font-weight:900;color:var(--accent);
+  letter-spacing:-.01em;line-height:1.02;word-break:keep-all}
+.cc-keyword::before,.cc-keyword::after{content:"–";color:var(--faint);margin:0 .28em;font-weight:400}
+.cc-tagline{font-family:var(--sans);font-size:30px;font-weight:800;color:var(--ink);
+  letter-spacing:-.01em;margin:18px 0 4px;word-break:keep-all}
+.cc-axes{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin:30px 0 8px}
+.cc-axis{flex:1 1 210px;max-width:290px;text-align:left;border-top:3px solid var(--accent);
+  padding:12px 4px 0;min-width:180px}
+.cc-term{font-family:var(--sans);font-size:19px;font-weight:900;color:var(--ink);letter-spacing:-.01em}
+.cc-term .cc-en{font-family:var(--sans);font-size:11.5px;font-weight:600;color:var(--muted);margin-left:8px;letter-spacing:0}
+.cc-ko{font-size:13px;color:var(--text);margin-top:5px;line-height:1.55}
+.cc-basis{margin-top:8px}
+.cc-note{font-size:12px;color:var(--muted);margin-top:26px;line-height:1.6}
+@media(max-width:640px){.cc-keyword{font-size:44px}.cc-tagline{font-size:22px}}
+
 /* ── 섹션 ─────────────────────────── */
 section.sec{margin:52px 0 0;scroll-margin-top:20px}
 section.sec>h2{display:flex;align-items:center;gap:12px;margin:0 0 18px;
@@ -469,6 +489,55 @@ _SITE_FIELDS = [
     ("natural_assets",   "자연 자원"),
     ("special_context",  "특이사항"),
 ]
+
+
+def _concept_cover_html(proposal: dict) -> str:
+    """concept_hook → 덱 오프닝 '컨셉 표지' 슬라이드. 없으면 ''.
+
+    한 단어 파르티(keyword) + 3축 슬로건(tagline) + 각 축 ko/en + 근거 앵커.
+    'AI 제안 시안'으로 명시(사실 아님) — 팀이 갈아끼울 출발점. 색은 건원 RED 토큰.
+    LLM 이 근거 못 달아 concept_hook 을 생략하면 렌더도 skip(graceful).
+    """
+    hook = proposal.get("concept_hook")
+    if not isinstance(hook, dict):
+        return ""
+    keyword = (hook.get("keyword") or "").strip()
+    if not keyword:
+        return ""
+    axes = [a for a in (hook.get("axes") or []) if isinstance(a, dict) and (a.get("term") or "").strip()]
+
+    tagline = (hook.get("tagline") or "").strip()
+    if not tagline and axes:
+        tagline = " · ".join(_esc(a.get("term")) for a in axes)
+    else:
+        tagline = _esc(tagline)
+
+    ax_rows = []
+    for a in axes:
+        term = _esc((a.get("term") or "").strip())
+        ko = _esc((a.get("ko") or "").strip())
+        en = (a.get("en") or "").strip()
+        en_html = f'<span class="cc-en">{_esc(en)}</span>' if en else ""
+        basis_html = _basis_html(a.get("basis"))
+        ax_rows.append(
+            '<div class="cc-axis">'
+            f'<div class="cc-term">{term}{en_html}</div>'
+            + (f'<div class="cc-ko">{ko}</div>' if ko else "")
+            + (f'<div class="cc-basis">{basis_html}</div>' if basis_html else "")
+            + '</div>'
+        )
+    axes_html = f'<div class="cc-axes">{"".join(ax_rows)}</div>' if ax_rows else ""
+
+    return (
+        '<section class="cc-cover">'
+        f'<div class="cc-eyebrow">{_AI_BADGE}<span>PROJECT VALUE · 컨셉 시안</span></div>'
+        f'<div class="cc-keyword">{_esc(keyword)}</div>'
+        + (f'<div class="cc-tagline">{tagline}</div>' if tagline else "")
+        + axes_html
+        + '<div class="cc-note">AI가 배점·대지 근거 위에서 압축한 <b>컨셉 시안</b>입니다 — '
+          '확정된 컨셉이 아니라 설계팀이 갈아끼우는 출발점입니다.</div>'
+        '</section>'
+    )
 
 
 def _hero_html(site_context: dict | None, image_b64: str = "") -> str:
@@ -1472,6 +1541,7 @@ def to_proposal_html(
     if proposal.get("model_id"):
         meta_bits.append(f'<span>모델 {_esc(proposal.get("model_id"))}</span>')
 
+    cover_html = _concept_cover_html(proposal)   # 덱 오프닝 컨셉 표지 (concept_hook 있을 때만)
     hero_html = _hero_html(site_context, site_image_b64)
     site_html = _site_context_html(site_context, site_image_b64, compact=bool(hero_html))
     facts_html = _facts_band_html(feasibility)
@@ -1544,6 +1614,7 @@ def to_proposal_html(
         "<header class='doc'><div class='eyebrow'>PROJECT PROPOSAL</div>"
         f"<h1>{_esc(title)}</h1>"
         f"<div class='meta'>{''.join(meta_bits)}</div></header>"
+        + cover_html
         + hero_html
         + "<div class='disclaimer'>"
         "본 제안서는 추출된 지침서 데이터에 근거한 <b>수주 전략 가설</b>입니다. "

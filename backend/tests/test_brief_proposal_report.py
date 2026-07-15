@@ -512,3 +512,59 @@ class TestLawRefsFootnote:
         sc["law_texts"]["건축법 제61조 (일조)"]["content"] = "<script>x</script>"
         h = to_proposal_html({"executive_summary": "x"}, site_context=sc)
         assert "<script>x</script>" not in h
+
+
+class TestConceptCover:
+    """concept_hook → 덱 오프닝 컨셉 표지. AI 제안 시안(사실 아님) + 근거 앵커 + graceful."""
+
+    _HOOK = {
+        "executive_summary": "s",
+        "concept_hook": {
+            "keyword": "TRANSIT",
+            "tagline": "되살림 · 잇기 · 지속",
+            "axes": [
+                {"term": "되살림", "ko": "쇠퇴 역세권 재생", "en": "Urban Regeneration",
+                 "basis": ["배점: 도시맥락 25%", "p.12"]},
+                {"term": "잇기", "ko": "기술과 사람 연결", "en": "Smart City", "basis": ["강조: 스마트"]},
+                {"term": "지속", "ko": "환경·구조 지속가능", "en": "", "basis": ["p.30"]},
+            ],
+        },
+    }
+
+    def test_cover_renders(self):
+        h = to_proposal_html(self._HOOK, "테스트")
+        assert "cc-cover" in h and "TRANSIT" in h
+        assert "되살림" in h and "쇠퇴 역세권 재생" in h and "Urban Regeneration" in h
+        assert "근거 배점: 도시맥락 25% · p.12" in h   # 축별 근거 앵커
+
+    def test_cover_labeled_ai_proposal(self):
+        # 사실 아님 — AI 제안 시안 명시 + 배지 (앱의 2층 분리 원칙)
+        h = to_proposal_html(self._HOOK, "x")
+        assert "컨셉 시안" in h and "ai-badge" in h
+        assert "설계팀이 갈아끼우는 출발점" in h
+
+    def test_cover_at_deck_top(self):
+        # 표지는 덱 오프닝 — disclaimer/cockpit 본문보다 앞 (body 마커 기준)
+        h = to_proposal_html(self._HOOK, "x")
+        assert h.find('<section class="cc-cover">') < h.find("<div class='disclaimer'>")
+
+    def test_tagline_autobuild(self):
+        # tagline 없으면 axes.term 이어붙임
+        p = {"concept_hook": {"keyword": "WEAVE", "axes": [{"term": "A"}, {"term": "B"}]}}
+        h = to_proposal_html(p, "x")
+        assert "A · B" in h
+
+    def test_graceful_without_hook(self):
+        # concept_hook 없거나 keyword 비면 표지 skip (LLM 이 근거 못 달아 생략한 경우).
+        # '.cc-cover' CSS 는 늘 있으니 body 의 <section> 마커로 판정.
+        M = '<section class="cc-cover">'
+        assert M not in to_proposal_html({"executive_summary": "s"}, "x")
+        assert M not in to_proposal_html({"concept_hook": {"keyword": ""}}, "x")
+        assert M not in to_proposal_html({"concept_hook": "not-a-dict"}, "x")
+
+    def test_cover_xss_escaped(self):
+        p = {"concept_hook": {"keyword": "<script>a</script>",
+                              "axes": [{"term": "<b>x", "ko": "<i>y", "basis": ["<u>z"]}]}}
+        h = to_proposal_html(p, "x")
+        assert "<script>a</script>" not in h and "&lt;script&gt;a&lt;/script&gt;" in h
+        assert "<b>x" not in h and "&lt;b&gt;x" in h

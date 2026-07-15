@@ -126,6 +126,13 @@ _PROPOSAL_INSTRUCTION = (
     "[출력 JSON — 정확히 이 키만, 다른 키 추가 금지]\n"
     "{\n"
     '  "executive_summary": "첫 문장은 \'발주처가 명시 요구 너머로 진짜 원하는 것\'을 배점·강조 분포로 읽어 한 줄로 박아라(예: 배점이 시민개방에 쏠리면 진짜 주제는 사무소가 아니라 열린 청사). 이어서 무게중심과 권장 전략 방향을 2~4문장. 제안형.",\n'
+    '  "concept_hook": {\n'
+    '    "keyword": "이 프로젝트 가치를 한 단어(또는 짧은 합성어)로 압축한 파르티 — 제안·시안. 배점 무게중심·win_themes·대지에서 도출(예: TRANSIT, WEAVE, 열린마당). 억지 조어·근거 없는 슬로건 금지, 못 만들면 concept_hook 전체 생략.",\n'
+    '    "tagline": "keyword 를 푸는 3축 슬로건 한 줄 — axes 의 term 을 이어붙인 것 (예: \'되살림 · 잇기 · 지속\').",\n'
+    '    "axes": [\n'
+    '      { "term": "축 이름(한 단어, 예: 되살림)", "ko": "이 축이 이 지침서에서 뜻하는 것 한 줄", "en": "영문 병기(선택, 예: Urban Regeneration)",\n'
+    '        "basis": ["이 축이 나온 근거 — 배점 항목명/강조/대지(site_context.키)/p.N. 최소 1개 필수"] }\n'
+    '    ] },\n'
     '  "win_themes": [\n'
     '    { "theme": "수주를 가르는 핵심 테마(차별화 축)",\n'
     '      "rationale": "왜 이게 핵심인지 — 배점/강조 근거에 비춘 제안",\n'
@@ -186,6 +193,12 @@ _PROPOSAL_INSTRUCTION = (
     "}\n"
     "\n"
     "[필드 규칙]\n"
+    "- concept_hook (표지 파르티 — AI 제안 시안): keyword 는 한 단어 압축, axes 는 **정확히 3축**\n"
+    "  으로 이 지침서의 배점 무게중심(scoring_focus 상위)·win_themes·대지 조건에서 도출하라. 각\n"
+    "  축은 **반드시 basis 로 어떤 사실에서 나왔는지 앵커**(못 달면 그 축을 빼고, 3축 못 채우면\n"
+    "  concept_hook 전체를 생략). 아무 프로젝트에나 붙는 뻔한 슬로건(예: '혁신·소통·미래')은\n"
+    "  금지 — 이 지침서 고유의 배점·대지에서만 나온 것이어야 한다. 팀이 갈아끼울 출발점 시안이지\n"
+    "  확정 컨셉이 아니다(사실 아님, 근거 위 추론).\n"
     "- win_themes: **1~2개로 압축**. 공모는 모든 항목을 고루 잘해서가 아니라 1~2개 큰 수로\n"
     "  갈린다. '여기서 당락이 갈린다'를 날카롭게 좁혀라 — 나열식으로 늘리면 도로 요약이 된다.\n"
     "  배점 무게중심(scoring_focus 상위)과 반복 강조가 겹치는 축을 우선.\n"
@@ -438,7 +451,8 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
 async def propose_project(brief_data: dict, facility_type: str = "") -> dict:
     """지침서 기반 수주 제안서 생성 (LLM 1콜). 저장된 _brief.json 재해석, 추가 추출 없음.
 
-    반환은 _proposal 스키마 dict (executive_summary / win_themes / design_directions(+
+    반환은 _proposal 스키마 dict (executive_summary / concept_hook(표지 파르티 — keyword+
+    3축 tagline, 각 축 basis 앵커, 근거 없으면 LLM 이 생략) / win_themes / design_directions(+
     scoring_play·site_rationale) / program_directions / massing_strategy / phasing /
     priorities / risks / kickoff_checklist / open_questions / scoring_focus(결정론) +
     data_confidence / caveats + 메타).

@@ -9,7 +9,7 @@
 
 **설계공모 경쟁분석 시스템(Competition Analyzer)** 은 건축 설계 공모전에서 제출된 제안서 PDF와 공모 지침서(PDF/DOCX/HWP/HWPX)를 자동으로 추출·분류·비교·진단하는 풀스택 웹 애플리케이션입니다. 핵심 목적은 대형 건축사사무소가 다수의 공모 제안서를 체계적으로 분석하고, 과거 당선/낙선 패턴을 축적하여 신규 공모 진단 및 수주 전략 수립에 활용하는 것입니다.
 
-기존의 수작업 비교 방식을 대체하기 위해 Claude AI(Sonnet 4.6 / Opus 4.8)를 LLM 엔진으로 활용하며, 추출된 정량 데이터와 AI 분석 결과를 HTML 리포트로 자동 생성합니다. 평가 결과는 숫자 점수가 아닌 5단계 등급(A/B/C/D/E) 문자열로 표현하여 임원 검토 시 정밀도 논쟁을 최소화합니다.
+기존의 수작업 비교 방식을 대체하기 위해 Claude AI(Sonnet 4.6 / Opus 4.8)를 LLM 엔진으로 활용하며, 추출된 정량 데이터와 AI 분석 결과를 HTML 리포트로 자동 생성합니다. 평가 결과는 숫자 점수가 아닌 등급 문자열로 표현합니다. **내부 계산은 5단계(A/B/C/D/E)** 로 순위·차별화를 산출하되, **리포트·UI 표시는 3단계(우수/보통/미흡)** 로 노출해(A·B→우수, C→보통, D·E→미흡) 임원 검토 시 정밀도 논쟁을 최소화합니다(2026-07 임원 요청).
 
 모든 데이터는 관계형 DB 없이 JSON 파일 시스템으로 저장되며, 운영 환경에서는 GCS 버킷을 GCSFUSE로 마운트하여 사용합니다. `main` 브랜치 push 시 GitHub Actions를 통해 Cloud Run (gen2)에 자동 배포됩니다.
 
@@ -85,7 +85,7 @@ competition_comparison/
 │   │   ├── brief_checklist_exporter.py # 지침서 체크리스트 html/md/xlsx (LLM 0)
 │   │   ├── proposal_number_check.py    # 제안서 근거없는 수치 검산 (LLM 0)
 │   │   ├── archive_search.py     # SQLite FTS5 인메모리
-│   │   ├── grade_helpers.py      # A-E 등급 단일 소스
+│   │   ├── grade_helpers.py      # 등급 단일 소스 (내부 A~E + 표시 3단계 우수/보통/미흡)
 │   │   ├── docx_loader.py        # DOCX 블록 파싱
 │   │   ├── hwpx_loader.py        # HWP/HWPX 블록 파싱
 │   │   ├── report_generator.py           # 비교 HTML (LLM 0)
@@ -143,6 +143,9 @@ competition_comparison/
 - Pass 1 출력(블라인드 등급)과 실제 결과 라벨만 전송. 원본 추출 데이터·brief JSON은 재전송하지 않음 → 토큰 약 80% 절감.
 - `max_tokens=8192`.
 - `concept_comparison` 산출: 시설유형 축마다, Pass 1 결과의 strengths/weaknesses/notes(이미 (p.N) 인용 포함)만 근거로 모든 제출물의 컨셉·설계방향을 한 문단으로 나란히 비교(승/패 프레이밍 아님). 원본 데이터 재전송 없이 Pass 1 산출물만 재가공하므로 토큰 절감 구조를 깨지 않음.
+- **차별화 신호 심화(Layer 2):** `key_differentiators` 는 각 항목을 **명시적 win↔lose 대비 + 인과** 포맷으로 강제 — "당선작은 ~(p.N), 낙선작은 ~(p.M) — 이 대비가 당락을 갈랐다". `winner_strengths`/`loser_weaknesses` 도 SPECIFICITY 규칙(추상어 금지·구체 근거+인용)으로 날카롭게. 크기 상한: `key_differentiators` 4개·70자, `winner_strengths`/`loser_weaknesses` 3개·45자.
+
+**리포트 렌더 구조(`report_generator.py`, LLM 0):** 리포트 최상단에 **핵심 요약** 블록 — ① `key_differentiators` 를 `_render_keydiff_card()` 가 축 헤더 + 본문(당선/낙선 색강조) + 💡 인과 하이라이트의 **구조화 카드**로(그동안 버려지던 신호를 노출), ② 당선 요인 ↔ 낙선 함정 2열(`winner_strengths`/`loser_weaknesses`), ③ 블라인드-실제 정합성 노트(`gap_analysis`, 발산 시 "설계 외 요인" 경고). 그 아래 **당선작 강점 분석**(강점-only — 대표 강점 헤드라인 + 나머지 불릿, 약점·balanced 판정 제거), 그 아래 **설계 축별 비교 분석**(대시보드 아코디언 — 각 카드 notes 를 `_strip_grade_tail()` 로 "B 수준" 꼬리만 절삭한 **판정 헤드라인**으로). 등급은 3단계(우수/보통/미흡) 표기. 순서: 핵심 요약 → 당선작 강점 분석 → 대시보드. 회귀: `tests/test_dashboard_readability.py`.
 
 **Gap Analysis (결정론):** `_compute_gap_analysis()`가 순수 Python으로 산출.
 - `blind_top1`: 블라인드 1위 제출물
@@ -193,7 +196,7 @@ competition_comparison/
 
 **저장 경로:** `{db_path}/_briefs/{YYYYMMDD_HHMMSS}_{facility_type}_{slug}.{json|md|html|xlsx}` (최대 120자).
 
-**complete SSE 이벤트 포함 필드:** `{brief_id, facility_type, total_pages, md_filename, xlsx_filename, html_filename, validation_summary, source_format, has_insight, has_proposal, proposal_filename, has_site_context, site_context, brief_genre, _timestamp}`. `/analyze` 폼 파라미터: `include_insight`(기본 ON)·`include_proposal`(기본 OFF)·`site_address`(선택).
+**complete SSE 이벤트 포함 필드:** `{brief_id, facility_type, total_pages, md_filename, xlsx_filename, html_filename, validation_summary, source_format, has_insight, has_proposal, proposal_filename, has_site_context, site_context, brief_genre, _timestamp}`. `/analyze` 폼 파라미터: `include_insight`(기본 ON)·`include_proposal`(기본 ON)·`site_address`(선택).
 
 **다중 파일 병합 (`_merge_multi_brief_data`):** `design_guidelines_grouped` 전체 연결 후 정규화, `_quantitative` 는 첫 non-null 우선, `page_map`/`total_pages` 합산, 기타 필드는 first-wins. 혼합 포맷 시 `source_format='multi'`.
 
@@ -210,9 +213,10 @@ competition_comparison/
 
 #### 3.4.2 수주 제안서 (brief_proposal)
 
-`POST /api/brief/{brief_id}/propose` 호출, 또는 `/analyze` 폼 **`include_proposal=True`(기본 OFF)** 로 분석과 동시 생성(단계 4.8) — 수집한 대지·법(site_context)을 버튼 없이 바로 융합. 렌더는 `/propose`·`/analyze` 공용 `_render_proposal_html`.
+`POST /api/brief/{brief_id}/propose` 호출, 또는 `/analyze` 폼 **`include_proposal`(기본 ON)** 로 분석과 동시 생성(단계 4.8) — 수집한 대지·법(site_context)을 버튼 없이 바로 융합. 렌더는 `/propose`·`/analyze` 공용 `_render_proposal_html`.
 
 - **역할 ("전략가"):** 처방형 전략. `brief_advisor`(해설가)와 별개 산출물.
+- **컨셉 표지 (`concept_hook`, 덱 오프닝):** 한 단어 파르티 `keyword`(건원 RED 大) + 3축 `tagline` + 축별 `{term, ko, en, basis}`. 배점 무게중심·`win_themes`·대지에서 도출하고 **각 축 basis 앵커 강제**(못 달면 축 제외, 3축 못 채우면 concept_hook 전체 생략 — graceful). 뻔한 범용 슬로건 금지. **사실 아닌 AI 제안 시안** — 렌더(`_concept_cover_html`)가 "AI 해석" 배지 + "팀이 갈아끼우는 출발점" 라벨로 사실과 구분. 결정론 덮어씀 없음(LLM 생략 시 표지 skip).
 - **대지 근거 배치 (`placement_strategy`, 2026-07-14):** zones=[{program, site, plan(8방위+C), level, required(지침서 명시=사실 vs AI 추론), why, draws_on(대지·법·프로그램·배점 교차), basis}] — SVG 조닝/단면 다이어그램(다부지 부지별 분리). site_context.analysis·measured·law_diagnosis 를 배치 근거로 교차 합성.
 - **결정론 백본 재사용:** `brief_advisor._build_advisor_payload()` + `compute_scoring_focus()` 그대로 import (드리프트 차단) — `reference_cases`(시설유형 기존 사례)도 이 payload 를 통해 공유. 기존 `_insight`는 `_prior_insight_digest()`로 요약 주입. `_pattern_signals(facility_type)`로 동일 시설유형 당선/낙선 경향을 `payload["pattern_context"]`에 주입.
 - **사실/제안 2층 분리:** 사실 주장(지침서가 요구하는 것)에는 basis 인용 강제, 전략·접근은 제안 명시.
@@ -578,12 +582,14 @@ PyWebView 통합: `target='_blank'` 링크 클릭 시 `window.pywebview.api.open
 
 **자체완결 리포트 HTML:** 독립 문서(프론트 `kunwon-tokens.css` 못 씀) — **`report_theme.py::THEME_VARS` 단일 소스**(건원 RED + 명조/Montserrat)를 7개 generator(비교·진단·개별·MyProject·제안서·플레이북·체크리스트)가 `inject_theme()`(`/*__THEME__*/` 마커, 없으면 예외) 또는 prepend로 주입. 색·폰트는 `var(--accent)` 등 공유 토큰 참조, 레이아웃 CSS만 각자 보유. LLM 텍스트는 `html.escape` 필수. 진단·비교 리포트는 `report_badges`(AI 해석 배지=`var(--ai)`)로 사실/추론 구분, 경고 밴드는 `report_theme.warning_band` 공용 shell(`citation_check`·`quant_validator` 공유).
 
-**등급 색상 (`grade_helpers.py::GRADE_COLORS`):**
+**등급 색상 (`grade_helpers.py::GRADE_COLORS`, 내부 5단계):**
 - A: 전경 `#16a34a`, 배경 `#dcfce7`
 - B: 전경 `#0891b2`, 배경 `#cffafe`
 - C: 전경 `#ca8a04`, 배경 `#fef3c7`
 - D: 전경 `#ea580c`, 배경 `#fed7aa`
 - E: 전경 `#dc2626`, 배경 `#fee2e2`
+
+**표시 3단계 라벨/색 (`grade_helpers.py::grade_label()`·`grade_label_colors()`·`grade_label_ring()`):** 리포트·UI 는 letter 를 직접 노출하지 않고 3단계로 collapse 해 표기 — `A·B→"우수"`(색 key=A/초록), `C→"보통"`(색 key=C/노랑), `D·E→"미흡"`(색 key=E/빨강). 프론트 단일 소스는 `constants/index.js::gradeLabel()`·`gradeLabelColor()`·`gradeLabelBg()`(백엔드와 동일 매핑, 주석에 "동일 유지" 명시). 구 `score`(0-10)→letter 자동 변환은 §Conventions 참조.
 
 ---
 

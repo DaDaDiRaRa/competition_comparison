@@ -18,7 +18,7 @@ COMP_LABEL_MAP = {'yes': '지침충족', 'partial': '부분충족', 'no': '미�
 
 
 from services.grade_helpers import (
-    GRADE_COLORS as _GRADE_COLORS, to_grade as _to_grade,
+    to_grade as _to_grade,
     grade_label as _grade_label, grade_label_colors as _grade_label_colors,
     grade_label_ring as _grade_label_ring,
 )
@@ -66,7 +66,11 @@ def _fmt_num(n: int) -> str:
 
 # 판정 한 줄 끝의 "…되어 B 수준" 꼬리 절삭 — 등급 배지가 대체(중복 제거). (p.N) 인용은 보존.
 # 연결어미(되어/으로/여/이 되어) 있으면 함께 제거해 자연스러운 명사구로. 못 자르면 원문 유지.
-_GRADE_TAIL = re.compile(r"\s*(?:되어|이\s*되어|으로|여)?\s*[A-E]\s*수준(?=\s*[\(（]|\s*$)")
+# ⚠ 반드시 문장 끝(선택적 (p.N) 인용 뒤)에 있을 때만 절삭 — 중간의 "X 수준(p.N)에…"는 건드리지 않음.
+_GRADE_TAIL = re.compile(
+    r"\s*(?:되어|이\s*되어|으로|여)?\s*(?:[A-E]\s*~\s*)?[A-E]\s*수준"
+    r"(?=\s*(?:[\(（][^)）]*[\)）])?\s*$)"
+)
 
 
 def _strip_grade_tail(notes: str) -> str:
@@ -87,10 +91,14 @@ def _render_keydiff_card(text: str, axis_labels: dict) -> str:
     if ":" in t:
         head, rest = t.split(":", 1)
         head = head.strip()
-        axis = axis_labels.get(head, head)   # 축 키면 한글 라벨, 아니면 원문
-        t = rest.strip()
+        # 축 라벨/키만 헤더로 승격 — 짧고 당선/낙선 키워드가 없을 때만. 본문 절이 콜론 앞에
+        # 오는 경우(예 '당선작은 X전략: Y')엔 분리하지 않아 내용 손실을 막는다.
+        if head and len(head) <= 20 and "당선작" not in head and "낙선작" not in head:
+            axis = axis_labels.get(head, head)   # 축 키면 한글 라벨, 아니면 원문(LLM 이 라벨 직접 출력)
+            t = rest.strip()
+    # 인과 구분은 프롬프트가 강제하는 대시(em/en)만 — 일반 하이픈 ' - '는 본문 내 오분할 위험이라 제외.
     body, insight = t, ""
-    for sep in (" — ", " – ", "—", "–", " - "):
+    for sep in (" — ", " – ", "—", "–"):
         if sep in t:
             body, insight = t.split(sep, 1)
             break
@@ -751,10 +759,6 @@ body {
                padding-left: 11px; border-left: 3px solid var(--border-strong); margin-bottom: 6px; }
 .w-axis-points { margin: 0; padding-left: 27px; list-style: disc; }
 .w-axis-points li { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 2px 0; }
-/* 옛 판정/태그 클래스 잔존 호환 */
-.w-axis-verdict { font-size: 14px; font-weight: 700; color: var(--text-primary); line-height: 1.5;
-                  padding-left: 11px; border-left: 3px solid var(--border-strong); margin-bottom: 7px; }
-.w-axis-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 
 /* ── Dashboard / accordion section ── */
 .db-wrap {
@@ -823,10 +827,6 @@ body {
   margin-bottom: 6px;
 }
 .db-card-score-unit { font-size: 11px; color: var(--text-faint); font-weight: 400; }
-.db-card-notes {
-  font-size: 12px; color: var(--text-secondary);
-  line-height: 1.65; margin-bottom: 10px;
-}
 /* 판정 헤드라인 — 카드 맨 위 굵은 한 줄 + 등급색 좌측 바 (border-left-color 인라인) */
 .db-card-verdict {
   font-size: 13px; font-weight: 700; color: var(--text-primary);
