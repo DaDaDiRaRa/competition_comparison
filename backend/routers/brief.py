@@ -178,10 +178,17 @@ def list_briefs():
         try:
             meta = json.loads(p.read_text(encoding="utf-8"))
             bm   = meta.get("_brief_meta") or {}
+            # 재분석 시 다시 입력받지 않도록 이미 아는 대지 주소를 노출 (site_context 우선, 없으면 추출값)
+            _sc  = meta.get("_site_context") or {}
+            _fes = (meta.get("feasibility_export") or {}).get("sites") or []
+            _site_addr = (_sc.get("matched_address")
+                          or (_fes[0].get("address") if _fes and isinstance(_fes[0], dict) else "")
+                          or "")
             items.append({
                 "brief_id":           p.stem,
                 "facility_type":      bm.get("facility_type", ""),
                 "brief_name":         bm.get("brief_name", ""),
+                "site_address":       _site_addr,
                 "analyzed_at":        bm.get("analyzed_at", ""),
                 "source_format":      bm.get("source_format", "pdf"),
                 "total_pages":        meta.get("total_pages", 0),
@@ -1003,9 +1010,16 @@ async def analyze_site(brief_id: str, req: SiteAnalyzeRequest):
     except Exception as e:
         raise HTTPException(500, f"지침서 JSON 로드 실패: {type(e).__name__}")
 
-    address = req.address.strip()
+    # 주소 미입력 시 이미 아는 값으로 폴백 — 재분석 때 다시 타이핑 안 하도록.
+    address = (req.address or "").strip()
     if not address:
-        raise HTTPException(400, "주소가 비어있습니다.")
+        _sc  = brief_data.get("_site_context") or {}
+        _fes = (brief_data.get("feasibility_export") or {}).get("sites") or []
+        address = (_sc.get("matched_address")
+                   or (_fes[0].get("address") if _fes and isinstance(_fes[0], dict) else "")
+                   or "").strip()
+    if not address:
+        raise HTTPException(400, "대지 주소를 찾을 수 없습니다. 주소를 직접 입력해주세요.")
 
     from services.vworld_analyzer import run_site_analysis
     image_filename = f"{safe_id}_site.jpg"

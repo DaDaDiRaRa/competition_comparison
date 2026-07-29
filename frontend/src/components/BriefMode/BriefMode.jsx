@@ -617,7 +617,8 @@ export default function BriefMode() {
               <button
                 style={{ fontSize: 12, background: 'none', border: 'none', cursor: 'pointer',
                   color: 'var(--color-text-muted)', padding: '2px 6px' }}
-                onClick={() => { setSiteAddr(''); setSiteErr(''); setSiteAnalyzing(false);
+                onClick={() => { const opening = !result._showSiteInput; setSiteErr(''); setSiteAnalyzing(false)
+                  setSiteAddr(opening ? (siteResult?.matched_address || result.site_address || '') : '')  // 아는 주소 자동 채움
                   setResult(prev => ({ ...prev, _showSiteInput: !prev._showSiteInput })) }}
               >
                 {result._showSiteInput ? '닫기' : (result.has_site_context ? '재분석' : '수동 입력')}
@@ -927,9 +928,11 @@ export default function BriefMode() {
                   <button
                     style={{ ...s.historyBtn(false), color: 'var(--color-text-muted)' }}
                     onClick={() => {
-                      setSiteHistoryId(siteHistoryId === item.brief_id ? null : item.brief_id)
+                      const opening = siteHistoryId !== item.brief_id
+                      setSiteHistoryId(opening ? item.brief_id : null)
                       setSiteHistoryErr('')
-                      setSiteHistoryAddr('')
+                      // 이미 아는 대지 주소를 자동 채움 — 재분석 때 다시 입력 안 하도록
+                      setSiteHistoryAddr(opening ? (item.site_address || '') : '')
                     }}
                   >
                     🛰 {item.has_site_context ? '재분석' : '대지분석'}
