@@ -249,7 +249,7 @@ class TestPhase2Interpretation:
         h = to_proposal_html(_PROPOSAL_P2, "x", "y")
         assert "프로그램 방향" in h and "매스 전략" in h and "단계 접근" in h
         assert "저층부에 시민개방형 공유 프로그램 집중" in h
-        assert h.count("AI 해석") >= 4   # 범례 + directions + 3 interp 섹션
+        assert h.count('class="ai-badge"') >= 4   # 범례 + directions + 3 interp 섹션 ('제안' 배지)
         # 각 해석 항목은 근거 앵커를 단다
         assert "site_context.natural_assets" in h
 
@@ -474,47 +474,46 @@ class TestPlacementMultiSite:
         assert "<b>부지1</b>" not in h
 
 
-class TestProgramOrgDiagram:
-    """OMA식 프로그램 조직 스택 — 지침서 필수=본체 플랫폼 / AI 추론=옆탭 aura (LLM 0 SVG)."""
+class TestProgramSectionDiagram:
+    """건물 단면형 조닝 — 층 밴드 + 이름 블록 (채움=지침서 필수 / 점선=제안, LLM 0 SVG)."""
 
     def _z(self, program, level="저층", required=False):
         return {"program": program, "plan": "S", "level": level, "required": required, "why": "근거"}
 
-    def test_org_diagram_present_full_width(self):
+    def test_section_diagram_present_full_width(self):
         ps = {"zones": [self._z("주민센터", "저층", True), self._z("주차", "지하", True)]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert 'aria-label="프로그램 조직 다이어그램"' in h
+        assert 'aria-label="프로그램 단면 다이어그램"' in h
         assert 'grid-column:1/-1' in h                              # 전체폭
-        assert '본체=지침서 필수(플랫폼)' in h
-        # 기존 방위/단면 다이어그램은 유지
-        assert '개념 조닝' in h and '개념 단면' in h
+        assert '채움=지침서 필수' in h                              # 단면 캡션
+        assert '주민센터' in h and 'G.L' in h                       # 이름 블록 + 지반선
+        assert '개념 조닝' in h                                     # 방위 다이어그램 유지
 
-    def test_aura_pushed_to_side_dashed(self):
+    def test_proposal_zone_dashed(self):
         ps = {"zones": [self._z("주민센터", "저층", True),
-                        self._z("전망라운지", "상층", False)]}       # AI 추론 → 옆탭
+                        self._z("전망라운지", "상층", False)]}       # 제안 → 점선 블록
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert 'stroke-dasharray' in h                              # aura 점선 리더/탭
+        assert 'stroke-dasharray' in h                              # 제안 점선 테두리
         assert '전망라운지' in h and '주민센터' in h
 
-    def test_all_aura_renders_without_platform(self):
-        # 필수 존이 하나도 없어도 (has_plat=False) 본체에 점선 슬래브로 렌더 (crash 없음)
+    def test_renders_without_required_zone(self):
         ps = {"zones": [self._z("a", "저층", False), self._z("b", "상층", False)]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert 'aria-label="프로그램 조직 다이어그램"' in h
+        assert 'aria-label="프로그램 단면 다이어그램"' in h
 
-    def test_org_escapes_program_name(self):
+    def test_section_escapes_program_name(self):
         ps = {"zones": [self._z("<b>x</b>", "저층", True), self._z("y", "상층", True)]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        org = h.split('aria-label="프로그램 조직 다이어그램"')[1][:800]
-        assert '&lt;b&gt;x&lt;/b&gt;' in h and '<b>x</b>' not in org
+        sec = h.split('aria-label="프로그램 단면 다이어그램"')[1][:1200]
+        assert '&lt;b&gt;x&lt;/b&gt;' in h and '<b>x</b>' not in sec
 
-    def test_multisite_org_per_site(self):
+    def test_multisite_section_per_site(self):
         ps = {"zones": [
             {"program": "민원실", "plan": "S", "level": "저층", "required": True, "site": "부지1"},
             {"program": "보건소", "plan": "S", "level": "저층", "required": True, "site": "부지2"},
         ]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert h.count('aria-label="프로그램 조직 다이어그램"') == 2   # 부지별 1개씩
+        assert h.count('aria-label="프로그램 단면 다이어그램"') == 2   # 부지별 1개씩
 
 
 class TestLawRefsFootnote:
@@ -611,3 +610,75 @@ class TestConceptCover:
         h = to_proposal_html(p, "x")
         assert "<script>a</script>" not in h and "&lt;script&gt;a&lt;/script&gt;" in h
         assert "<b>x" not in h and "&lt;b&gt;x" in h
+
+
+class TestZoningAlternatives:
+    """조닝 ALT — 사실-락(브랜드 로직) + 3안 렌더(설계안별 조직 스택)."""
+    from services.brief_proposal import _lock_placement_alternatives as _lock
+
+    def _ps(self):
+        return {"placement_strategy": {
+            "zones": [
+                {"program": "보건소", "plan": "S", "level": "저층", "required": True, "why": "1층 필수"},
+                {"program": "업무동", "plan": "N", "level": "중층", "required": False},
+            ],
+            "alternatives": [
+                {"label": "A", "based_on": "조망 우선", "premise": "상층 조망",
+                 "zones": [
+                     {"program": "보건소", "plan": "N", "level": "상층", "required": True},  # 사실 위반 시도
+                     {"program": "라운지", "plan": "C", "level": "상층", "required": False},
+                 ]},
+                {"label": "B", "based_on": "가로 활성", "premise": "저층 개방",
+                 "zones": [{"program": "카페", "plan": "S", "level": "저층", "required": False}]},  # 보건소 누락
+            ]}}
+
+    def test_lock_forces_required_zone_position(self):
+        r = self._ps()
+        TestZoningAlternatives._lock(r)
+        a0 = {z["program"]: (z["plan"], z["level"]) for z in r["placement_strategy"]["alternatives"][0]["zones"]}
+        assert a0["보건소"] == ("S", "저층")          # 권장안 위치로 덮어씀
+        assert a0["라운지"] == ("C", "상층")          # aura(추론)는 유지
+
+    def test_lock_backfills_missing_required_zone(self):
+        r = self._ps()
+        TestZoningAlternatives._lock(r)
+        a1 = {z["program"]: (z["plan"], z["level"]) for z in r["placement_strategy"]["alternatives"][1]["zones"]}
+        assert a1.get("보건소") == ("S", "저층")       # 빠졌던 명시 존 보강
+
+    def test_lock_caps_at_three(self):
+        r = {"placement_strategy": {"zones": [], "alternatives": [
+            {"label": str(i), "zones": [{"program": f"p{i}", "plan": "C", "level": "저층", "required": False}]}
+            for i in range(5)]}}
+        TestZoningAlternatives._lock(r)
+        assert len(r["placement_strategy"]["alternatives"]) == 3
+
+    def test_lock_noop_without_alternatives(self):
+        r = {"placement_strategy": {"zones": [{"program": "x", "plan": "S", "level": "저층", "required": True}]}}
+        TestZoningAlternatives._lock(r)          # alternatives 없음 → 예외 없이 no-op
+        assert "alternatives" not in r["placement_strategy"] or not r["placement_strategy"]["alternatives"]
+
+    def test_renders_three_columns_and_suppresses_single_section(self):
+        r = self._ps()
+        TestZoningAlternatives._lock(r)
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": r["placement_strategy"]})
+        assert "프로그램 조닝 대안" in h
+        assert h.count('aria-label="프로그램 단면 다이어그램"') == 2   # 2 ALT
+        assert "grid-column:1/-1" not in h                         # 권장안 단일 단면 억제
+        assert "개념 조닝" in h                                     # 권장안 방위 다이어그램 유지
+        assert "지침서 필수 배치는 3안 모두 동일" in h
+
+    def test_single_alternative_not_rendered(self):
+        # 대안 1개뿐이면 ALT 행 생략 → 권장안 단일 단면 유지
+        ps = {"zones": [{"program": "a", "plan": "S", "level": "저층", "required": True}],
+              "alternatives": [{"label": "A", "zones": [{"program": "a", "plan": "S", "level": "저층", "required": True}]}]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert "프로그램 조닝 대안" not in h
+        assert "grid-column:1/-1" in h                             # 권장안 단일 단면은 남음
+
+    def test_alt_program_name_escaped(self):
+        ps = {"zones": [{"program": "코어", "plan": "C", "level": "중층", "required": True}],
+              "alternatives": [
+                  {"label": "A", "zones": [{"program": "<b>x</b>", "plan": "S", "level": "저층", "required": False}]},
+                  {"label": "B", "zones": [{"program": "y", "plan": "N", "level": "상층", "required": False}]}]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert "<b>x</b>" not in h and "&lt;b&gt;x&lt;/b&gt;" in h

@@ -156,7 +156,7 @@ class TestRenderer:
         assert "과거 낙선 함정" in html
         assert "이 지침서 적용" in html
         assert "당락을 가른 축" in html
-        assert "AI 해석" in html                       # applications 배지
+        assert "해석" in html                          # applications 배지 ('해석')
         assert "저층부를 시민에게 개방하라" in html
         assert "과거공모A" in html                       # source 칩
         assert "시민개방" in html                        # basis 칩

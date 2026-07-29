@@ -415,8 +415,8 @@ def _md_insight_block(L: list[str], insight: Any) -> None:
     if not (summary or emphases or must or constraints or focus or guide):
         return
 
-    L.append("## 0. AI 종합 해설")
-    L.append("> AI가 추출 데이터를 종합·해석한 결과입니다. 모든 항목은 지침서 근거를 인용하며, "
+    L.append("## 0. 종합 해설")
+    L.append("> 추출 데이터를 종합·해석한 결과입니다. 모든 항목은 지침서 근거를 인용하며, "
              "판단·결정은 사용자 몫입니다. 당락 예측이 아닙니다.")
     conf = (insight.get("data_confidence") or "").lower()
     conf_lbl = _CONF_LABEL.get(conf, "")
@@ -1285,8 +1285,8 @@ def _insight_section_html(insight: dict) -> str:
     conf_html = f'<span class="conf {conf_cls}">근거 {_esc(conf_lbl)}</span>' if conf_lbl else ""
     parts.append(
         '<section id="insight" class="sec ai">'
-        f'<h2><span class="aibadge">AI</span>지침서 종합 해설{conf_html}</h2>'
-        '<div class="ai-disclaimer">AI가 추출된 데이터를 종합·해석한 결과입니다. '
+        f'<h2>지침서 종합 해설{conf_html}</h2>'
+        '<div class="ai-disclaimer">추출된 데이터를 종합·해석한 결과입니다. '
         '모든 항목은 지침서 근거를 인용하며, 판단·결정은 사용자 몫입니다. 당락 예측이 아닙니다.</div>'
     )
 
@@ -1626,7 +1626,7 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
 
     # ══ AI 종합 해설 (insight 있을 때만, 핵심수치 카드 직후·본문 앞) ════════════════
     if insight:
-        nav_items.append(("insight", "AI해설"))
+        nav_items.append(("insight", "해설"))
         P.append(_insight_section_html(insight))
 
     # ══ 대지 · 법적 골격 (site_context 있을 때만 — 제안서 없이도 대지·법 표시) ════════
@@ -2206,12 +2206,12 @@ def to_xlsx(brief_data: dict, validation: dict) -> bytes:
             items = [str(x).strip() for x in items if str(x).strip()]
             return " · ".join(items)
 
-        wsi = wb.create_sheet("AI 종합 해설")
-        rowi = _write_section_title(wsi, "AI 종합 해설", 1, span=_AI_SPAN)
+        wsi = wb.create_sheet("종합 해설")
+        rowi = _write_section_title(wsi, "종합 해설", 1, span=_AI_SPAN)
         rowi += 1
         ws_i_disc = wsi.cell(
             row=rowi, column=1,
-            value="※ AI가 추출 데이터를 종합·해석한 결과입니다. 모든 항목은 지침서 근거를 인용하며, "
+            value="※ 추출 데이터를 종합·해석한 결과입니다. 모든 항목은 지침서 근거를 인용하며, "
                   "판단·결정은 사용자 몫입니다. 당락 예측이 아닙니다.",
         )
         ws_i_disc.font = Font(italic=True, color="888888")

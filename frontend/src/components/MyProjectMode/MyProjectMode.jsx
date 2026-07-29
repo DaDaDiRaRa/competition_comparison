@@ -241,7 +241,7 @@ export default function MyProjectMode() {
         <div style={s.title}>내 프로젝트 등록</div>
         <div style={s.desc}>
           <strong style={{ color: 'var(--color-text-body)' }}>우리 회사가 과거에 제출한 제안서</strong>를 하나씩 등록하는 탭입니다.<br />
-          <span style={{ color: 'var(--color-accent)' }}>AI가 PDF를 깊이 분석해 수주 형태·연면적·층수·세대수·태그·요약을 자동 추출</span>하므로 별도 입력이 필요 없습니다.<br />
+          <span style={{ color: 'var(--color-accent)' }}>PDF를 깊이 분석해 수주 형태·연면적·층수·세대수·태그·요약을 자동 추출</span>하므로 별도 입력이 필요 없습니다.<br />
           당선·수의계약은 <span style={{ color: 'var(--color-success)' }}>패턴 DB에 자동 반영</span>되어 이후 진단의 기준이 됩니다.
           낙선은 <span style={{ color: 'var(--color-danger)' }}>기존 당선 패턴 대비 원인 분석</span>을 바로 제공합니다.<br />
           <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>

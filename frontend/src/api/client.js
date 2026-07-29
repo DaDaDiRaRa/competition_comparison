@@ -409,7 +409,7 @@ export async function reinterpretBrief(briefId) {
   const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/interpret`, { method: 'POST', headers })
   if (!r.ok) {
     const err = await r.json().catch(() => ({}))
-    throw new Error(err.detail || `AI 종합 해설 생성 실패 (HTTP ${r.status})`)
+    throw new Error(err.detail || `종합 해설 생성 실패 (HTTP ${r.status})`)
   }
   return r.json()
 }

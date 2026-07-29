@@ -175,7 +175,13 @@ _PROPOSAL_INSTRUCTION = (
     '        "draws_on": ["대지:남측 20m도로", "법:정북일조/용적460%", "프로그램:감염동선", "배점:배치40"],\n'
     '        "basis": ["site_context.road_access", "배치계획", "p.20"] }\n'
     "    ],\n"
-    '    "section_note": "단면 원리 한 줄 (예: 저층 시민개방 · 중상층 업무 · 코어 북측 · 지하 부지연계)"\n'
+    '    "section_note": "단면 원리 한 줄 (예: 저층 시민개방 · 중상층 업무 · 코어 북측 · 지하 부지연계)",\n'
+    '    "alternatives": [\n'
+    '      { "label": "A|B|C — 짧은 이름",\n'
+    '        "based_on": "이 대안이 구현하는 design_directions 중 한 direction (그 설계안의 공간판)",\n'
+    '        "premise": "이 조닝을 가르는 전제 한 줄 (예: 조망 우선 / 가로 활성 / 효율 집약) — 왜 이렇게 다르게 배치하나",\n'
+    '        "zones": [ { "program": "...", "plan": "N|S|E|W|NE|NW|SE|SW|C", "level": "지하|저층|중층|상층", "required": true } ] }\n'
+    "    ]\n"
     "  },\n"
     '  "priorities": [\n'
     '    { "rank": 1, "focus": "가장 먼저·가장 무겁게 다룰 영역",\n'
@@ -193,7 +199,7 @@ _PROPOSAL_INSTRUCTION = (
     "}\n"
     "\n"
     "[필드 규칙]\n"
-    "- concept_hook (표지 파르티 — AI 제안 시안): keyword 는 한 단어 압축, axes 는 **정확히 3축**\n"
+    "- concept_hook (표지 파르티 — 제안 시안): keyword 는 한 단어 압축, axes 는 **정확히 3축**\n"
     "  으로 이 지침서의 배점 무게중심(scoring_focus 상위)·win_themes·대지 조건에서 도출하라. 각\n"
     "  축은 **반드시 basis 로 어떤 사실에서 나왔는지 앵커**(못 달면 그 축을 빼고, 3축 못 채우면\n"
     "  concept_hook 전체를 생략). 아무 프로젝트에나 붙는 뻔한 슬로건(예: '혁신·소통·미래')은\n"
@@ -213,7 +219,7 @@ _PROPOSAL_INSTRUCTION = (
     "  '흔한 감점 함정' 으로 제시하되, 추론임을 note/근거에 드러내고 단정하지 말 것.\n"
     "- win_themes·priorities·risks 는 억지로 개수 채우지 말 것(강한 것 위주 triage). 단\n"
     "  design_directions 는 위 규칙대로 5안을 채운다. 신호 없는 항목은 지어내지 말 것.\n"
-    "- program_directions·massing_strategy·phasing 은 **AI 해석 확장층** — 1층 사실\n"
+    "- program_directions·massing_strategy·phasing 은 **해석 확장층** — 1층 사실\n"
     "  (배점·강조·대지) 위에서 추론한 제안이다. 각 claim 은 **반드시 basis 로 어떤 사실에서\n"
     "  나왔는지 앵커**하라(앵커 못 달면 그 항목은 빼라). 신호가 얕으면 항목 수를 줄여라.\n"
     "  사실로 위장하지 말 것 — 이 셋은 '제안'으로 읽히게 쓴다.\n"
@@ -235,12 +241,20 @@ _PROPOSAL_INSTRUCTION = (
     "  ⑤ **명시 요구 절대 준수 (CRITICAL) — 지침서가 특정 프로그램의 위치/층을 명시하면\n"
     "     (예: '보건소 1층 필수', '어린이집 저층 옥외 접함', '민원실 주출입 인접') 그건 사실이자\n"
     "     필수 제약이다. 반드시 그대로 반영하고 required=true + basis 에 그 요구 위치를 앵커하라.\n"
-    "     AI 추론으로 그 위치를 덮거나 무시하지 마라.** 지침서가 위치를 안 정한 것만 AI 가\n"
+    "     추론으로 그 위치를 덮거나 무시하지 마라.** 지침서가 위치를 안 정한 것만 우리가\n"
     "     추론(required=false)해 배치한다. 명시 요구와 추론이 충돌하면 명시 요구가 이긴다.\n"
     "  ⑥ synthesis 는 '이 땅의 이 조건들이 겹쳐서 이렇게'로 — 일반론 금지. zones 5~8개 권장.\n"
     "  ⑦ **다부지면 각 zone 에 site(부지N) 필수** — sites/law_diagnosis 에 부지가 2개 이상이면\n"
     "     모든 zone 에 소속 부지를 site 로 표기하라(방위 N/S/E/W 가 부지마다 다르므로 섞이면 안 됨).\n"
     "     각 부지의 plan(방위)은 그 부지 고유의 접도·조망·형상 기준으로 정하라. 단일 부지면 site 생략.\n"
+    "  ⑧ **alternatives (조닝 ALT — 최대 3안):** 위 zones(권장안)와 별개로, design_directions\n"
+    "     상위 2~3안을 **공간 배치로 표현한 대안**을 준다. (a) 각 대안은 based_on 으로\n"
+    "     design_directions 의 한 direction 에 연결(그 전략의 공간판). (b) **required=true(지침서\n"
+    "     명시 위치)인 존은 모든 대안에서 위치·층이 동일**해야 한다 — 사실은 변주 대상이 아니다.\n"
+    "     대안 간 차이는 required=false(추론) 배치에서만 나온다. (c) 대안 zones 는 compact\n"
+    "     (program/plan/level/required 만; why/draws_on/basis 는 권장안에만). (d) 전제(premise)가\n"
+    "     실제로 갈리게 — 무엇을 상층에 올리고 무엇을 저층 개방하느냐가 달라지게. 신호 얕으면 2안,\n"
+    "     더 얕으면 alternatives 를 빈 배열로 두라(억지 변주 금지).\n"
     "- **읽을 만한 깊이 (CRITICAL):** 각 항목은 한 줄 제목(claim/direction)에서 끝내지 말고\n"
     "  detail/narrative 로 **2~4문장 풀어써라** — 설계팀이 읽고 판단할 수 있게. 단 분량을\n"
     "  늘리는 건 'filler(미사여구·동어반복)'가 아니라 **근거 있는 추론의 깊이**다: ① 어떤\n"
@@ -367,6 +381,58 @@ def _placement_req_signals(brief_data: dict) -> list[str]:
     return out[:14]
 
 
+def _lock_placement_alternatives(result: dict) -> None:
+    """조닝 ALT 정직성 가드 (LLM 0 · 숫자/텍스트 발명 0).
+
+    권장안(placement_strategy.zones)에서 지침서 명시(required=true)인 존의 위치(plan·level)를
+    **모든 대안에 동일 고정** — 사실은 대안마다 달라지면 안 된다. 대안에서 빠진 명시 존은 canonical
+    로 채우고, malformed 대안은 제거, 최대 3안. alternatives 없거나 비면 no-op(graceful).
+    """
+    ps = result.get("placement_strategy")
+    if not isinstance(ps, dict):
+        return
+    alts = ps.get("alternatives")
+    if not isinstance(alts, list) or not alts:
+        return
+
+    def _req(z):
+        return z.get("required") in (True, "true", "True", 1)
+
+    canon: dict[str, tuple] = {}   # program → (plan, level)
+    order: list[str] = []
+    for z in (ps.get("zones") or []):
+        if isinstance(z, dict) and _req(z):
+            key = (z.get("program") or "").strip()
+            if key and key not in canon:
+                canon[key] = (z.get("plan"), z.get("level"))
+                order.append(key)
+
+    cleaned = []
+    for alt in alts:
+        if not isinstance(alt, dict):
+            continue
+        zs = [z for z in (alt.get("zones") or [])
+              if isinstance(z, dict) and (z.get("program") or "").strip()]
+        if not zs:
+            continue
+        present = set()
+        for z in zs:
+            key = (z.get("program") or "").strip()
+            if key in canon:                       # 명시 존 → canonical 위치로 덮어씀(사실 락)
+                z["plan"], z["level"] = canon[key]
+                z["required"] = True
+                present.add(key)
+        for key in order:                          # 빠진 명시 존은 canonical 로 보강
+            if key not in present:
+                p, l = canon[key]
+                zs.append({"program": key, "plan": p, "level": l, "required": True})
+        alt["zones"] = zs
+        cleaned.append(alt)
+        if len(cleaned) >= 3:
+            break
+    ps["alternatives"] = cleaned
+
+
 def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     # advisor 와 동일한 결정론 백본 신호 — 단일 소스 재사용 (드리프트 차단). reference_cases
     # (시설유형 기존 사례 참고자료) 도 _build_advisor_payload 가 이미 채워서 넘겨준다.
@@ -411,7 +477,7 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)
     raw = call_messages(
         model=settings.model_id_advisor,   # 제안 전용 모델(기본 Opus). 추출은 그대로 Sonnet.
-        max_tokens=32000,   # 대형 brief(5안+placement+program/massing/phasing)에서 16k 초과 잘림 방지
+        max_tokens=40000,   # 대형 brief(5안+placement+alternatives 3안+program/massing/phasing) 잘림 방지
         temperature=0,     # Opus 4.7/4.8 은 call_messages 가 temperature 를 자동 생략 (400 회피)
         system=_PROPOSAL_SYSTEM,
         messages=[{
@@ -437,6 +503,12 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     result["brief_id"] = (brief_data.get("_brief_meta") or {}).get("brief_id", "")
     # 렌더러가 재조회 없이 "참고 사례" 섹션을 그릴 수 있게 원본 보존 (없으면 {} — graceful skip)
     result["_reference_cases"] = ref_ctx
+
+    # 조닝 ALT 사실-락 (LLM 0) — 지침서 명시 배치는 모든 대안에 동일 고정. 비치명.
+    try:
+        _lock_placement_alternatives(result)
+    except Exception as e:
+        logger.warning("조닝 ALT 사실-락 실패 (비치명): %s", e)
 
     # 근거 없는 수치 검산 (LLM 0, 숫자 수정 0). 비치명 — 실패해도 제안서는 유지.
     try:

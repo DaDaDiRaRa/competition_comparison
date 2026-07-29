@@ -163,7 +163,7 @@ function QuantSection({ quant, originalQuant, onChange }) {
               }}
             />
             {originalQuant[key] != null && originalQuant[key] !== quant[key] && (
-              <div style={s.original}>AI 추출값: {originalQuant[key]}</div>
+              <div style={s.original}>추출값: {originalQuant[key]}</div>
             )}
           </div>
         ))}

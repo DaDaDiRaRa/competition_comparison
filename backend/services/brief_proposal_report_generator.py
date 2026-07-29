@@ -184,7 +184,7 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
 .dir-field .dfv{font-size:13px;color:var(--text)}
 .dir-card-basis{padding:7px 16px 12px;font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);background:#fafafa}
 
-/* ── 2층 범례 (사실 vs AI 해석) ──── */
+/* ── 2층 범례 (사실 vs 해석) ──── */
 .legend{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin:16px 0 2px;
   padding:11px 16px;border:1px solid var(--line);border-radius:10px;background:var(--soft);font-size:12px}
 .legend .lg-h{font-weight:700;color:var(--ink);margin-right:2px}
@@ -193,7 +193,7 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
   color:#2a6496;background:#eaf1f7;border:1px solid #cfe0ee;border-radius:20px;padding:2px 9px;vertical-align:middle}
 section.sec>h2 .ai-badge{margin-left:8px}
 
-/* ── AI 해석 리스트 (프로그램·매스·단계) ── */
+/* ── 해석 리스트 (프로그램·매스·단계) ── */
 ul.interp{list-style:none;margin:6px 0;padding:0}
 ul.interp li{padding:13px 0;border-bottom:1px solid #f4f4f4;display:flex;flex-direction:column;gap:5px}
 ul.interp li:last-child{border-bottom:none}
@@ -270,6 +270,15 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
 .place-dias{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:8px 0}
 .dia-box{border:1px solid var(--line);padding:14px;background:#fff}
 .dia-cap{font-size:10.5px;color:var(--faint);text-align:center;margin-top:6px;letter-spacing:.02em}
+.place-alts{margin:16px 0 4px;border-top:1px solid var(--line);padding-top:14px}
+.alts-hd{font-weight:800;font-family:var(--sans);font-size:15px;margin-bottom:4px}
+.alts-note{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5}
+.alts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.alt-col{border:1px solid var(--line);border-radius:8px;padding:11px 11px 14px;background:#fff}
+.alt-hd{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin-bottom:3px}
+.alt-tag{font-family:var(--sans);font-weight:800;color:var(--accent);font-size:13px}
+.alt-based{font-size:11px;color:var(--muted)}
+.alt-premise{font-size:12px;color:var(--text);margin-bottom:8px;line-height:1.45}
 .pz-tag{font-family:var(--sans);font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:8px;vertical-align:middle;white-space:nowrap}
 .pz-tag.req{color:#4e7d3e;background:#eef5ea;border:1px solid #cfe3c0}
 .pz-tag.inf{color:var(--ai);background:#eaf1f7;border:1px solid #cfe0ee}
@@ -370,6 +379,7 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
   .rec{grid-template-columns:1fr}.rec-mass{border-right:none;border-bottom:1px solid var(--line)}
   .rec-grafts{grid-template-columns:1fr}
   .place-dias{grid-template-columns:1fr}.place-zones{grid-template-columns:1fr}
+  .alts-grid{grid-template-columns:1fr}
 }
 """
 
@@ -397,7 +407,7 @@ def _basis_html(b) -> str:
 
 
 # "AI 해석" 배지 — 사실/해석 2층 구분 (legend·directions·interp 섹션 공통 단일 소스)
-_AI_BADGE = '<span class="ai-badge">AI 해석</span>'
+_AI_BADGE = '<span class="ai-badge">제안</span>'
 
 
 def _sat_src_label(sc: dict | None) -> str:
@@ -534,7 +544,7 @@ def _concept_cover_html(proposal: dict) -> str:
         f'<div class="cc-keyword">{_esc(keyword)}</div>'
         + (f'<div class="cc-tagline">{tagline}</div>' if tagline else "")
         + axes_html
-        + '<div class="cc-note">AI가 배점·대지 근거 위에서 압축한 <b>컨셉 시안</b>입니다 — '
+        + '<div class="cc-note">배점·대지 근거 위에서 압축한 <b>컨셉 시안</b>입니다 — '
           '확정된 컨셉이 아니라 설계팀이 갈아끼우는 출발점입니다.</div>'
         '</section>'
     )
@@ -775,7 +785,7 @@ def _site_context_html(site_context: dict | None, image_b64: str = "", compact: 
     if has_vision:
         conf_lbl = _CONF_LABEL.get(conf, "")
         caveats = [str(c).strip() for c in (analysis.get("caveats") or []) if str(c).strip()]
-        note_bits = ["위성 영상 AI 판독 기반 — 현장 답사·지적도로 확인 필요 (추론 포함)"]
+        note_bits = ["위성 영상 판독 기반 — 현장 답사·지적도로 확인 필요 (추론 포함)"]
         if conf_lbl:
             note_bits.append(f"판독 신뢰도 {conf_lbl}")
         note = '<div class="site-note">⚠ ' + " · ".join(_esc(x) for x in note_bits)
@@ -1037,7 +1047,7 @@ def _legend_html() -> str:
         '<span class="lg-item">'
         '<span class="cite">근거 p.N</span> 지침서·대지에서 확인된 <b>사실</b></span>'
         '<span class="lg-item">'
-        f'{_AI_BADGE} 그 사실 위에서 AI가 추론한 <b>제안</b> (검증 필요)</span>'
+        f'{_AI_BADGE} 그 사실 위에서 추론한 <b>제안</b> (검증 필요)</span>'
         '</div>'
     )
 
@@ -1268,7 +1278,7 @@ def _decision_cockpit_html(proposal: dict, bid_structure: dict | None = None) ->
     return (
         '<section class="cockpit"><div class="cok-head">'
         '<div class="cok-h-l">결정 요약 · DECISION BRIEF</div>'
-        '<div class="cok-h-r">AI가 지침서를 읽고 <b>판단한 결론</b> — 각 칸은 아래 근거 섹션으로 연결됩니다. 최종 결정은 설계팀.</div>'
+        '<div class="cok-h-r">지침서를 읽고 <b>판단한 결론</b> — 각 칸은 아래 근거 섹션으로 연결됩니다. 최종 결정은 설계팀.</div>'
         f'</div><div class="cok-grid">{grid}</div></section>'
     )
 
@@ -1354,87 +1364,137 @@ def _zone_sect_svg(zones: list, zc: dict) -> str:
     )
 
 
-def _zone_org_svg(zones: list, zc: dict) -> str:
-    """OMA식 프로그램 조직 스택 — 층 순서(상층→지하)로 프로그램을 쌓되 지침서 필수 존은
-    본체 슬래브(플랫폼), AI 추론 존은 옆으로 밀어낸 in-between(aura) 탭으로 구분한다.
+def _zone_section_stack_svg(zones: list, zc: dict) -> str:
+    """건물 단면형 조닝 — 층(상→중→저→지하)을 가로 밴드로 쌓고, 각 프로그램을 이름 붙은
+    색 블록으로 그 층에 배치. 채움=지침서 필수(사실), 점선 테두리=제안(추론). 저층↔지하에
+    지반선(G.L). '무엇이 몇 층에'가 한눈에 읽히게. 면적 비례 아님. LLM 0.
 
-    존별 면적이 없어 **면적 비례가 아니라 조직 다이어그램**(슬래브 높이 균일). 사실(필수)↔
-    제안(추론)을 platform/aura 로 2층 분리 — required 플래그가 근거라 정직한 분류. 번호·색은
-    다른 배치 다이어그램(plan/section)과 통합(zc·_num 재사용).
+    긴 헤더 캡션은 SVG 밖(dia-cap/alts-note)이 담당 — SVG 내부엔 넣지 않아 오버플로 없음.
     """
-    def _lv(z):
-        return (z.get("level") or "저층").strip()
+    FONT = "Montserrat,'Malgun Gothic',sans-serif"
+    W, LX, RPAD = 300, 46, 10
+    BW = W - LX - RPAD
+    BLKH, ROWGAP, BANDPAD, TOP = 25, 6, 9, 10
+    CH = 11.5
 
-    def _clip(s, n):
-        s = str(s or "")
-        return s if len(s) <= n else s[:n - 1] + "…"
+    def _blk_w(txt):
+        return min(BW, max(44, len(str(txt)) * CH + 20))
 
-    rank = {lv: i for i, lv in enumerate(_LEVEL_ORDER)}
-    idx = {id(z): i for i, z in enumerate(zones)}
-    ordered = sorted(zones, key=lambda z: (rank.get(_lv(z), 2), idx[id(z)]))
-    has_plat = any(_zreq(z) for z in ordered)
-    main = [z for z in ordered if _zreq(z)] if has_plat else ordered
-    side = [z for z in ordered if not _zreq(z)] if has_plat else []
+    by: dict = {}
+    for z in zones:
+        by.setdefault((z.get("level") or "저층").strip(), []).append(z)
+    levels = [lv for lv in _LEVEL_ORDER if by.get(lv)]
+    levels += [lv for lv in by if lv not in _LEVEL_ORDER]   # 이상 층값 방어(뒤에)
 
-    BX, BW, TOP, SLAB_H, GAP = 44, 150, 44, 34, 5
-    FONT = "Montserrat,sans-serif"
-    tx = BX + BW
+    # 밴드별 행 배치 (블록 폭 합이 밴드폭 넘으면 줄바꿈)
+    bands = []
+    for lv in levels:
+        rows, cur, curw = [], [], 0.0
+        for z in by[lv]:
+            txt = f'{z.get("_num")}. {z.get("program") or ""}'.strip()
+            w = _blk_w(txt)
+            if cur and curw + w + 6 > BW:
+                rows.append(cur); cur, curw = [], 0.0
+            cur.append((z, txt, w)); curw += w + 6
+        if cur:
+            rows.append(cur)
+        bands.append((lv, rows or [[]]))
 
-    slabs, lvl_ys, y = "", {}, TOP
-    for z in main:
-        col = zc[id(z)]
-        lv = _lv(z)
-        lvl_ys.setdefault(lv, []).append(y + SLAB_H / 2)
-        nm = _esc(_clip(f'{z["_num"]}. {z.get("program") or ""}', 15))
-        cy = y + SLAB_H / 2 + 4
-        if _zreq(z):
-            slabs += (f'<rect x="{BX}" y="{y}" width="{BW}" height="{SLAB_H}" rx="3" fill="{col}"/>'
-                      f'<text x="{BX + 9}" y="{cy:.0f}" font-size="11.5" font-weight="700" '
-                      f'font-family="{FONT}" fill="#fff">{nm}</text>')
-        else:  # 플랫폼 없는 케이스: aura 를 본체에 점선 슬래브로
-            slabs += (f'<rect x="{BX}" y="{y}" width="{BW}" height="{SLAB_H}" rx="3" fill="#fff" '
-                      f'stroke="{col}" stroke-width="1.4" stroke-dasharray="3 2"/>'
-                      f'<text x="{BX + 9}" y="{cy:.0f}" font-size="11" font-weight="700" '
-                      f'font-family="{FONT}" fill="{col}">{nm}</text>')
-        y += SLAB_H + GAP
-    main_bottom = y
+    y = TOP
+    geo = []
+    for lv, rows in bands:
+        h = BANDPAD * 2 + len(rows) * BLKH + (len(rows) - 1) * ROWGAP
+        geo.append((lv, rows, y, h)); y += h
+    svg_h = y + 20
 
-    lvlab = ""
-    for lv, ys in lvl_ys.items():
-        my = sum(ys) / len(ys)
-        lvlab += (f'<text x="40" y="{my + 3:.0f}" text-anchor="end" font-size="9.5" '
-                  f'font-family="{FONT}" fill="#a9a5a0">{_esc(lv)}</text>')
+    parts, gl_y = [], None
+    for lv, rows, y0, h in geo:
+        parts.append(f'<rect x="{LX}" y="{y0:.0f}" width="{BW}" height="{h:.0f}" fill="#f6f4f1" stroke="#e0ded9"/>')
+        parts.append(f'<text x="{LX - 6}" y="{y0 + h / 2 + 4:.0f}" text-anchor="end" font-size="12" '
+                     f'font-weight="700" font-family="{FONT}" fill="#6f6b66">{_esc(lv)}</text>')
+        for ri, row in enumerate(rows):
+            by0 = y0 + BANDPAD + ri * (BLKH + ROWGAP)
+            bx = LX + 8
+            for z, txt, w in row:
+                col = zc[id(z)]
+                tc = "#fff" if _zreq(z) else col
+                fill = (f'fill="{col}"' if _zreq(z)
+                        else f'fill="#fff" stroke="{col}" stroke-width="1.5" stroke-dasharray="4 2"')
+                parts.append(
+                    f'<rect x="{bx:.0f}" y="{by0:.0f}" width="{w:.0f}" height="{BLKH}" rx="4" {fill}/>'
+                    f'<text x="{bx + w / 2:.0f}" y="{by0 + BLKH / 2 + 4:.0f}" text-anchor="middle" '
+                    f'font-size="12" font-weight="700" font-family="{FONT}" fill="{tc}">{_esc(txt)}</text>')
+                bx += w + 6
+        if lv == "저층":
+            gl_y = y0 + h
+    if gl_y is None:
+        for lv, rows, y0, h in geo:
+            if lv == "지하":
+                gl_y = y0; break
+    gl = ""
+    if gl_y is not None:
+        gl = (f'<line x1="{LX - 2}" y1="{gl_y:.0f}" x2="{LX + BW}" y2="{gl_y:.0f}" stroke="#141414" stroke-width="2"/>'
+              f'<text x="{LX + BW}" y="{gl_y - 3:.0f}" text-anchor="end" font-size="8" fill="#a9a5a0">G.L</text>')
 
-    cursor, tabs = TOP, ""
-    for z in side:
-        col = zc[id(z)]
-        ys = lvl_ys.get(_lv(z))
-        anchor = (sum(ys) / len(ys)) if ys else (TOP + (main_bottom - TOP) / 2)
-        ty = max(anchor, cursor + 20)
-        cursor = ty
-        nm = _esc(_clip(f'{z["_num"]}. {z.get("program") or ""}', 16))
-        tabs += (f'<line x1="{tx}" y1="{anchor:.0f}" x2="{tx + 16}" y2="{ty:.0f}" stroke="{col}" '
-                 f'stroke-width="1" stroke-dasharray="3 2"/>'
-                 f'<rect x="{tx + 17}" y="{ty - 8:.0f}" width="12" height="16" rx="2" fill="#fff" '
-                 f'stroke="{col}" stroke-width="1.3" stroke-dasharray="2.5 2"/>'
-                 f'<text x="{tx + 34}" y="{ty + 3:.0f}" font-size="10.5" font-family="{FONT}" '
-                 f'fill="{col}">{nm}</text>')
-
-    svg_h = max(main_bottom + 12, cursor + 18)
-    hd = ('<text x="119" y="26" text-anchor="middle" font-size="10.5" font-family="' + FONT
-          + '" fill="#6f6b66">본체=지침서 필수(플랫폼) · 옆=AI 제안(in-between)</text>')
-    return (f'<svg viewBox="0 0 384 {svg_h:.0f}" width="100%" '
-            f'style="max-width:440px;display:block;margin:0 auto" '
-            f'role="img" aria-label="프로그램 조직 다이어그램">'
-            + hd + lvlab + slabs + tabs + '</svg>')
+    return (f'<svg viewBox="0 0 {W} {svg_h:.0f}" width="100%" '
+            f'style="max-width:460px;display:block;margin:0 auto" '
+            f'role="img" aria-label="프로그램 단면 다이어그램">'
+            + "".join(parts) + gl + '</svg>')
 
 
-def _zone_diagrams(zones: list, zc: dict) -> str:
+def _zone_alts_html(alternatives: list) -> str:
+    """조닝 ALT (설계안별 최대 3안) → OMA 조직 스택을 나란히. 프로그램별 색·번호를 대안 간
+    통일해 비교 가능하게. 유효 대안 2개 미만이면 '' (렌더 생략). LLM 0."""
+    alts = [a for a in (alternatives or []) if isinstance(a, dict)
+            and [z for z in (a.get("zones") or [])
+                 if isinstance(z, dict) and (z.get("program") or "").strip()]]
+    if len(alts) < 2:
+        return ""
+    prog_num: dict = {}
+    prog_col: dict = {}
+    for a in alts:
+        for z in (a.get("zones") or []):
+            if not isinstance(z, dict):
+                continue
+            p = (z.get("program") or "").strip()
+            if p and p not in prog_num:
+                n = len(prog_num) + 1
+                prog_num[p] = n
+                prog_col[p] = _ZONE_COLORS[(n - 1) % len(_ZONE_COLORS)]
+    cols = ""
+    for i, a in enumerate(alts[:3]):
+        zs = [z for z in (a.get("zones") or [])
+              if isinstance(z, dict) and (z.get("program") or "").strip()]
+        zc = {}
+        for z in zs:
+            p = (z.get("program") or "").strip()
+            z["_num"] = prog_num.get(p, 0)
+            zc[id(z)] = prog_col.get(p, _ZONE_COLORS[0])
+        label = (a.get("label") or f"ALT {chr(65 + i)}").strip()
+        premise = (a.get("premise") or "").strip()
+        based = (a.get("based_on") or "").strip()
+        head = ('<div class="alt-hd"><span class="alt-tag">' + _esc(label) + '</span>'
+                + (f'<span class="alt-based">↳ {_esc(based)}</span>' if based else '') + '</div>'
+                + (f'<div class="alt-premise">{_esc(premise)}</div>' if premise else ''))
+        cols += f'<div class="alt-col">{head}{_zone_section_stack_svg(zs, zc)}</div>'
     return (
-        f'<div class="dia-box" style="grid-column:1/-1">{_zone_org_svg(zones, zc)}'
-        f'<div class="dia-cap">프로그램 조직 · OMA식 (본체=지침서 필수 플랫폼 · 옆=AI 제안 in-between · 층 순서 · 면적 비례 아님)</div></div>'
-        f'<div class="dia-box">{_zone_plan_svg(zones, zc)}<div class="dia-cap">개념 조닝 (방위 · 번호는 아래 목록)</div></div>'
-        f'<div class="dia-box">{_zone_sect_svg(zones, zc)}<div class="dia-cap">개념 단면 (층대 · 번호는 아래 목록)</div></div>'
+        '<div class="place-alts"><div class="alts-hd">프로그램 조닝 대안 · 설계안별 ' + _AI_BADGE + '</div>'
+        '<div class="alts-note"><b>지침서 필수 배치는 3안 모두 동일(사실 고정)</b> · 제안 배치만 전제'
+        '(design_direction)별로 달라집니다 — 채움=필수, 점선=제안. 어느 프로그램이 층을 옮기는지 비교하세요.</div>'
+        f'<div class="alts-grid">{cols}</div></div>'
+    )
+
+
+def _zone_diagrams(zones: list, zc: dict, show_section: bool = True) -> str:
+    """단면형(층별 명명 블록) + 조닝(방위) 다이어그램. show_section=False 면 방위만
+    (조닝 ALT 가 단면을 대신 그릴 때 — 권장안 단면 중복 방지)."""
+    sect = ""
+    if show_section:
+        sect = (f'<div class="dia-box" style="grid-column:1/-1">{_zone_section_stack_svg(zones, zc)}'
+                f'<div class="dia-cap">프로그램 단면 · 층별 배치 (채움=지침서 필수 · 점선=제안 · 면적 비례 아님)</div></div>')
+    return (
+        sect
+        + f'<div class="dia-box">{_zone_plan_svg(zones, zc)}<div class="dia-cap">개념 조닝 (방위 · 번호는 아래 목록)</div></div>'
     )
 
 
@@ -1445,7 +1505,7 @@ def _zone_cards(zones: list, zc: dict) -> str:
         draws = "".join(_draw_chip(x) for x in (z.get("draws_on") or []) if str(x).strip())
         req = _zreq(z)
         tag = ('<span class="pz-tag req">지침서 필수</span>' if req
-               else '<span class="pz-tag inf">AI 추론</span>')
+               else '<span class="pz-tag inf">제안</span>')
         col = zc[id(z)]
         out += (
             f'<div class="pz{" req" if req else ""}" style="border-left-color:{col}">'
@@ -1461,7 +1521,7 @@ def _zone_cards(zones: list, zc: dict) -> str:
 
 _PLACE_LEGEND = (
     '<div class="place-legend"><b>마커:</b> <span class="lg-req">■ 채움=지침서 필수(사실)</span> '
-    '<span class="lg-inf">▢ 점선=AI 추론(제안)</span> &nbsp;|&nbsp; <b>근거 색:</b> '
+    '<span class="lg-inf">▢ 점선=제안(추론)</span> &nbsp;|&nbsp; <b>근거 색:</b> '
     '<span class="draw-chip d-site">대지</span><span class="draw-chip d-law">법</span>'
     '<span class="draw-chip d-prog">프로그램</span><span class="draw-chip d-score">배점</span>'
     '<span class="draw-chip d-spec">특수조건</span> — 여러 색 = 근거 교차</div>'
@@ -1497,6 +1557,10 @@ def _placement_strategy_html(proposal: dict) -> str:
         groups[k].append(z)
     multi = len([k for k in order if k]) > 1
 
+    # 조닝 ALT (설계안별) — 있으면 권장안 단일 단면은 생략(중복 방지), ALT 행이 대신 그린다.
+    alts_html = _zone_alts_html(ps.get("alternatives") or [])
+    show_section = not alts_html
+
     if multi:
         body = ""
         for k in order:
@@ -1504,15 +1568,16 @@ def _placement_strategy_html(proposal: dict) -> str:
             hd = f'<div class="place-site-hd">{_esc(k) if k else "부지 미지정"}</div>'
             body += (
                 '<div class="place-site">' + hd
-                + '<div class="place-dias">' + _zone_diagrams(zs, zc) + '</div>'
+                + '<div class="place-dias">' + _zone_diagrams(zs, zc, show_section) + '</div>'
                 + f'<div class="place-zones">{_zone_cards(zs, zc)}</div>'
                 + '</div>'
             )
     else:
         body = (
-            '<div class="place-dias">' + _zone_diagrams(zones, zc) + '</div>'
+            '<div class="place-dias">' + _zone_diagrams(zones, zc, show_section) + '</div>'
             + f'<div class="place-zones">{_zone_cards(zones, zc)}</div>'
         )
+    body += alts_html
 
     syn = (ps.get("synthesis") or "").strip()
     snote = (ps.get("section_note") or "").strip()
@@ -1524,7 +1589,7 @@ def _placement_strategy_html(proposal: dict) -> str:
         + _PLACE_LEGEND
         + body
         + '<div class="caveat">개념 다이어그램 — 방위·층대는 근거 기반 추론(정확한 도면·층수 아님). '
-          '<b>지침서가 위치를 명시한 존(필수)은 그대로 반영</b>, 나머지는 AI 배치 제안. 최종 배치는 설계팀.</div>'
+          '<b>지침서가 위치를 명시한 존(필수)은 그대로 반영</b>, 나머지는 배치 제안. 최종 배치는 설계팀.</div>'
         '</section>'
     )
 
@@ -1701,7 +1766,7 @@ def to_proposal_html(
         + body
         + caveat_html
         + "<footer class='doc'>"
-        "Competition Analyzer · 지침서 기반 수주 제안서 (AI 생성 · 당락 예측 아님)"
+        "Competition Analyzer · 지침서 기반 수주 제안서 (당락 예측 아님)"
         "</footer>"
         "</div></body></html>"
     )

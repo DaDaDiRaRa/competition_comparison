@@ -15,7 +15,7 @@ from __future__ import annotations
 _ACCENT = "var(--ai)"
 
 
-def ai_badge(label: str = "AI 해석") -> str:
+def ai_badge(label: str = "해석") -> str:
     """추론 섹션·항목에 붙는 작은 인라인 배지."""
     return (
         f'<span style="display:inline-block;font-size:11px;font-weight:700;'
@@ -32,6 +32,6 @@ def fact_interp_legend() -> str:
         'padding:10px 16px;margin:12px 0;font-size:12px;color:#555">'
         '<span><b style="color:#333">사실</b> · 강점/약점/근거는 제출물에서 직접 관찰 '
         '(p.N 인용)</span>'
-        f'<span>{ai_badge()} · 보강·차별화·사후 요약은 AI 추론·조언 (참고용)</span>'
+        f'<span>{ai_badge()} · 보강·차별화·사후 요약은 추론·조언 (참고용)</span>'
         '</div>'
     )

@@ -15,7 +15,7 @@ from services.report_generator import generate_comparison_report
 
 class TestBadgeHelpers:
     def test_ai_badge_default_label(self):
-        assert "AI 해석" in ai_badge()
+        assert "해석" in ai_badge()
 
     def test_ai_badge_uses_theme_token(self):
         # AI 해석 색은 테마 --ai(파랑)로 통일 — 앰버 하드코딩 아님 (제안서·플레이북과 일치)
@@ -27,7 +27,7 @@ class TestBadgeHelpers:
 
     def test_legend_mentions_both_layers(self):
         leg = fact_interp_legend()
-        assert "사실" in leg and "AI 해석" in leg
+        assert "사실" in leg and "해석" in leg
         assert "p.N" in leg or "인용" in leg
 
 
@@ -47,7 +47,7 @@ class TestDiagnoseReport:
     def test_recommendations_badged(self):
         html = self._report()
         # 보강 포인트 섹션 + 축별 보강 라인 모두 배지
-        assert html.count("AI 해석") >= 2
+        assert html.count("해석") >= 2
 
     def test_no_recommendations_no_badge_section(self):
         # 보강이 없으면 보강 섹션 자체가 없음 (배지는 범례에만)
@@ -55,7 +55,7 @@ class TestDiagnoseReport:
                 "axes": {"공간": {"grade": "B", "strengths": ["좋음 (p.3)"]}}}
         html = generate_diagnosis_report(diag)
         # 범례 1회만 (섹션 배지 없음)
-        assert html.count("AI 해석") == 1
+        assert html.count("해석") == 1
 
 
 class TestCompareReport:
@@ -71,9 +71,9 @@ class TestCompareReport:
         html = self._report(["배치 우수 (p.3)"], ["동선 미흡 (p.5)"])
         assert "제출물에서 직접 관찰" in html      # 범례
         assert "핵심 요약" in html and "당선 요인" in html and "낙선 함정" in html
-        assert html.count("AI 해석") == 2          # 범례 + 핵심 요약
+        assert html.count("해석") == 2          # 범례 + 핵심 요약
 
     def test_legend_absent_without_inference(self):
         html = self._report([], [])
         assert "제출물에서 직접 관찰" not in html   # 사후 요약·당선분석 없으면 범례도 없음
-        assert "AI 해석" not in html
+        assert "해석" not in html

@@ -302,7 +302,9 @@ _proposal: {
     synthesis, section_note,
     zones: [{program, plan: "N|S|E|W|NE|NW|SE|SW|C", level: "지하|저층|중층|상층",
              required: bool,                              # 지침서 명시 위치=true(사실·필수), AI 추론=false(제안)
-             why, draws_on: ["대지:…","법:…","프로그램:…","배점:…"], basis: [...]}] },
+             why, draws_on: ["대지:…","법:…","프로그램:…","배점:…"], basis: [...]}],
+    alternatives: [{label, based_on, premise,             # 조닝 ALT (최대 3안, design_directions 연결) — compact zones
+                    zones: [{program, plan, level, required}]}] },  # 사실-락: required 존은 zones(권장안) 기준으로 3안 동일 고정(brief_proposal._lock_placement_alternatives, LLM 0)
   priorities: [{rank, focus, why, scoring_weight}],        # 배점 기반 착수 우선순위
   risks: [{risk, severity: "high|medium|low", mitigation, basis}],
   kickoff_checklist: [str], open_questions: [str],

@@ -305,7 +305,7 @@ class TestToHtml:
         assert '재직증명서 미제출 시 실격' in h                    # must_not_miss
         assert 'p.20' in h                                       # basis 인용
         assert '당락 예측이 아닙니다' in h                         # disclaimer
-        assert 'AI해설' in h                                      # nav 항목
+        assert '#insight">해설</a>' in h                          # nav 항목
 
     def test_insight_section_wellformed(self):
         h = to_html(self.bd, self.validation, insight=self._INSIGHT)

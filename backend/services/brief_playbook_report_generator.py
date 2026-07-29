@@ -134,7 +134,7 @@ def _legend() -> str:
     return (
         '<div class="legend">'
         '<span class="k"><span class="dot past"></span>과거·사실 — 다른 공모의 축적 데이터</span>'
-        '<span class="k"><span class="dot interp"></span>AI 해석 — 과거 교훈을 이 지침서에 적용한 추론</span>'
+        '<span class="k"><span class="dot interp"></span>해석 — 과거 교훈을 이 지침서에 적용한 추론</span>'
         '</div>'
     )
 
@@ -189,7 +189,7 @@ def _application_cards(items: list) -> str:
             '<div class="card interp">'
             '<div class="hdwrap">'
             f'<div class="hd" style="flex:1">{_esc(guide)}</div>'
-            '<span class="badge-interp">AI 해석</span>'
+            '<span class="badge-interp">해석</span>'
             '</div>'
             + rows
             + (f'<div class="chips">{chips}</div>' if chips else "")
@@ -299,7 +299,7 @@ def to_playbook_html(
         + _section("과거 낙선 함정", "past", "과거·사실",
                    "떨어진 안들이 공통으로 빠진 함정.",
                    _lesson_cards(pb.get("losing_pitfalls") or [], "lose"))
-        + _section("이 지침서 적용", "interp", "AI 해석",
+        + _section("이 지침서 적용", "interp", "해석",
                    "과거 교훈을 이 지침서의 배점·강조·대지에 걸어 처방으로 바꾼 것. "
                    "각 항목은 과거 교훈과 이 지침서 근거에 동시에 앵커됩니다.",
                    _application_cards(pb.get("applications") or []))

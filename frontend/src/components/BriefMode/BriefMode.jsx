@@ -272,7 +272,7 @@ export default function BriefMode() {
       const res = await reinterpretBrief(result.brief_id)
       setResult(prev => ({ ...prev, has_insight: res.has_insight }))
     } catch (e) {
-      setRegenErr(e.message || 'AI 종합 해설 생성 실패')
+      setRegenErr(e.message || '종합 해설 생성 실패')
     }
     setRegening(false)
   }
@@ -481,7 +481,7 @@ export default function BriefMode() {
           style={{ marginTop: 2, cursor: 'pointer' }}
         />
         <span>
-          AI 종합 해설 포함
+          종합 해설 포함
           <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-xs)', marginLeft: 6 }}>
             지침서가 강조하는 것·놓치면 안 되는 것을 근거와 함께 정리합니다 (API 토큰 소량 사용)
           </span>
@@ -577,19 +577,19 @@ export default function BriefMode() {
                 fontSize: 'var(--font-size-sm)', color: 'var(--color-accent)',
                 fontWeight: 'var(--font-weight-semibold)',
               }}>
-                🔍 AI 종합 해설이 리포트(.html) 상단에 포함되었습니다
+                🔍 종합 해설이 리포트(.html) 상단에 포함되었습니다
               </span>
             ) : (
               <>
                 <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
-                  AI 종합 해설 미포함
+                  종합 해설 미포함
                 </span>
                 <button
                   style={{ ...s.dlBtn(false), ...(regening ? s.btnDisabled : {}) }}
                   onClick={handleRegenInsight}
                   disabled={regening}
                 >
-                  {regening ? '생성 중...' : '🔍 AI 종합 해설 생성'}
+                  {regening ? '생성 중...' : '🔍 종합 해설 생성'}
                 </button>
               </>
             )}
@@ -837,7 +837,7 @@ export default function BriefMode() {
                     <span style={s.fmtBadge}>
                       {item.source_format === 'multi' ? '복수파일' : (item.source_format || 'pdf').toUpperCase()}
                     </span>
-                    {item.has_insight && <span style={s.insightBadge}>AI 해설</span>}
+                    {item.has_insight && <span style={s.insightBadge}>해설</span>}
                     {item.brief_genre === 'bid' && <span style={s.genreBadge}>입찰</span>}
                     {item.brief_genre === 'competition' && <span style={s.genreBadge}>공모</span>}
                     {item.has_proposal && (
