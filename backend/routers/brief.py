@@ -1036,6 +1036,7 @@ async def analyze_site(brief_id: str, req: SiteAnalyzeRequest):
         "analyzed_at":     time.strftime("%Y-%m-%dT%H:%M:%S"),
         "analysis":        result["analysis"],
         "has_cadastral":   result.get("has_cadastral", False),
+        "parcel_norm":     result.get("parcel_norm"),   # 실측 필지 경계(이미지 정규화 링) 또는 None
     }
     brief_data["_site_context"] = site_ctx
     try:

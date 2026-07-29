@@ -273,7 +273,7 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
 .place-alts{margin:16px 0 4px;border-top:1px solid var(--line);padding-top:14px}
 .alts-hd{font-weight:800;font-family:var(--sans);font-size:15px;margin-bottom:4px}
 .alts-note{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5}
-.alts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.alts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
 .alt-col{border:1px solid var(--line);border-radius:8px;padding:11px 11px 14px;background:#fff}
 .alt-hd{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin-bottom:3px}
 .alt-tag{font-family:var(--sans);font-weight:800;color:var(--accent);font-size:13px}
@@ -386,6 +386,8 @@ nav.top .links a:hover{background:var(--soft);color:var(--ink)}
 from services.report_theme import THEME_VARS
 # 제안서 = 디자인 기준. :root 를 공유 토큰 단일 소스로 대체 (값 동일, 드리프트 차단).
 _PROPOSAL_CSS = _PROPOSAL_CSS.replace("/*__THEME__*/", THEME_VARS)
+
+_ACCENT = "#e60012"   # 건원 RED (SVG 속성엔 var() 대신 리터럴 — 실측 대지경계선 등)
 
 _CONF_LABEL = {"high": "높음", "medium": "보통", "low": "낮음 (근거 부족)"}
 _SEV_LABEL   = {"high": "높음", "medium": "중간",  "low": "낮음"}
@@ -1442,6 +1444,291 @@ def _zone_section_stack_svg(zones: list, zc: dict) -> str:
             + "".join(parts) + gl + '</svg>')
 
 
+def _iso_rgb(h: str):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _iso_mix(h: str, tgt: tuple, t: float) -> str:
+    r, g, b = _iso_rgb(h)
+    return "#%02x%02x%02x" % (int(r + (tgt[0] - r) * t), int(g + (tgt[1] - g) * t), int(b + (tgt[2] - b) * t))
+
+
+def _zone_iso_massing_svg(zones: list, zc: dict) -> str:
+    """개념 매스(아이소메트릭 2.5D) — 프로그램을 층 순서(상→지하)로 분리된 볼륨으로 적층하고
+    오른쪽에 이름 주석(리더선). 채움=지침서 필수(사실), 반투명=제안(추론). 지반선(G.L).
+    실제 층수·형태 아님(개념). 임원 보고용 톤. LLM 0 · 자체완결.
+
+    상면=밝게 / 측면=어둡게 음영으로 입체감. 슬래브는 GAP>DY 로 분리(겹침·z-fighting 없음).
+    """
+    FONT = "Montserrat,'Malgun Gothic',sans-serif"
+    W = 400
+    XB, SW, DX, DY, TH, GAP = 66, 124, 30, 15, 26, 18
+    LBLX = XB + SW + DX + 12
+    rank = {lv: i for i, lv in enumerate(_LEVEL_ORDER)}
+    idx = {id(z): i for i, z in enumerate(zones)}
+    order = sorted(zones, key=lambda z: (rank.get((z.get("level") or "저층").strip(), 2), idx[id(z)]))
+
+    TOP_Y = 34
+    slabs, labels, lvl_first = [], [], {}
+    gl_y, y = None, TOP_Y
+    for z in order:
+        lv = (z.get("level") or "저층").strip()
+        col = zc[id(z)]
+        req = _zreq(z)
+        top = _iso_mix(col, (255, 255, 255), 0.36)
+        side = _iso_mix(col, (0, 0, 0), 0.20)
+        op = "" if req else ' opacity="0.5"'
+        x = XB
+        slabs.append(
+            f'<g{op}>'
+            f'<polygon points="{x},{y} {x+DX},{y-DY} {x+DX+SW},{y-DY} {x+SW},{y}" fill="{top}" stroke="#ffffff" stroke-width="0.8"/>'
+            f'<polygon points="{x+SW},{y} {x+DX+SW},{y-DY} {x+DX+SW},{y-DY+TH} {x+SW},{y+TH}" fill="{side}" stroke="#ffffff" stroke-width="0.8"/>'
+            f'<polygon points="{x},{y} {x+SW},{y} {x+SW},{y+TH} {x},{y+TH}" fill="{col}" stroke="#ffffff" stroke-width="0.8"/>'
+            f'</g>')
+        cy = y + TH / 2
+        tcol = "#3a3a3a" if req else _iso_mix(col, (0, 0, 0), 0.1)
+        nm = f'{z.get("_num")}. {z.get("program") or ""}'
+        sw_op = "" if req else ' opacity="0.5"'
+        labels.append(
+            f'<line x1="{x+SW+DX}" y1="{y-DY+TH/2:.0f}" x2="{LBLX-5}" y2="{cy:.0f}" stroke="#cfccc6" stroke-width="1"/>'
+            f'<rect x="{LBLX}" y="{cy-6:.0f}" width="10" height="12" rx="2" fill="{col}"{sw_op}/>'
+            f'<text x="{LBLX+16}" y="{cy+4:.0f}" font-size="12.5" font-weight="{700 if req else 600}" '
+            f'font-family="{FONT}" fill="{tcol}">{_esc(nm)}</text>'
+            + ('' if req else f'<text x="{W-4}" y="{cy+4:.0f}" text-anchor="end" font-size="9" '
+                              f'font-family="{FONT}" fill="#a9a5a0">제안</text>'))
+        lvl_first.setdefault(lv, cy)
+        if lv == "저층":
+            gl_y = y + TH
+        y += TH + GAP
+    bottom_y = y
+
+    if gl_y is None:                      # 저층 없으면 지하 상단
+        yy = TOP_Y
+        for z in order:
+            if (z.get("level") or "").strip() == "지하":
+                gl_y = yy
+                break
+            yy += TH + GAP
+    ground = ""
+    if gl_y is not None:
+        gx, gw = XB - 16, SW + 32
+        ground = (f'<polygon points="{gx},{gl_y} {gx+DX},{gl_y-DY} {gx+DX+gw},{gl_y-DY} {gx+gw},{gl_y}" '
+                  f'fill="#e7e4df" stroke="#cfccc6" stroke-width="0.8"/>'
+                  f'<text x="{gx+DX+gw+2}" y="{gl_y-DY+4:.0f}" font-size="8.5" fill="#a9a5a0">G.L</text>')
+
+    lvlab = "".join(
+        f'<text x="26" y="{cy+4:.0f}" text-anchor="end" font-size="11" font-weight="700" '
+        f'font-family="{FONT}" fill="#8a8680">{_esc(lv)}</text>'
+        for lv, cy in lvl_first.items())
+
+    svg_h = bottom_y + 16
+    return (f'<svg viewBox="0 0 {W} {svg_h:.0f}" width="100%" '
+            f'style="max-width:560px;display:block;margin:0 auto" '
+            f'role="img" aria-label="개념 매스 다이어그램">'
+            + ground + lvlab + "".join(slabs) + "".join(labels) + '</svg>')
+
+
+_SITE_ANCHORS = {   # 대지 사각형 내 방위 앵커 (fx, fy 비율)
+    "N": (0.50, 0.17), "S": (0.50, 0.83), "E": (0.78, 0.50), "W": (0.22, 0.50),
+    "C": (0.50, 0.50), "NE": (0.76, 0.19), "NW": (0.24, 0.19),
+    "SE": (0.76, 0.81), "SW": (0.24, 0.81),
+}
+_LVL_SHORT = {"상층": "상층", "중층": "중층", "저층": "저층", "지하": "지하"}
+# 평면(배치도)에서는 위치=방위. 층(상/중/저)은 수직 매스라 평면에 표기하면 안 됨(축이 다름) →
+# 블록엔 방위를 표기하고 층 구성은 아래 존 목록이 담당.
+_PLAN_KO = {"N": "북측", "S": "남측", "E": "동측", "W": "서측", "C": "중앙",
+            "NE": "북동", "NW": "북서", "SE": "남동", "SW": "남서"}
+
+
+def _zone_site_plan_svg(zones: list, zc: dict) -> str:
+    """대지 배치도(위에서 본 평면) — 대지 위에 각 프로그램(동)을 방위 제자리에 이름 블록으로
+    배치. **방위가 다르면 별개 위치 = 별개 동**(같은 건물로 뭉치지 않음). 층은 칩으로 표기
+    (평면이라 수직 적층은 표현 안 함). 지하는 대지 하부 '지하' 띠에. 채움=지침서 필수(사실),
+    점선=제안(추론). 데이터에 '동' 명시가 없어 방위로 그룹핑 — 개념 배치(정확 도면 아님). LLM 0.
+    """
+    FONT = "Montserrat,'Malgun Gothic',sans-serif"
+    VW, MX, TOP = 430, 46, 44
+    SW, SH = VW - 2 * MX, 244
+    sx, sy = MX, TOP
+
+    def _clip(s, n):
+        s = str(s or "")
+        return s if len(s) <= n else s[:n - 1] + "…"
+
+    def _block(z, ax, top_y, cap=134):
+        nm = _clip(f'{z.get("_num")}. {z.get("program") or ""}', 11)
+        bw = min(cap, max(58, int(len(nm) * 11 + 16)))
+        bx = ax - bw / 2
+        col = zc[id(z)]
+        req = _zreq(z)
+        fillattr = (f'fill="{col}"' if req
+                    else f'fill="#ffffff" stroke="{col}" stroke-width="1.6" stroke-dasharray="4 2"')
+        tc = "#ffffff" if req else col
+        return (f'<rect x="{bx:.0f}" y="{top_y:.0f}" width="{bw:.0f}" height="26" rx="5" {fillattr}/>'
+                f'<text x="{ax:.0f}" y="{top_y+17:.0f}" text-anchor="middle" font-size="12" '
+                f'font-weight="700" font-family="{FONT}" fill="{tc}">{_esc(nm)}</text>')  # 방위는 N 표시로 충분
+
+    below = [z for z in zones if (z.get("level") or "").strip() == "지하"]
+    above = [z for z in zones if (z.get("level") or "").strip() != "지하"]
+    groups: dict = {}
+    for z in above:
+        p = (z.get("plan") or "C").strip().upper()
+        groups.setdefault(p if p in _SITE_ANCHORS else "C", []).append(z)
+
+    BH, GAP = 26, 18
+    blocks = ""
+    for pos, zs in groups.items():
+        fx, fy = _SITE_ANCHORS[pos]
+        ax, ay = sx + fx * SW, sy + fy * SH
+        total = len(zs) * BH + (len(zs) - 1) * GAP
+        y0 = ay - total / 2
+        for z in zs:
+            blocks += _block(z, ax, y0)
+            y0 += BH + GAP
+
+    site = (f'<rect x="{sx}" y="{sy}" width="{SW}" height="{SH}" rx="6" fill="#fbfaf8" stroke="#141414" stroke-width="1.5"/>'
+            f'<text x="{sx+SW/2:.0f}" y="{sy-14}" text-anchor="middle" font-size="12" font-weight="700" font-family="{FONT}" fill="#6f6b66">N ▲</text>'
+            f'<text x="{sx-8}" y="{sy+SH/2+3:.0f}" text-anchor="end" font-size="10" fill="#a9a5a0">W</text>'
+            f'<text x="{sx+SW+8}" y="{sy+SH/2+3:.0f}" font-size="10" fill="#a9a5a0">E</text>'
+            f'<text x="{sx+SW/2:.0f}" y="{sy+SH+16}" text-anchor="middle" font-size="10" fill="#a9a5a0">S</text>')
+
+    base, by = "", sy + SH + 30
+    if below:
+        base += (f'<rect x="{sx}" y="{by}" width="{SW}" height="34" rx="5" fill="#eceae7" '
+                 f'stroke="#cfccc6" stroke-width="1" stroke-dasharray="3 2"/>'
+                 f'<text x="{sx+8}" y="{by+21:.0f}" font-size="10" font-weight="700" font-family="{FONT}" fill="#8a8680">지하</text>')
+        bx = sx + 44
+        for z in below:
+            nm = _clip(f'{z.get("_num")}. {z.get("program") or ""}', 10)
+            bw = min(120, max(56, int(len(nm) * 10.5 + 14)))
+            col = zc[id(z)]
+            req = _zreq(z)
+            fillattr = (f'fill="{col}"' if req
+                        else f'fill="#ffffff" stroke="{col}" stroke-width="1.4" stroke-dasharray="4 2"')
+            tc = "#ffffff" if req else col
+            base += (f'<rect x="{bx:.0f}" y="{by+6:.0f}" width="{bw}" height="22" rx="4" {fillattr}/>'
+                     f'<text x="{bx+bw/2:.0f}" y="{by+21:.0f}" text-anchor="middle" font-size="11" '
+                     f'font-weight="700" font-family="{FONT}" fill="{tc}">{_esc(nm)}</text>')
+            bx += bw + 8
+        vh = by + 34 + 12
+    else:
+        vh = sy + SH + 24
+
+    return (f'<svg viewBox="0 0 {VW} {vh:.0f}" width="100%" '
+            f'style="max-width:540px;display:block;margin:0 auto" '
+            f'role="img" aria-label="대지 배치도">' + site + blocks + base + '</svg>')
+
+
+_OVERLAY_ANCHORS = {   # 위성 위 중앙(대지) 주변 방위 앵커 (정사각 캔버스 비율)
+    "N": (0.50, 0.32), "S": (0.50, 0.68), "E": (0.68, 0.50), "W": (0.32, 0.50),
+    "C": (0.50, 0.50), "NE": (0.64, 0.36), "NW": (0.36, 0.36),
+    "SE": (0.64, 0.64), "SW": (0.36, 0.64),
+}
+# 필지 중심(centroid) 기준 방위 오프셋 (캔버스 비율) — 실측 대지 위에 방위로 흩뿌림
+_OVERLAY_OFF = {
+    "N": (0.0, -0.19), "S": (0.0, 0.20), "E": (0.23, 0.0), "W": (-0.23, 0.0),
+    "C": (0.0, 0.0), "NE": (0.17, -0.14), "NW": (-0.17, -0.14),
+    "SE": (0.17, 0.16), "SW": (-0.17, 0.16),
+}
+
+
+def _zone_site_overlay_svg(zones: list, zc: dict, bg_b64: str, parcel_norm: list | None = None) -> str:
+    """실측 위성+지적도 이미지 위에 프로그램 오버레이. parcel_norm(연속지적도 필지 폴리곤,
+    이미지 정규화 링 리스트)이 있으면 **실제 대지경계선**(건원 RED)을 그리고 그 필지 중심 기준
+    으로 프로그램을 방위 배치. 없으면 이미지 중앙 기준. 채움=지침서 필수, 점선=제안. 지하는 하부 띠.
+    LLM 0 · 자체완결. (블록 위치는 여전히 방위 근사 — LLM 이 방위만 주므로.)
+    """
+    FONT = "Montserrat,'Malgun Gothic',sans-serif"
+    S = 430
+
+    def _clip(s, n):
+        s = str(s or "")
+        return s if len(s) <= n else s[:n - 1] + "…"
+
+    # ── 실측 필지 경계 폴리곤 + 중심(centroid) ──
+    poly_svg, cx, cy, has_parcel = "", S / 2, S / 2, False
+    rings = [rg for rg in (parcel_norm or []) if isinstance(rg, list) and len(rg) >= 3]
+    if rings:
+        pts_all = []
+        for ring in rings:
+            pts = " ".join(f"{float(p[0])*S:.1f},{float(p[1])*S:.1f}" for p in ring
+                           if isinstance(p, (list, tuple)) and len(p) >= 2)
+            if not pts:
+                continue
+            poly_svg += (f'<polygon points="{pts}" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.6"/>'
+                         f'<polygon points="{pts}" fill="{_ACCENT}" fill-opacity="0.10" '
+                         f'stroke="{_ACCENT}" stroke-width="2.4"/>')
+            pts_all.extend(ring)
+        if pts_all and poly_svg:
+            cx = sum(float(p[0]) for p in pts_all) / len(pts_all) * S
+            cy = sum(float(p[1]) for p in pts_all) / len(pts_all) * S
+            has_parcel = True
+
+    below = [z for z in zones if (z.get("level") or "").strip() == "지하"]
+    above = [z for z in zones if (z.get("level") or "").strip() != "지하"]
+    groups: dict = {}
+    for z in above:
+        p = (z.get("plan") or "C").strip().upper()
+        groups.setdefault(p if p in _OVERLAY_OFF else "C", []).append(z)
+
+    BH, GAP = 24, 10
+    blocks = ""
+    for pos, zs in groups.items():
+        dx, dy = _OVERLAY_OFF[pos]
+        ax, ay = cx + dx * S, cy + dy * S
+        total = len(zs) * BH + (len(zs) - 1) * GAP
+        y0 = ay - total / 2
+        y0 = min(max(y0, 34), max(34, S - 42 - total))     # 스택이 캔버스 안에 들어오게
+        for z in zs:
+            nm = _clip(f'{z.get("_num")}. {z.get("program") or ""}', 11)
+            bw = min(150, max(60, int(len(nm) * 11 + 18)))
+            bx = min(max(ax - bw / 2, 4), S - bw - 4)
+            col = zc[id(z)]
+            req = _zreq(z)
+            if req:
+                fa, tc = f'fill="{col}" opacity="0.9"', "#ffffff"
+            else:
+                fa = f'fill="#ffffff" opacity="0.82" stroke="{col}" stroke-width="1.7" stroke-dasharray="4 2"'
+                tc = col
+            blocks += (
+                f'<rect x="{bx:.0f}" y="{y0:.0f}" width="{bw}" height="{BH}" rx="5" {fa}/>'
+                f'<text x="{bx+bw/2:.0f}" y="{y0+16:.0f}" text-anchor="middle" font-size="12" font-weight="700" '
+                f'font-family="{FONT}" fill="{tc}">{_esc(nm)}</text>')     # 방위는 좌상단 N 표시로 충분
+            y0 += BH + GAP
+
+    base = ""
+    if below:
+        by = S - 30
+        base += (f'<rect x="0" y="{by}" width="{S}" height="30" fill="#141414" opacity="0.58"/>'
+                 f'<text x="10" y="{by+19}" font-size="10" font-weight="700" font-family="{FONT}" fill="#e7e4df">지하</text>')
+        bx = 46
+        for z in below:
+            nm = _clip(f'{z.get("_num")}. {z.get("program") or ""}', 10)
+            col = zc[id(z)]
+            req = _zreq(z)
+            bw = min(120, max(54, int(len(nm) * 10 + 14)))
+            fa = f'fill="{col}"' if req else f'fill="#ffffff" stroke="{col}" stroke-width="1.3" stroke-dasharray="3 2"'
+            tc = "#ffffff" if req else col
+            base += (f'<rect x="{bx}" y="{by+6}" width="{bw}" height="18" rx="3" {fa}/>'
+                     f'<text x="{bx+bw/2:.0f}" y="{by+19}" text-anchor="middle" font-size="10" '
+                     f'font-weight="700" font-family="{FONT}" fill="{tc}">{_esc(nm)}</text>')
+            bx += bw + 8
+
+    chrome = (f'<rect x="6" y="6" width="46" height="24" rx="5" fill="#000000" opacity="0.4"/>'
+              f'<text x="14" y="23" font-size="13" font-weight="800" font-family="{FONT}" fill="#ffffff">N ▲</text>')
+    if has_parcel:
+        chrome += (f'<rect x="{S-96}" y="6" width="90" height="22" rx="5" fill="#000000" opacity="0.42"/>'
+                   f'<text x="{S-51}" y="21" text-anchor="middle" font-size="10.5" font-weight="700" '
+                   f'font-family="{FONT}" fill="{_ACCENT}">■ 실측 대지경계</text>')
+    return (f'<svg viewBox="0 0 {S} {S}" width="100%" '
+            f'style="max-width:540px;display:block;margin:0 auto;border-radius:8px" '
+            f'role="img" aria-label="대지 배치도">'
+            f'<image href="data:image/jpeg;base64,{bg_b64}" x="0" y="0" width="{S}" height="{S}" preserveAspectRatio="xMidYMid slice"/>'
+            f'<rect x="0" y="0" width="{S}" height="{S}" fill="#000000" opacity="0.16"/>'
+            + poly_svg + chrome + blocks + base + '</svg>')
+
+
 def _zone_alts_html(alternatives: list) -> str:
     """조닝 ALT (설계안별 최대 3안) → OMA 조직 스택을 나란히. 프로그램별 색·번호를 대안 간
     통일해 비교 가능하게. 유효 대안 2개 미만이면 '' (렌더 생략). LLM 0."""
@@ -1462,7 +1749,7 @@ def _zone_alts_html(alternatives: list) -> str:
                 prog_num[p] = n
                 prog_col[p] = _ZONE_COLORS[(n - 1) % len(_ZONE_COLORS)]
     cols = ""
-    for i, a in enumerate(alts[:3]):
+    for i, a in enumerate(alts[:2]):        # 정확히 2안 (권장안 히어로 + 대안 2 = 총 3 방향)
         zs = [z for z in (a.get("zones") or [])
               if isinstance(z, dict) and (z.get("program") or "").strip()]
         zc = {}
@@ -1476,25 +1763,31 @@ def _zone_alts_html(alternatives: list) -> str:
         head = ('<div class="alt-hd"><span class="alt-tag">' + _esc(label) + '</span>'
                 + (f'<span class="alt-based">↳ {_esc(based)}</span>' if based else '') + '</div>'
                 + (f'<div class="alt-premise">{_esc(premise)}</div>' if premise else ''))
-        cols += f'<div class="alt-col">{head}{_zone_section_stack_svg(zs, zc)}</div>'
+        cols += f'<div class="alt-col">{head}{_zone_site_plan_svg(zs, zc)}</div>'
     return (
         '<div class="place-alts"><div class="alts-hd">프로그램 조닝 대안 · 설계안별 ' + _AI_BADGE + '</div>'
-        '<div class="alts-note"><b>지침서 필수 배치는 3안 모두 동일(사실 고정)</b> · 제안 배치만 전제'
-        '(design_direction)별로 달라집니다 — 채움=필수, 점선=제안. 어느 프로그램이 층을 옮기는지 비교하세요.</div>'
+        '<div class="alts-note"><b>지침서 필수 배치는 두 안 모두 동일(사실 고정)</b> · 제안 배치만 전제'
+        '(design_direction)별로 달라집니다 — 채움=필수, 점선=제안. 어느 동이 어디로 가는지 비교하세요.</div>'
         f'<div class="alts-grid">{cols}</div></div>'
     )
 
 
-def _zone_diagrams(zones: list, zc: dict, show_section: bool = True) -> str:
-    """단면형(층별 명명 블록) + 조닝(방위) 다이어그램. show_section=False 면 방위만
-    (조닝 ALT 가 단면을 대신 그릴 때 — 권장안 단면 중복 방지)."""
-    sect = ""
-    if show_section:
-        sect = (f'<div class="dia-box" style="grid-column:1/-1">{_zone_section_stack_svg(zones, zc)}'
-                f'<div class="dia-cap">프로그램 단면 · 층별 배치 (채움=지침서 필수 · 점선=제안 · 면적 비례 아님)</div></div>')
+def _zone_diagrams(zones: list, zc: dict, bg_b64: str = "", parcel_norm: list | None = None) -> str:
+    """권장안 배치 — 대지 배치도 전체폭 히어로. bg_b64(위성+지적도)가 있으면 실측 이미지 위
+    오버레이, 없으면 흰 박스 개념 평면. parcel_norm 있으면 실측 대지경계선을 그린다."""
+    if bg_b64:
+        svg = _zone_site_overlay_svg(zones, zc, bg_b64, parcel_norm)
+        _bnd = ('<b>빨간선=실측 대지경계(연속지적도)</b> · ' if parcel_norm
+                else '지적선은 이미지 참조 · ')
+        cap = ('실측 위성 + 지적도 위 배치 · ' + _bnd + '채움=지침서 필수 · 점선=제안 · '
+               '지하는 하부 띠 · <b>층 구성(상/중/저)은 아래 존 목록 참조</b> · 블록 위치는 방위 근사')
+    else:
+        svg = _zone_site_plan_svg(zones, zc)
+        cap = ('대지 배치도 · 라벨=방위(평면 위치) · 채움=지침서 필수 · 점선=제안 · 지하는 하부 띠 · '
+               '<b>층 구성(상/중/저)은 아래 존 목록 참조</b> (평면이라 층은 표기 안 함)')
     return (
-        sect
-        + f'<div class="dia-box">{_zone_plan_svg(zones, zc)}<div class="dia-cap">개념 조닝 (방위 · 번호는 아래 목록)</div></div>'
+        f'<div class="dia-box" style="grid-column:1/-1">{svg}'
+        f'<div class="dia-cap">{cap}</div></div>'
     )
 
 
@@ -1510,7 +1803,8 @@ def _zone_cards(zones: list, zc: dict) -> str:
         out += (
             f'<div class="pz{" req" if req else ""}" style="border-left-color:{col}">'
             f'<div class="pz-head"><span class="pz-num" style="background:{col}">{z["_num"]}</span>'
-            f'<span class="pz-loc">{_esc(z.get("plan"))}·{_esc(z.get("level"))}</span>'
+            f'<span class="pz-loc">{_esc(_PLAN_KO.get((z.get("plan") or "").strip().upper(), z.get("plan")))}'
+            f'·{_esc(z.get("level"))}</span>'
             f'{_esc(z.get("program"))}{tag}</div>'
             + (f'<div class="pz-why">{_esc(z.get("why"))}</div>' if (z.get("why") or "").strip() else "")
             + (f'<div class="pz-draws">{draws}</div>' if draws else "")
@@ -1528,7 +1822,7 @@ _PLACE_LEGEND = (
 )
 
 
-def _placement_strategy_html(proposal: dict) -> str:
+def _placement_strategy_html(proposal: dict, site_image_b64: str = "", parcel_norm: list | None = None) -> str:
     """대지 근거 배치 → SVG 조닝(방위)·단면(층대) 다이어그램(번호 마커) + 번호 존 카드. 없으면 ''.
 
     다부지(zone.site 서로 다름)면 **부지별로 다이어그램·카드를 분리**한다 — 한 사각형에 두 부지를
@@ -1557,9 +1851,8 @@ def _placement_strategy_html(proposal: dict) -> str:
         groups[k].append(z)
     multi = len([k for k in order if k]) > 1
 
-    # 조닝 ALT (설계안별) — 있으면 권장안 단일 단면은 생략(중복 방지), ALT 행이 대신 그린다.
+    # 권장안 = 개념 매스(히어로) + 방위. 조닝 ALT(설계안별 단면 비교)는 그 아래 별도.
     alts_html = _zone_alts_html(ps.get("alternatives") or [])
-    show_section = not alts_html
 
     if multi:
         body = ""
@@ -1568,13 +1861,14 @@ def _placement_strategy_html(proposal: dict) -> str:
             hd = f'<div class="place-site-hd">{_esc(k) if k else "부지 미지정"}</div>'
             body += (
                 '<div class="place-site">' + hd
-                + '<div class="place-dias">' + _zone_diagrams(zs, zc, show_section) + '</div>'
+                + '<div class="place-dias">' + _zone_diagrams(zs, zc) + '</div>'
                 + f'<div class="place-zones">{_zone_cards(zs, zc)}</div>'
                 + '</div>'
             )
     else:
+        # 단부지 → 위성 이미지가 있으면 실측 오버레이 히어로 (이미지·필지경계는 대표 부지 1장뿐).
         body = (
-            '<div class="place-dias">' + _zone_diagrams(zones, zc, show_section) + '</div>'
+            '<div class="place-dias">' + _zone_diagrams(zones, zc, site_image_b64, parcel_norm) + '</div>'
             + f'<div class="place-zones">{_zone_cards(zones, zc)}</div>'
         )
     body += alts_html
@@ -1715,7 +2009,7 @@ def to_proposal_html(
         + rec_html
         + directions_html
         + interp_html
-        + _placement_strategy_html(proposal)
+        + _placement_strategy_html(proposal, site_image_b64, (site_context or {}).get("parcel_norm"))
         + _priorities_html(proposal)
         + _risks_html(proposal)
         + _checklist_html(proposal, "kickoff_checklist", "kickoff", "5", "착수 체크리스트")

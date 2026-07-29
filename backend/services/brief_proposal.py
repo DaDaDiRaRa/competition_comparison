@@ -177,7 +177,7 @@ _PROPOSAL_INSTRUCTION = (
     "    ],\n"
     '    "section_note": "단면 원리 한 줄 (예: 저층 시민개방 · 중상층 업무 · 코어 북측 · 지하 부지연계)",\n'
     '    "alternatives": [\n'
-    '      { "label": "A|B|C — 짧은 이름",\n'
+    '      { "label": "A|B — 짧은 이름",\n'
     '        "based_on": "이 대안이 구현하는 design_directions 중 한 direction (그 설계안의 공간판)",\n'
     '        "premise": "이 조닝을 가르는 전제 한 줄 (예: 조망 우선 / 가로 활성 / 효율 집약) — 왜 이렇게 다르게 배치하나",\n'
     '        "zones": [ { "program": "...", "plan": "N|S|E|W|NE|NW|SE|SW|C", "level": "지하|저층|중층|상층", "required": true } ] }\n'
@@ -247,14 +247,14 @@ _PROPOSAL_INSTRUCTION = (
     "  ⑦ **다부지면 각 zone 에 site(부지N) 필수** — sites/law_diagnosis 에 부지가 2개 이상이면\n"
     "     모든 zone 에 소속 부지를 site 로 표기하라(방위 N/S/E/W 가 부지마다 다르므로 섞이면 안 됨).\n"
     "     각 부지의 plan(방위)은 그 부지 고유의 접도·조망·형상 기준으로 정하라. 단일 부지면 site 생략.\n"
-    "  ⑧ **alternatives (조닝 ALT — 최대 3안):** 위 zones(권장안)와 별개로, design_directions\n"
-    "     상위 2~3안을 **공간 배치로 표현한 대안**을 준다. (a) 각 대안은 based_on 으로\n"
+    "  ⑧ **alternatives (조닝 ALT — 정확히 2안):** 위 zones(권장안)와 별개로, design_directions\n"
+    "     상위 2안을 **공간 배치로 표현한 대안**을 준다. (a) 각 대안은 based_on 으로\n"
     "     design_directions 의 한 direction 에 연결(그 전략의 공간판). (b) **required=true(지침서\n"
     "     명시 위치)인 존은 모든 대안에서 위치·층이 동일**해야 한다 — 사실은 변주 대상이 아니다.\n"
     "     대안 간 차이는 required=false(추론) 배치에서만 나온다. (c) 대안 zones 는 compact\n"
     "     (program/plan/level/required 만; why/draws_on/basis 는 권장안에만). (d) 전제(premise)가\n"
-    "     실제로 갈리게 — 무엇을 상층에 올리고 무엇을 저층 개방하느냐가 달라지게. 신호 얕으면 2안,\n"
-    "     더 얕으면 alternatives 를 빈 배열로 두라(억지 변주 금지).\n"
+    "     실제로 갈리게 — 무엇을 상층에 올리고 무엇을 저층 개방하느냐가 달라지게. 신호 얕으면 1안,\n"
+    "     없으면 alternatives 를 빈 배열로 두라(억지 변주 금지).\n"
     "- **읽을 만한 깊이 (CRITICAL):** 각 항목은 한 줄 제목(claim/direction)에서 끝내지 말고\n"
     "  detail/narrative 로 **2~4문장 풀어써라** — 설계팀이 읽고 판단할 수 있게. 단 분량을\n"
     "  늘리는 건 'filler(미사여구·동어반복)'가 아니라 **근거 있는 추론의 깊이**다: ① 어떤\n"
@@ -386,7 +386,7 @@ def _lock_placement_alternatives(result: dict) -> None:
 
     권장안(placement_strategy.zones)에서 지침서 명시(required=true)인 존의 위치(plan·level)를
     **모든 대안에 동일 고정** — 사실은 대안마다 달라지면 안 된다. 대안에서 빠진 명시 존은 canonical
-    로 채우고, malformed 대안은 제거, 최대 3안. alternatives 없거나 비면 no-op(graceful).
+    로 채우고, malformed 대안은 제거, 최대 2안. alternatives 없거나 비면 no-op(graceful).
     """
     ps = result.get("placement_strategy")
     if not isinstance(ps, dict):
@@ -428,7 +428,7 @@ def _lock_placement_alternatives(result: dict) -> None:
                 zs.append({"program": key, "plan": p, "level": l, "required": True})
         alt["zones"] = zs
         cleaned.append(alt)
-        if len(cleaned) >= 3:
+        if len(cleaned) >= 2:
             break
     ps["alternatives"] = cleaned
 

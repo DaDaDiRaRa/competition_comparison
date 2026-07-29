@@ -474,46 +474,77 @@ class TestPlacementMultiSite:
         assert "<b>부지1</b>" not in h
 
 
-class TestProgramSectionDiagram:
-    """건물 단면형 조닝 — 층 밴드 + 이름 블록 (채움=지침서 필수 / 점선=제안, LLM 0 SVG)."""
+class TestSitePlan:
+    """권장안 = 대지 배치도(위에서 본 평면, 방위별 별개 동). 채움=지침서 필수 / 점선=제안, LLM 0 SVG."""
 
-    def _z(self, program, level="저층", required=False):
-        return {"program": program, "plan": "S", "level": level, "required": required, "why": "근거"}
+    def _z(self, program, plan="S", level="저층", required=False):
+        return {"program": program, "plan": plan, "level": level, "required": required, "why": "근거"}
 
-    def test_section_diagram_present_full_width(self):
-        ps = {"zones": [self._z("주민센터", "저층", True), self._z("주차", "지하", True)]}
+    def test_site_plan_present_full_width(self):
+        ps = {"zones": [self._z("주민센터", "S", "저층", True), self._z("주차", "C", "지하", True)]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert 'aria-label="프로그램 단면 다이어그램"' in h
-        assert 'grid-column:1/-1' in h                              # 전체폭
-        assert '채움=지침서 필수' in h                              # 단면 캡션
-        assert '주민센터' in h and 'G.L' in h                       # 이름 블록 + 지반선
-        assert '개념 조닝' in h                                     # 방위 다이어그램 유지
+        assert 'aria-label="대지 배치도"' in h
+        assert 'grid-column:1/-1' in h                              # 전체폭 히어로
+        assert '라벨=방위(평면 위치)' in h                          # 캡션: 위치=방위(층 아님)
+        assert '층 구성(상/중/저)은 아래 존 목록 참조' in h          # 층은 평면에 표기 안 함
+        assert '주민센터' in h and '>지하<' in h                     # 이름 블록 + 지하 띠
 
-    def test_proposal_zone_dashed(self):
-        ps = {"zones": [self._z("주민센터", "저층", True),
-                        self._z("전망라운지", "상층", False)]}       # 제안 → 점선 블록
+    def test_separate_orientations_both_placed(self):
+        # 방위가 다르면 별개 위치 = 별개 동 (한 건물로 뭉치지 않음)
+        ps = {"zones": [self._z("보건소", "S", "저층", True),
+                        self._z("업무동", "N", "상층", False)]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert 'stroke-dasharray' in h                              # 제안 점선 테두리
-        assert '전망라운지' in h and '주민센터' in h
+        assert '보건소' in h and '업무동' in h
+        assert 'stroke-dasharray' in h                              # 제안(업무동) 점선
 
     def test_renders_without_required_zone(self):
-        ps = {"zones": [self._z("a", "저층", False), self._z("b", "상층", False)]}
+        ps = {"zones": [self._z("a", "S", "저층", False), self._z("b", "N", "상층", False)]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert 'aria-label="프로그램 단면 다이어그램"' in h
+        assert 'aria-label="대지 배치도"' in h
 
-    def test_section_escapes_program_name(self):
-        ps = {"zones": [self._z("<b>x</b>", "저층", True), self._z("y", "상층", True)]}
+    def test_site_plan_escapes_program_name(self):
+        ps = {"zones": [self._z("<b>x</b>", "S", "저층", True), self._z("y", "N", "상층", True)]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        sec = h.split('aria-label="프로그램 단면 다이어그램"')[1][:1200]
+        sec = h.split('aria-label="대지 배치도"')[1][:1500]
         assert '&lt;b&gt;x&lt;/b&gt;' in h and '<b>x</b>' not in sec
 
-    def test_multisite_section_per_site(self):
+    def test_multisite_site_plan_per_site(self):
         ps = {"zones": [
             {"program": "민원실", "plan": "S", "level": "저층", "required": True, "site": "부지1"},
             {"program": "보건소", "plan": "S", "level": "저층", "required": True, "site": "부지2"},
         ]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
-        assert h.count('aria-label="프로그램 단면 다이어그램"') == 2   # 부지별 1개씩
+        assert h.count('aria-label="대지 배치도"') == 2   # 부지별 1개씩
+
+    def test_satellite_overlay_when_image_present(self):
+        # 단부지 + 위성 이미지 → 실측 위성 위 오버레이 (흰 박스 아님)
+        ps = {"zones": [self._z("보건소", "S", "저층", True), self._z("업무동", "N", "상층", False)]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps}, site_image_b64="QUJD")
+        assert '<image href="data:image/jpeg;base64,QUJD"' in h    # 실측 위성 배경
+        assert '실측 위성 + 지적도 위 배치' in h                    # 정직 캡션
+        assert 'aria-label="대지 배치도"' in h
+
+    def test_white_box_fallback_without_image(self):
+        ps = {"zones": [self._z("보건소", "S", "저층", True), self._z("업무동", "N", "상층", False)]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert '<image href="data:image' not in h                  # 이미지 없으면 흰 박스
+        assert 'aria-label="대지 배치도"' in h
+
+    def test_real_parcel_boundary_drawn(self):
+        # 위성 + 실측 필지 폴리곤 → 실제 대지경계선(건원 RED) 렌더
+        ps = {"zones": [self._z("보건소", "S", "저층", True), self._z("업무동", "N", "상층", False)]}
+        sc = {"parcel_norm": [[[0.42, 0.40], [0.58, 0.40], [0.58, 0.60], [0.42, 0.60], [0.42, 0.40]]]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps},
+                             site_context=sc, site_image_b64="QUJD")
+        assert '<polygon' in h and '#e60012' in h                  # 필지 경계선
+        assert '실측 대지경계' in h                                 # 칩
+        assert '빨간선=실측 대지경계' in h                          # 캡션
+
+    def test_no_polygon_without_parcel(self):
+        ps = {"zones": [self._z("보건소", "S", "저층", True), self._z("업무동", "N", "상층", False)]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps},
+                             site_context={}, site_image_b64="QUJD")
+        assert '<polygon' not in h and '<image href' in h          # 폴리곤 없음, 위성은 유지
 
 
 class TestLawRefsFootnote:
@@ -645,35 +676,35 @@ class TestZoningAlternatives:
         a1 = {z["program"]: (z["plan"], z["level"]) for z in r["placement_strategy"]["alternatives"][1]["zones"]}
         assert a1.get("보건소") == ("S", "저층")       # 빠졌던 명시 존 보강
 
-    def test_lock_caps_at_three(self):
+    def test_lock_caps_at_two(self):
         r = {"placement_strategy": {"zones": [], "alternatives": [
             {"label": str(i), "zones": [{"program": f"p{i}", "plan": "C", "level": "저층", "required": False}]}
             for i in range(5)]}}
         TestZoningAlternatives._lock(r)
-        assert len(r["placement_strategy"]["alternatives"]) == 3
+        assert len(r["placement_strategy"]["alternatives"]) == 2
 
     def test_lock_noop_without_alternatives(self):
         r = {"placement_strategy": {"zones": [{"program": "x", "plan": "S", "level": "저층", "required": True}]}}
         TestZoningAlternatives._lock(r)          # alternatives 없음 → 예외 없이 no-op
         assert "alternatives" not in r["placement_strategy"] or not r["placement_strategy"]["alternatives"]
 
-    def test_renders_three_columns_and_suppresses_single_section(self):
+    def test_renders_two_alt_siteplans_plus_primary(self):
         r = self._ps()
         TestZoningAlternatives._lock(r)
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": r["placement_strategy"]})
         assert "프로그램 조닝 대안" in h
-        assert h.count('aria-label="프로그램 단면 다이어그램"') == 2   # 2 ALT
-        assert "grid-column:1/-1" not in h                         # 권장안 단일 단면 억제
-        assert "개념 조닝" in h                                     # 권장안 방위 다이어그램 유지
-        assert "지침서 필수 배치는 3안 모두 동일" in h
+        # 권장안 히어로(1) + 대안 2 = 대지 배치도 3개 (ALT 도 동일 표현)
+        assert h.count('aria-label="대지 배치도"') == 3
+        assert "grid-column:1/-1" in h
+        assert "지침서 필수 배치는 두 안 모두 동일" in h
 
     def test_single_alternative_not_rendered(self):
-        # 대안 1개뿐이면 ALT 행 생략 → 권장안 단일 단면 유지
+        # 대안 1개뿐이면 ALT 행 생략 → 권장안 대지 배치도만
         ps = {"zones": [{"program": "a", "plan": "S", "level": "저층", "required": True}],
               "alternatives": [{"label": "A", "zones": [{"program": "a", "plan": "S", "level": "저층", "required": True}]}]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
         assert "프로그램 조닝 대안" not in h
-        assert "grid-column:1/-1" in h                             # 권장안 단일 단면은 남음
+        assert 'aria-label="대지 배치도"' in h                      # 권장안 대지 배치도는 남음
 
     def test_alt_program_name_escaped(self):
         ps = {"zones": [{"program": "코어", "plan": "C", "level": "중층", "required": True}],

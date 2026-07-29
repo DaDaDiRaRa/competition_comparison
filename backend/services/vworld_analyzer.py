@@ -106,6 +106,73 @@ def _tile_grid_bbox_3857(cx: int, cy: int, zoom: int, grid: int) -> tuple:
     return minx, miny, maxx, maxy
 
 
+# ── 필지 경계 폴리곤 (2D데이터 API GetFeature) → 이미지 정규화 좌표 ──────────────────
+# 연속지적도 필지 레이어. 위성 이미지가 bbox_3857 을 정확히 커버하므로, 필지 폴리곤(WGS84)
+# 을 3857 로 변환 후 이미지 0~1 정규화 좌표로 투영해 저장 → 렌더러가 위성 위에 실제 대지경계
+# 를 그린다. (지적도 래스터선과 달리 '이 대지'만 벡터로 강조 가능.)
+_PARCEL_LAYER = "LP_PA_CBND_BUBUN"
+
+
+def _geom_outer_rings(geom: dict) -> list:
+    """GeoJSON geometry → 외곽 링 리스트 (각 링 = [[lng,lat],...]). Polygon/MultiPolygon 처리."""
+    t = geom.get("type")
+    c = geom.get("coordinates") or []
+    if t == "Polygon":
+        return [c[0]] if c else []
+    if t == "MultiPolygon":
+        return [poly[0] for poly in c if poly]
+    return []
+
+
+def _project_ring_norm(ring: list, bbox: tuple) -> list:
+    """WGS84 링([[lng,lat],...]) → 이미지 정규화 좌표([[nx,ny],...], 0~1). y 는 상단이 maxy."""
+    minx, miny, maxx, maxy = bbox
+    w = (maxx - minx) or 1.0
+    h = (maxy - miny) or 1.0
+    out = []
+    for pt in ring:
+        try:
+            x, y = _lat_lng_to_3857(float(pt[1]), float(pt[0]))
+        except (TypeError, ValueError, IndexError):
+            continue
+        out.append([round((x - minx) / w, 4), round((maxy - y) / h, 4)])
+    return out
+
+
+async def _fetch_parcel_polygon(lat: float, lng: float, api_key: str, bbox: tuple,
+                                domain: str = "") -> list | None:
+    """지오코딩 좌표의 연속지적도 필지 폴리곤 → 이미지 정규화 링 리스트. 실패·미지원 시 None(graceful).
+
+    2D데이터 API GetFeature (VWorld 인증키에 '2D데이터 API' 활성 필요 — 미활성 시 status!=OK → None).
+    """
+    url = f"{_VWORLD_BASE}/data"
+    params = {
+        "service": "data", "request": "GetFeature", "data": _PARCEL_LAYER,
+        "key": api_key, "geomFilter": f"POINT({lng} {lat})", "geometry": "true",
+        "crs": "EPSG:4326", "format": "json", "size": "1",
+    }
+    if domain:
+        params["domain"] = domain
+    try:
+        async with httpx.AsyncClient(timeout=12) as client:
+            r = await client.get(url, params=params)
+        data = r.json()
+        resp = data.get("response") or {}
+        if resp.get("status") != "OK":
+            logger.info("필지 폴리곤 status=%s (2D데이터 API 미활성일 수 있음)", resp.get("status"))
+            return None
+        feats = (((resp.get("result") or {}).get("featureCollection") or {}).get("features") or [])
+        if not feats:
+            return None
+        rings = _geom_outer_rings(feats[0].get("geometry") or {})
+        norm = [_project_ring_norm(rg, bbox) for rg in rings if rg]
+        norm = [n for n in norm if len(n) >= 3]
+        return norm or None
+    except Exception as e:
+        logger.warning("VWorld 필지 폴리곤 취득 실패 (비치명): %s", e)
+        return None
+
+
 async def _fetch_wmts_satellite(
     lat: float, lng: float, api_key: str, domain: str = "",
     zoom: int = _DEFAULT_ZOOM, grid: int = _TILE_GRID,
@@ -356,10 +423,16 @@ async def run_site_analysis(
         save_image_path.write_bytes(composed)
         logger.info("site image saved: %s", save_image_path)
 
-    # 5. Vision 분석 (지적도 있으면 선·지번 해석 안내 추가)
+    # 5. Vision 분석 + 필지 폴리곤 취득을 **동시** 실행(추가 지연 없음). 폴리곤은 graceful(None 가능).
+    parcel_task = asyncio.create_task(
+        _fetch_parcel_polygon(lat, lng, vworld_key, bbox, vworld_domain)
+    )
     analysis = await _vision_analyze(
         composed, geo["matched"], lat, lng, view_radius_m, has_cadastral=has_cadastral,
     )
+    parcel_norm = await parcel_task
+    if parcel_norm:
+        logger.info("필지 경계 폴리곤 취득: %d개 링", len(parcel_norm))
 
     return {
         "address_input": address,
@@ -369,5 +442,6 @@ async def run_site_analysis(
         "radius_m": view_radius_m,
         "analysis": analysis,
         "has_cadastral": has_cadastral,
+        "parcel_norm": parcel_norm,      # 이미지 정규화 필지 경계(링 리스트) 또는 None
         "image_jpeg_b64": base64.standard_b64encode(composed).decode(),
     }

@@ -10,6 +10,8 @@ from services.vworld_analyzer import (
     _lat_lng_to_tile,
     _lat_lng_to_3857,
     _tile_grid_bbox_3857,
+    _geom_outer_rings,
+    _project_ring_norm,
     _WORLD_3857,
     _DEFAULT_ZOOM,
     _CADASTRAL_SPAN_M,
@@ -91,3 +93,42 @@ class TestHybridCadastralGeometry:
         # 광역 맥락 확보용으로 줌16(3×3 ≈ 1.8km)을 유지 (지적도는 중앙 합성으로 별도 처리)
         minx, _, maxx, _ = _tile_grid_bbox_3857(55869, 25389, _DEFAULT_ZOOM, 3)
         assert maxx - minx > 1500
+
+
+class TestParcelPolygonProjection:
+    """연속지적도 필지 폴리곤 → 이미지 정규화 투영 (2D데이터 API GetFeature 소비, 네트워크 0)."""
+
+    def test_geom_outer_rings_polygon(self):
+        ring = [[126.9, 37.5], [126.91, 37.5], [126.91, 37.51], [126.9, 37.5]]
+        assert _geom_outer_rings({"type": "Polygon", "coordinates": [ring, [[0, 0]]]}) == [ring]
+
+    def test_geom_outer_rings_multipolygon(self):
+        r1 = [[126.9, 37.5], [126.91, 37.5], [126.91, 37.51]]
+        r2 = [[126.8, 37.4], [126.81, 37.4], [126.81, 37.41]]
+        got = _geom_outer_rings({"type": "MultiPolygon", "coordinates": [[r1], [r2]]})
+        assert got == [r1, r2]
+
+    def test_geom_outer_rings_unknown_empty(self):
+        assert _geom_outer_rings({"type": "Point", "coordinates": [1, 2]}) == []
+
+    def test_projection_center_point_near_half(self):
+        # 지오코딩 좌표 부근 필지 → 이미지 정규화 좌표는 0~1 안, 중앙 근처
+        lat, lng = 37.5665, 126.9780
+        cx, cy = _lat_lng_to_tile(lat, lng, _DEFAULT_ZOOM)
+        bbox = _tile_grid_bbox_3857(cx, cy, _DEFAULT_ZOOM, 3)
+        ring = [[lng - 0.0006, lat - 0.0004], [lng + 0.0006, lat - 0.0004],
+                [lng + 0.0006, lat + 0.0004], [lng - 0.0006, lat + 0.0004]]
+        norm = _project_ring_norm(ring, bbox)
+        assert len(norm) == 4
+        for nx, ny in norm:
+            assert 0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0     # 이미지 안
+            assert 0.3 < nx < 0.7 and 0.3 < ny < 0.75         # 중앙 부근(타일 오프셋 허용)
+
+    def test_projection_y_inverted(self):
+        # 위도가 클수록(북쪽) 이미지 y 는 작아야(위쪽) 한다
+        lat, lng = 37.5, 127.0
+        cx, cy = _lat_lng_to_tile(lat, lng, _DEFAULT_ZOOM)
+        bbox = _tile_grid_bbox_3857(cx, cy, _DEFAULT_ZOOM, 3)
+        south = _project_ring_norm([[lng, lat - 0.001]], bbox)[0]
+        north = _project_ring_norm([[lng, lat + 0.001]], bbox)[0]
+        assert north[1] < south[1]                            # 북쪽이 위(작은 y)
