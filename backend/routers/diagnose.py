@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 from datetime import datetime
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from config import settings, FACILITY_TYPES
@@ -24,7 +24,7 @@ from services.data_extractor import extract_pdf, merge_extracted_data, extract_b
 from services.comparator import diagnose_submission
 from services.diagnosis_report_generator import generate_diagnosis_report
 from services.pattern_builder import build_pattern_from_submissions
-from services.utils import sse, user_error_msg as _user_error_msg
+from services.utils import sse, user_error_msg as _user_error_msg, html_file_response
 
 router = APIRouter()
 
@@ -322,8 +322,8 @@ def list_reports():
 
 
 @router.get("/reports/{filename}")
-def get_report(filename: str):
+def get_report(filename: str, download: bool = Query(False)):
     path = get_diagnosis_report_path(filename)
     if not path:
         raise HTTPException(404, "리포트를 찾을 수 없습니다.")
-    return FileResponse(path, media_type="text/html")
+    return html_file_response(path, download=download, filename=filename)

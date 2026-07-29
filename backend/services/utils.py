@@ -4,6 +4,30 @@ import threading
 from pathlib import Path
 
 
+# ── HTML 리포트 응답 ───────────────────────────────────────────────────────────
+
+def html_file_response(path: Path, *, download: bool = False, filename: str | None = None):
+    """자체완결 HTML 리포트/제안서 서빙용 FileResponse.
+
+    download=False → 브라우저 인라인 표시(보기용), True → 첨부 다운로드.
+    ⚠ 리포트 파일명은 한글 포함 가능(brief_id 등) → 헤더에 그대로 넣으면 ASGI latin-1
+      인코딩에서 UnicodeEncodeError(500). RFC 6266 방식(ascii fallback + filename*=UTF-8'')
+      으로 순수 ASCII 헤더값을 만든다.
+    """
+    from urllib.parse import quote
+    from fastapi.responses import FileResponse
+
+    name = filename or Path(path).name
+    resp = FileResponse(path, media_type="text/html; charset=utf-8")
+    disposition = "attachment" if download else "inline"
+    ascii_name = name.encode("ascii", "ignore").decode() or "report.html"
+    resp.headers["Content-Disposition"] = (
+        f"{disposition}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
+    )
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 # ── 래스터라이즈 ──────────────────────────────────────────────────────────────
 # Claude Sonnet API는 이미지를 내부적으로 최장변 ~1568px로 리사이즈한다.
 # 따라서 DPI를 올려봐야 Claude가 실제로 보는 해상도는 동일하다.

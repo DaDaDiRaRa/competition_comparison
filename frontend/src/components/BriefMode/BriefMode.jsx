@@ -259,6 +259,10 @@ export default function BriefMode() {
     }
   }
 
+  // HTML 리포트/제안서 파일 다운로드 (?download=1 → 서버 attachment)
+  const handleHtmlDownload = (filename) =>
+    handleDownload(getBriefExportUrl(filename) + '?download=1', filename)
+
   // AI 종합 해설만 재생성 (분석 시 껐거나 실패한 경우). 추출 재처리 없음.
   const handleRegenInsight = async () => {
     if (!result?.brief_id || regening) return
@@ -545,6 +549,14 @@ export default function BriefMode() {
                 📄 리포트 .html
               </button>
             )}
+            {result.html_filename && (
+              <button
+                style={s.dlBtn(false)}
+                onClick={() => handleHtmlDownload(result.html_filename)}
+              >
+                ⬇ 리포트 .html 저장
+              </button>
+            )}
             <button
               style={s.dlBtn(false)}
               onClick={() => handleDownload(getBriefExportUrl(result.xlsx_filename), result.xlsx_filename)}
@@ -709,6 +721,14 @@ export default function BriefMode() {
                   📄 제안서 열기
                 </button>
               )}
+              {result.has_proposal && (
+                <button
+                  style={s.dlBtn(false)}
+                  onClick={() => handleHtmlDownload(`${result.brief_id}_proposal.html`)}
+                >
+                  ⬇ 제안서 저장
+                </button>
+              )}
               {proposeErr && (
                 <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{proposeErr}</span>
               )}
@@ -740,6 +760,14 @@ export default function BriefMode() {
                   onClick={() => handleHtml(`${result.brief_id}_playbook.html`)}
                 >
                   📄 처방 열기
+                </button>
+              )}
+              {result.has_playbook && (
+                <button
+                  style={s.dlBtn(false)}
+                  onClick={() => handleHtmlDownload(`${result.brief_id}_playbook.html`)}
+                >
+                  ⬇ 처방 저장
                 </button>
               )}
               {playbookErr && (
@@ -827,6 +855,21 @@ export default function BriefMode() {
                   {item.has_html && (
                     <button style={s.historyBtn(true)} onClick={() => handleHtml(`${item.brief_id}.html`)}>
                       리포트 열기
+                    </button>
+                  )}
+                  {item.has_html && (
+                    <button style={s.historyBtn(false)} title="리포트 HTML 저장" onClick={() => handleHtmlDownload(`${item.brief_id}.html`)}>
+                      ⬇ 리포트
+                    </button>
+                  )}
+                  {item.has_proposal && (
+                    <button style={s.historyBtn(false)} title="제안서 HTML 저장" onClick={() => handleHtmlDownload(`${item.brief_id}_proposal.html`)}>
+                      ⬇ 제안서
+                    </button>
+                  )}
+                  {item.has_playbook && (
+                    <button style={s.historyBtn(false)} title="처방 HTML 저장" onClick={() => handleHtmlDownload(`${item.brief_id}_playbook.html`)}>
+                      ⬇ 처방
                     </button>
                   )}
                   {item.has_proposal ? (

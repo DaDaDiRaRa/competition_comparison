@@ -121,6 +121,27 @@ export function getCrossCompareReportUrl(filename) {
   return `${BASE}/accumulate/cross-compare/reports/${encodeURIComponent(filename)}`
 }
 
+// 리포트/제안서 HTML을 파일로 저장. 서버에 ?download=1 을 붙이면 Content-Disposition:
+// attachment 로 내려와 브라우저가 새 탭 대신 다운로드한다. 데스크톱(pywebview)은 저장
+// 다이얼로그, 웹은 anchor[download] 로 처리.
+export async function downloadReport(url, filename) {
+  const dlUrl = url + (url.includes('?') ? '&' : '?') + 'download=1'
+  if (window.pywebview?.api?.save_file) {
+    const fullUrl = window.location.origin + dlUrl
+    const res = await window.pywebview.api.save_file(fullUrl, filename)
+    if (res && !res.ok && res.reason !== 'cancelled') {
+      alert(`저장 실패: ${res.reason}`)
+    }
+    return
+  }
+  const a = document.createElement('a')
+  a.href = dlUrl
+  a.download = filename || ''
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
 export async function listCrossCompareReports() {
   const r = await fetch(`${BASE}/accumulate/cross-compare/reports`)
   return r.json()

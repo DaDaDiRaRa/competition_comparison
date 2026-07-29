@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, rerunCompare, rerenderReport, getReportUrl, getSubmissionReportUrl, addSubmission, deleteProject } from '../../api/client'
+import { getProjects, rerunCompare, rerenderReport, getReportUrl, getSubmissionReportUrl, addSubmission, deleteProject, downloadReport } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import DropZone from '../common/DropZone'
 import SubmissionEditor from '../SubmissionEditor/SubmissionEditor'
@@ -52,6 +52,16 @@ const s = {
   },
   subReportBtn: {
     background: 'var(--color-accent)', color: 'var(--color-bg-surface)', border: '1px solid var(--color-accent-hover)', borderRadius: 6,
+    padding: '4px 10px', cursor: 'pointer', fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-semibold)',
+    textDecoration: 'none', display: 'inline-block',
+  },
+  downloadBtn: {
+    background: 'transparent', color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 6,
+    padding: '6px 14px', cursor: 'pointer', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
+    textDecoration: 'none', display: 'inline-block',
+  },
+  subDownloadBtn: {
+    background: 'transparent', color: 'var(--color-accent)', border: '1px solid var(--color-accent)', borderRadius: 6,
     padding: '4px 10px', cursor: 'pointer', fontSize: 'var(--font-size-xs)', fontWeight: 'var(--font-weight-semibold)',
     textDecoration: 'none', display: 'inline-block',
   },
@@ -278,14 +288,26 @@ function ProjectCard({ project, onRerunDone }) {
               </span>
               <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-body)' }}>{sub.company}</span>
               {sub.has_sub_report && (
-                <a
-                  href={getSubmissionReportUrl(project.facility_type, project.competition_id, sub.company)}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={s.subReportBtn}
-                >
-                  리포트
-                </a>
+                <>
+                  <a
+                    href={getSubmissionReportUrl(project.facility_type, project.competition_id, sub.company)}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={s.subReportBtn}
+                  >
+                    리포트
+                  </a>
+                  <button
+                    style={s.subDownloadBtn}
+                    onClick={() => downloadReport(
+                      getSubmissionReportUrl(project.facility_type, project.competition_id, sub.company),
+                      `${sub.company}_리포트.html`,
+                    )}
+                    title="리포트 HTML 다운로드"
+                  >
+                    ⬇
+                  </button>
+                </>
               )}
               <button
                 style={s.editBtn}
@@ -336,6 +358,16 @@ function ProjectCard({ project, onRerunDone }) {
             >
               비교 리포트 열기
             </a>
+            <button
+              style={s.downloadBtn}
+              onClick={() => downloadReport(
+                getReportUrl(project.facility_type, project.competition_id),
+                `${project.competition_name || project.competition_id}_비교리포트.html`,
+              )}
+              title="비교 리포트 HTML 다운로드"
+            >
+              ⬇ 다운로드
+            </button>
             <button
               style={{ ...s.rerenderBtn, ...(rerendering || running ? s.disabledBtn : {}) }}
               onClick={(rerendering || running) ? undefined : handleRerender}

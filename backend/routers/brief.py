@@ -20,7 +20,7 @@ import traceback
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -39,7 +39,7 @@ from services.brief_proposal_report_generator import to_proposal_html
 from services.brief_playbook import build_playbook
 from services.brief_playbook_report_generator import to_playbook_html
 from services.reference_cases import collect_reference_context
-from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count, normalize_design_guidelines_grouped
+from services.utils import sse, user_error_msg as _user_error_msg, pdf_page_count, normalize_design_guidelines_grouped, html_file_response
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -237,10 +237,11 @@ def delete_brief(brief_id: str):
 # ── 파일 다운로드 ──────────────────────────────────────────────────────────────
 
 @router.get("/exports/{filename}")
-def download_export(filename: str):
+def download_export(filename: str, download: bool = Query(False)):
     """저장된 md / xlsx / html 다운로드. path traversal 방지.
 
-    html 은 브라우저 인라인 표시 (보기용), md/xlsx 는 attachment (다운로드).
+    html 은 기본 브라우저 인라인 표시 (보기용). `?download=1` 이면 첨부 다운로드.
+    md/xlsx 는 항상 attachment (다운로드).
     """
     # Path().name 으로 디렉터리 구분자 제거 — 결과가 원본과 다르면 비정상 경로
     safe_name = Path(filename).name
@@ -261,17 +262,9 @@ def download_export(filename: str):
         ".html": "text/html; charset=utf-8",
     }[ext]
     if ext == ".html":
-        # 인라인 표시 — filename 지정 시 attachment 가 되므로 생략하고 헤더 직접 설정.
-        # ⚠ brief_id 는 한글 포함 가능(_slugify 가 가-힣 보존)이라 파일명을 헤더에 그대로 넣으면
-        #   ASGI 헤더 latin-1 인코딩에서 UnicodeEncodeError → 500. RFC 6266 방식으로
-        #   ascii fallback + filename*=UTF-8'' 퍼센트 인코딩(순수 ASCII 헤더값).
-        resp = FileResponse(path, media_type=media_type)
-        ascii_name = safe_name.encode("ascii", "ignore").decode() or "report.html"
-        resp.headers["Content-Disposition"] = (
-            f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe_name)}"
-        )
-    else:
-        resp = FileResponse(path, media_type=media_type, filename=safe_name)
+        # 인라인 표시(기본) 또는 첨부 다운로드(?download=1). 한글 파일명 RFC 6266 처리는 헬퍼가 담당.
+        return html_file_response(path, download=download, filename=safe_name)
+    resp = FileResponse(path, media_type=media_type, filename=safe_name)
     resp.headers["Cache-Control"] = "no-store"
     return resp
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   getFacilityTypes, runDiagnosePipeline, runDiagnoseVsProjects,
-  getPattern, getProjects, getDiagnosisReportUrl,
+  getPattern, getProjects, getDiagnosisReportUrl, downloadReport,
 } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
@@ -284,6 +284,17 @@ export default function DiagnoseMode() {
           >
             진단 리포트 열기
           </a>
+          <button
+            onClick={() => downloadReport(getDiagnosisReportUrl(reportFilename), reportFilename)}
+            style={{
+              display: 'inline-block', background: 'transparent', color: 'var(--color-accent)',
+              border: '1px solid var(--color-accent)', borderRadius: 6, padding: '8px 20px',
+              fontSize: 'var(--font-size-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
+            }}
+            title="진단 리포트 HTML 다운로드"
+          >
+            ⬇ 다운로드
+          </button>
         </div>
       )}
 

@@ -60,3 +60,22 @@ class TestKoreanFilenameHtmlServing:
         c, _ = client
         r = c.get("/api/brief/exports/없는파일_proposal.html")
         assert r.status_code == 404
+
+    def test_download_flag_serves_attachment(self, client):
+        # ?download=1 이면 인라인이 아니라 첨부(다운로드)로 내려와야 한다. 한글 파일명도 latin-1 안전.
+        c, db = client
+        fn = "20260714_public_한글제안서_proposal.html"
+        _write(db, fn)
+        r = c.get(f"/api/brief/exports/{fn}?download=1")
+        assert r.status_code == 200
+        cd = r.headers["content-disposition"]
+        cd.encode("latin-1")  # UnicodeEncodeError 나면 실패
+        assert cd.startswith("attachment;")
+        assert "filename*=UTF-8''" in cd
+
+    def test_default_is_inline(self, client):
+        c, db = client
+        fn = "20260714_public.html"
+        _write(db, fn)
+        r = c.get(f"/api/brief/exports/{fn}")
+        assert r.headers["content-disposition"].startswith("inline;")

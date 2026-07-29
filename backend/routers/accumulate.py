@@ -44,7 +44,7 @@ async def _resolve_pdf(file: "UploadFile | None", file_ref: str | None) -> bytes
 
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from routers.upload import resolve_file_ref
 
@@ -71,7 +71,7 @@ from services.report_generator import generate_comparison_report
 from services.submission_report_generator import generate_submission_report
 from services.myproject_analyzer import deep_analyze
 from services.myproject_report_generator import generate_myproject_report
-from services.utils import sse, user_error_msg as _user_error_msg
+from services.utils import sse, user_error_msg as _user_error_msg, html_file_response
 from services.archive_search import rebuild_index as _rebuild_archive_index
 
 router = APIRouter()
@@ -112,34 +112,28 @@ async def create_project(
 
 
 @router.get("/projects/{facility_type}/{competition_id}/report")
-def get_report(facility_type: str, competition_id: str):
+def get_report(facility_type: str, competition_id: str, download: bool = Query(False)):
     path = get_report_path(facility_type, competition_id)
     if not path.exists():
         raise HTTPException(404, "Report not found")
-    resp = FileResponse(path, media_type="text/html")
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
+    return html_file_response(path, download=download)
 
 
 @router.get("/projects/{facility_type}/{competition_id}/submissions/{company}/report")
-def get_submission_report(facility_type: str, competition_id: str, company: str):
+def get_submission_report(facility_type: str, competition_id: str, company: str, download: bool = Query(False)):
     path = get_submission_report_path(facility_type, competition_id, company)
     if path is None or not path.exists():
         raise HTTPException(404, "Submission report not found")
-    resp = FileResponse(path, media_type="text/html")
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
+    return html_file_response(path, download=download)
 
 
 @router.get("/projects/{facility_type}/{competition_id}/submissions/{company}/deep-report")
-def get_myproject_deep_report(facility_type: str, competition_id: str, company: str):
+def get_myproject_deep_report(facility_type: str, competition_id: str, company: str, download: bool = Query(False)):
     """MyProjectMode 심층 분석 HTML 리포트 — submissions/{slug}_{result}_deep.html"""
     path = get_myproject_report_path(facility_type, competition_id, company)
     if path is None or not path.exists():
         raise HTTPException(404, "Deep report not found")
-    resp = FileResponse(path, media_type="text/html")
-    resp.headers["Cache-Control"] = "no-store"
-    return resp
+    return html_file_response(path, download=download)
 
 
 @router.get("/projects/{facility_type}/{competition_id}/submissions/{company}")
@@ -233,11 +227,11 @@ def list_cross_reports():
 
 
 @router.get("/cross-compare/reports/{filename}")
-def get_cross_compare_report(filename: str):
+def get_cross_compare_report(filename: str, download: bool = Query(False)):
     path = get_cross_compare_report_path(filename)
     if path is None or not path.exists():
         raise HTTPException(404, "Cross-compare report not found")
-    return FileResponse(path, media_type="text/html", filename=filename)
+    return html_file_response(path, download=download, filename=filename)
 
 
 @router.post("/cross-compare/reports/{filename}/rerender")

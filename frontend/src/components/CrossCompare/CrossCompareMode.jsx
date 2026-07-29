@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProjects, crossCompare, getCrossCompareReportUrl, listCrossCompareReports, rerenderCrossCompareReport } from '../../api/client'
+import { getProjects, crossCompare, getCrossCompareReportUrl, listCrossCompareReports, rerenderCrossCompareReport, downloadReport } from '../../api/client'
 import ProgressLog from '../common/ProgressLog'
 import ComparisonDashboard from '../AccumulateMode/ComparisonDashboard'
 import { useMeta } from '../../hooks/useMeta'
@@ -320,6 +320,15 @@ export default function CrossCompareMode() {
                   rel="noreferrer"
                   style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)', textDecoration: 'none' }}
                 >열기 →</a>
+                <button
+                  onClick={() => downloadReport(getCrossCompareReportUrl(rep.filename), rep.filename)}
+                  title="교차비교 리포트 HTML 다운로드"
+                  style={{
+                    fontSize: 'var(--font-size-xs)', color: 'var(--color-accent)',
+                    background: 'transparent', border: '1px solid var(--color-border)',
+                    borderRadius: 5, padding: '4px 8px', cursor: 'pointer',
+                  }}
+                >⬇</button>
               </div>
             ))}
           </div>
@@ -331,18 +340,31 @@ export default function CrossCompareMode() {
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16, gap: 'var(--gap-md)' }}>
             <div style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--color-accent)', flex: 1 }}>비교분석 결과</div>
             {result.report_filename && (
-              <a
-                href={getCrossCompareReportUrl(result.report_filename)}
-                target="_blank"
-                rel="noreferrer"
-                style={{
-                  background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', borderRadius: 6,
-                  padding: '6px 14px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
-                  textDecoration: 'none',
-                }}
-              >
-                HTML 리포트 열기
-              </a>
+              <>
+                <a
+                  href={getCrossCompareReportUrl(result.report_filename)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    background: 'var(--color-accent)', color: 'var(--color-text-on-accent)', borderRadius: 6,
+                    padding: '6px 14px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
+                    textDecoration: 'none',
+                  }}
+                >
+                  HTML 리포트 열기
+                </a>
+                <button
+                  onClick={() => downloadReport(getCrossCompareReportUrl(result.report_filename), result.report_filename)}
+                  title="교차비교 리포트 HTML 다운로드"
+                  style={{
+                    background: 'transparent', color: 'var(--color-accent)', border: '1px solid var(--color-accent)',
+                    borderRadius: 6, padding: '6px 14px', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--font-weight-semibold)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⬇ 다운로드
+                </button>
+              </>
             )}
           </div>
           <ComparisonDashboard comparison={result.comparison} facilityType={selected[0]?.facility_type} />
