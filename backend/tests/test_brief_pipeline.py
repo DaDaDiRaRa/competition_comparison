@@ -475,3 +475,39 @@ class TestProgramAreaStack:
         v = validate_brief(BRIEF_DATA, REQUIREMENTS)
         h = to_html({**BRIEF_DATA, **v}, v['validation'])
         assert 'aria-label="면적 프로그램 비례 다이어그램"' in h
+
+    def test_multisite_scoping_excludes_resummary_and_subtotals(self):
+        # 다부지: '부지' site_total 아래 요약 시설만 채택. ①②③ 재집계 헤더/시설·소계 행 배제,
+        # 부지 간 동일 시설(주차)은 합산 (영등포 통합신청사 교훈).
+        a = {'area_rows': [
+            {'row_type': 'site_total', 'name': '총 합계 (지상+지하)', 'subtotal_area': 600},
+            {'row_type': 'site_total', 'name': '부지1(당산 385) 합계 계', 'subtotal_area': 400},
+            {'row_type': 'facility', 'name': '구청', 'subtotal_area': 300},
+            {'row_type': 'facility', 'name': '주차(지하)', 'subtotal_area': 100},
+            {'row_type': 'site_total', 'name': '부지2(당산 370) 합계 계', 'subtotal_area': 200},
+            {'row_type': 'facility', 'name': '보건소', 'subtotal_area': 150},
+            {'row_type': 'facility', 'name': '주차(지하)', 'subtotal_area': 50},
+            {'row_type': 'site_total', 'name': '① 계(지상+지하)', 'subtotal_area': 400},  # 재집계 헤더
+            {'row_type': 'facility', 'name': '① 구청', 'subtotal_area': 300},              # 재집계 시설
+            {'row_type': 'space', 'name': '청장실', 'area': 99},
+            {'row_type': 'facility', 'name': '구청 전용 계', 'subtotal_area': 300},         # 소계
+        ], 'area_table': [], 'rooms': [], 'zones': []}
+        blocks, denom, _ = TestProgramAreaStack._blocks(a)
+        assert blocks == [('구청', 300.0), ('주차(지하)', 150.0), ('보건소', 150.0)]
+        assert denom == 600.0                          # 연면적 총합과 일치, 재집계 미포함
+
+    def test_clean_strips_decoration_merges_and_drops_subtotals(self):
+        from services.brief_checklist_exporter import _clean_program_blocks as _clean
+        out = _clean([
+            ('▣ 공용', 100), ('공용', 50),             # 장식 제거 → 동일 라벨 합산
+            ('소계', 999), ('보건소 전용 계', 999), ('총 공용+설비', 999),  # 소계·재집계 제외
+            ('A', 0), ('B', -5),                         # 비양수 제외
+            ('C', 30),
+        ])
+        assert out == [('공용', 150.0), ('C', 30.0)]
+
+    def test_is_subtotal_and_norm_name(self):
+        from services.brief_checklist_exporter import _is_subtotal_name as sub, _norm_prog_name as nm
+        assert sub('소계') and sub('구청 전용 계') and sub('총 공용') and sub('합계')
+        assert not sub('구청') and not sub('부속 주차장(지하)') and not sub('공공커뮤니티지원센터')
+        assert nm('▣ 공용') == '공용' and nm('■ 구청') == '구청' and nm('구청') == '구청'

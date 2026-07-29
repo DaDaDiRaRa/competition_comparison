@@ -1116,45 +1116,119 @@ def _to_area_float(v: Any):
     return f if f > 0 else None
 
 
+# 블록 라벨 앞머리 장식 기호(기하·박스·불릿·중점·구획 마커) — 표에서 딸려온 것 제거
+_PROG_DECOR_RE = re.compile(r"^[\s　·•▪▶◀◆◇★☆※○●◦□■▢▣▤▥▦▧▨▩△▲▽▼\-–—]+")
+# 소계·합계·재집계 행 이름 — 블록에서 제외(중복 방지). "구청 전용 계 / 소계 / 총 공용…" 등
+_PROG_SUBTOTAL_RE = re.compile(r"소\s*계|합\s*계|총\s*계|누\s*계|^총\s|(전용\s*)?계\s*$")
+
+
+def _norm_prog_name(name) -> str:
+    """블록 라벨 정리 — 앞머리 장식 기호/불릿 제거. 전부 기호면 원본 유지."""
+    s = (name or "").strip()
+    s2 = _PROG_DECOR_RE.sub("", s).strip()
+    return s2 or s
+
+
+def _is_subtotal_name(name) -> bool:
+    """소계·합계·재집계 성격의 행 이름인지 (블록 집계에서 제외 — 이중집계 방지)."""
+    return bool(_PROG_SUBTOTAL_RE.search((name or "").strip()))
+
+
+def _clean_program_blocks(raw):
+    """(name, area) 원시 블록 → 정리: 장식기호 제거 · 소계행 제외 · 동일 라벨 합산 · 양수만.
+
+    다부지 표에서 부지별 동일 시설(예: '부속 주차장(지하)' ×2)은 하나로 합산하고,
+    '~전용 계 / 소계 / 총 …' 재집계 행은 상위와 중복되므로 버린다(영등포 통합신청사 교훈).
+    """
+    merged: dict[str, float] = {}
+    order: list[str] = []
+    for name, area in raw:
+        if not area or area <= 0:
+            continue
+        n = _norm_prog_name(name)
+        if _is_subtotal_name(n):
+            continue
+        if n not in merged:
+            merged[n] = 0.0
+            order.append(n)
+        merged[n] += float(area)
+    return [(n, merged[n]) for n in order]
+
+
 def _program_stack_blocks(a: dict):
     """면적표 → 비례 스택용 (라벨, ㎡) 블록 리스트 + denominator + note.
 
     플랫폼 granularity = 시설(facility)/그룹 단위 (leaf space 수백 개 방지). 시설
-    subtotal 우선, 없으면 하위 space 합산(이중집계 방지). 유효 블록 2개 미만이면 ([], None, "").
+    subtotal 우선, 없으면 하위 space 합산(이중집계 방지). 원시 블록은 `_clean_program_blocks`
+    로 소계 제외·동일라벨 합산 후 사용. 유효 블록 2개 미만이면 ([], None, "").
     LLM 0 · 결정론.
     """
-    blocks: list[tuple[str, float]] = []
+    raw: list[tuple[str, float]] = []
 
     if a.get("area_rows"):
         rows = [r for r in a["area_rows"] if isinstance(r, dict)]
-        cur_name = None
-        cur_sub = None
-        cur_children = 0.0
+        # 다부지 = '부지' 이름을 단 site_total 이 있을 때. (총합계·재집계 ①②③ 헤더 제외)
+        multi_site = any((r.get("row_type") or "") == "site_total" and "부지" in (r.get("name") or "")
+                         for r in rows)
 
-        def _flush():
-            nonlocal cur_name, cur_sub, cur_children
-            if cur_name is not None:
-                area = cur_sub if cur_sub is not None else (cur_children or None)
-                if area:
-                    blocks.append((cur_name, area))
-            cur_name, cur_sub, cur_children = None, None, 0.0
+        if multi_site:
+            # 부지 site_total 아래 '요약 시설' 행만 채택. 각 부지는 선언 subtotal 에 도달하면
+            # 닫아 재집계(①②③ 계)·상세 dump 를 배제한다 → 부지별 시설 합이 연면적 총합과
+            # 일치(영등포 통합신청사 교훈). '부지' 없는 site_total(총합계·재집계)은 섹션 안 엶.
+            site_open = False
+            site_target = None
+            site_sum = 0.0
+            for r in rows:
+                rt = r.get("row_type") or "space"
+                if rt == "site_total":
+                    if "부지" in (r.get("name") or ""):
+                        site_target = _to_area_float(r.get("subtotal_area")) or _to_area_float(r.get("area"))
+                        site_open, site_sum = True, 0.0
+                    else:
+                        site_open = False      # 총합계·재집계 헤더 → 섹션 아님
+                    continue
+                if rt == "facility":
+                    if not site_open:
+                        continue               # 요약 섹션 밖(재집계·상세) 시설 제외
+                    area = _to_area_float(r.get("subtotal_area")) or _to_area_float(r.get("area"))
+                    if area:
+                        raw.append(((r.get("name") or "").strip() or "시설", area))
+                        site_sum += area
+                        if site_target and site_sum >= site_target * 0.995:
+                            site_open = False  # 이 부지 요약 완료 → 닫기
+                else:
+                    site_open = False          # 상세(space/bureau/division) 시작 → 요약 종료
+        else:
+            # 단순형(부지 구분 없음): 시설별 subtotal 우선, 없으면 하위 space 합산. site_total 무시.
+            cur_name = None
+            cur_sub = None
+            cur_children = 0.0
 
-        for r in rows:
-            rt = r.get("row_type") or "space"
-            if rt == "site_total":
-                continue                       # 총합 행은 블록 아님 (중복 방지)
-            if rt == "facility":
-                _flush()
-                cur_name = (r.get("name") or "").strip() or "시설"
-                cur_sub = _to_area_float(r.get("subtotal_area")) or _to_area_float(r.get("area"))
-            else:
-                area = _to_area_float(r.get("area"))
+            def _flush():
+                nonlocal cur_name, cur_sub, cur_children
                 if cur_name is not None:
-                    if area and rt == "space" and cur_sub is None:
-                        cur_children += area   # subtotal 없을 때만 하위 합산
-                elif area:
-                    blocks.append(((r.get("name") or "").strip() or "기타", area))
-        _flush()
+                    area = cur_sub if cur_sub is not None else (cur_children or None)
+                    if area:
+                        raw.append((cur_name, area))
+                cur_name, cur_sub, cur_children = None, None, 0.0
+
+            for r in rows:
+                rt = r.get("row_type") or "space"
+                if rt == "site_total":
+                    _flush()                   # 총합 행은 블록 아님
+                    continue
+                if rt == "facility":
+                    _flush()
+                    cur_name = (r.get("name") or "").strip() or "시설"
+                    cur_sub = _to_area_float(r.get("subtotal_area")) or _to_area_float(r.get("area"))
+                else:
+                    area = _to_area_float(r.get("area"))
+                    if cur_name is not None:
+                        if area and rt == "space" and cur_sub is None:
+                            cur_children += area   # subtotal 없을 때만 하위 합산
+                    elif area:
+                        raw.append(((r.get("name") or "").strip() or "기타", area))
+            _flush()
 
     elif a.get("area_table"):
         for grp in a["area_table"]:
@@ -1166,7 +1240,7 @@ def _program_stack_blocks(a: dict):
                 area = sum(f for it in (grp.get("items") or []) if isinstance(it, dict)
                            for f in (_to_area_float(it.get("area_sqm")),) if f) or None
             if area:
-                blocks.append((name, area))
+                raw.append((name, area))
 
     elif a.get("rooms"):
         for rm in a["rooms"]:
@@ -1174,7 +1248,7 @@ def _program_stack_blocks(a: dict):
                 continue
             area = _to_area_float(rm.get("required_area_sqm")) or _to_area_float(rm.get("area_sqm"))
             if area:
-                blocks.append(((rm.get("name") or "").strip() or "실", area))
+                raw.append(((rm.get("name") or "").strip() or "실", area))
 
     elif a.get("zones"):
         for z in a["zones"]:
@@ -1182,9 +1256,9 @@ def _program_stack_blocks(a: dict):
                 continue
             area = _to_area_float(z.get("area_sqm"))
             if area:
-                blocks.append(((z.get("name") or z.get("zone") or "").strip() or "존", area))
+                raw.append(((z.get("name") or z.get("zone") or "").strip() or "존", area))
 
-    blocks = [(n, v) for (n, v) in blocks if v and v > 0]
+    blocks = _clean_program_blocks(raw)
     if len(blocks) < 2:
         return [], None, ""
 
@@ -1213,36 +1287,46 @@ def _program_area_stack_svg(blocks: list, denom: float, total_label: str, note: 
         s = str(s)
         return s if len(s) <= n else s[:n - 1] + "…"
 
+    def _m2(v):
+        return f"{v:,.0f}㎡"
+
     segs, y = [], TOP
     for i, (name, area) in enumerate(blocks):
         h = area / denom * H
-        segs.append((name, area / denom * 100.0, y, h, CATEGORY_COLORS[i % len(CATEGORY_COLORS)]))
+        segs.append((name, area, area / denom * 100.0, y, h, CATEGORY_COLORS[i % len(CATEGORY_COLORS)]))
         y += h
 
     rects, inside, thin = [], [], []
-    for name, pct, sy, h, color in segs:
+    for name, area, pct, sy, h, color in segs:
         rects.append(f'<rect x="{BAR_X}" y="{sy:.1f}" width="{BAR_W}" height="{max(h, 1.2):.1f}" '
                      f'fill="{color}" stroke="#ffffff" stroke-width="0.7"/>')
         if h >= THIN:
             cy = sy + h / 2
-            inside.append(
-                f'<text x="{BAR_X + 8}" y="{cy + 4:.1f}" font-size="11.5" font-weight="700" '
-                f'font-family="{_SVG_FONT}" fill="#ffffff">{_esc(_clip(name, 13))}</text>'
-                f'<text x="{BAR_X + BAR_W - 8}" y="{cy + 4:.1f}" text-anchor="end" font-size="10.5" '
-                f'font-family="{_SVG_FONT}" fill="#ffffff" opacity="0.9">{_pct(pct)}%</text>')
+            if h >= 42:          # 넉넉하면 2줄 — 이름 + (면적·비율)
+                inside.append(
+                    f'<text x="{BAR_X + 10}" y="{cy - 2:.1f}" font-size="11.5" font-weight="700" '
+                    f'font-family="{_SVG_FONT}" fill="#ffffff">{_esc(_clip(name, 15))}</text>'
+                    f'<text x="{BAR_X + 10}" y="{cy + 13:.1f}" font-size="9.5" '
+                    f'font-family="{_SVG_FONT}" fill="#ffffff" opacity="0.85">{_m2(area)} · {_pct(pct)}%</text>')
+            else:                # 한 줄 — 이름 좌 / 비율 우
+                inside.append(
+                    f'<text x="{BAR_X + 10}" y="{cy + 4:.1f}" font-size="11" font-weight="700" '
+                    f'font-family="{_SVG_FONT}" fill="#ffffff">{_esc(_clip(name, 13))}</text>'
+                    f'<text x="{BAR_X + BAR_W - 8}" y="{cy + 4:.1f}" text-anchor="end" font-size="10" '
+                    f'font-family="{_SVG_FONT}" fill="#ffffff" opacity="0.9">{_pct(pct)}%</text>')
         else:
-            thin.append((name, pct, sy + h / 2, color))
+            thin.append((name, area, pct, sy + h / 2, color))
 
     tx = BAR_X + BAR_W
     cursor, tabs = TOP, []
-    for name, pct, c, color in thin:
+    for name, area, pct, c, color in thin:
         ty = max(c, cursor + 17)
         cursor = ty
         tabs.append(
             f'<line x1="{tx}" y1="{c:.1f}" x2="{tx + 14}" y2="{ty:.1f}" stroke="{color}" stroke-width="1"/>'
             f'<rect x="{tx + 15}" y="{ty - 7:.1f}" width="11" height="13" rx="2" fill="{color}"/>'
             f'<text x="{tx + 31}" y="{ty + 3:.1f}" font-size="10.5" font-family="{_SVG_FONT}" '
-            f'fill="#3a3a3a">{_esc(_clip(name, 16))} · {_pct(pct)}%</text>')
+            f'fill="#3a3a3a">{_esc(_clip(name, 13))} · {_m2(area)} · {_pct(pct)}%</text>')
 
     svg_h = max(TOP + H + 18, cursor + 22)
     title = (f'<text x="{BAR_X + BAR_W // 2}" y="30" text-anchor="middle" font-size="12.5" '
@@ -1251,7 +1335,7 @@ def _program_area_stack_svg(blocks: list, denom: float, total_label: str, note: 
            f'style="max-width:520px;display:block;margin:6px auto 0" '
            f'role="img" aria-label="면적 프로그램 비례 다이어그램">'
            + title + "".join(rects) + "".join(inside) + "".join(tabs) + '</svg>')
-    cap = '본체 = 면적표 그룹 · 옆 라벨 = 소형·세부 프로그램(가독성) · 블록 높이 = 면적 비례 · 추출 면적표 기반'
+    cap = '블록 = 시설 그룹(다부지면 부지 합산) · 옆 라벨 = 소형 항목 · 높이 = 면적 비례 · 소계·재집계 행 제외 · 추출 면적표 기반'
     if note:
         cap = _esc(note) + ' · ' + cap
     return (f'<div style="border:1px solid var(--line);border-radius:10px;padding:14px 12px 12px;'
@@ -1272,9 +1356,9 @@ def program_stack_html(brief_data: dict) -> str:
         blocks, denom, note = _program_stack_blocks(a)
         if not blocks:
             return ""
-        tfa = _v(a.get("total_fa"), " ㎡")
-        label = (f"연면적 {tfa}" if tfa != "(없음)"
-                 else f"표시 면적 합계 {int(round(denom)):,} ㎡")
+        tfa_num = _to_area_float(a.get("total_fa"))
+        label = (f"연면적 {tfa_num:,.0f}㎡" if tfa_num
+                 else f"표시 면적 합계 {denom:,.0f}㎡")
         return _program_area_stack_svg(blocks, denom, label, note)
     except Exception:
         return ""
@@ -1744,8 +1828,8 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
     # OMA식 면적 비례 스택 다이어그램 (표 위 시각 요약, LLM 0). 데이터 부족 시 생략.
     _sb, _sdenom, _snote = _program_stack_blocks(a)
     if _sb:
-        _tfa = _v(a.get("total_fa"), " ㎡")
-        _tlabel = f"연면적 {_tfa}" if _tfa != "(없음)" else f"표시 면적 합계 {int(round(_sdenom)):,} ㎡"
+        _tfn = _to_area_float(a.get("total_fa"))
+        _tlabel = f"연면적 {_tfn:,.0f}㎡" if _tfn else f"표시 면적 합계 {_sdenom:,.0f}㎡"
         P.append(_program_area_stack_svg(_sb, _sdenom, _tlabel, _snote))
 
     if a["area_rows"]:
