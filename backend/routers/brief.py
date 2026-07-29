@@ -1045,6 +1045,21 @@ async def analyze_site(brief_id: str, req: SiteAnalyzeRequest):
         logger.error("site-analyze save error: %s", traceback.format_exc())
         raise HTTPException(500, f"저장 실패: {type(e).__name__}")
 
+    # 대지 재분석 → 기존 제안서가 있으면 **LLM 없이 재렌더**해 새 대지 맥락·필지 경계를 반영.
+    #   (제안서는 정적 HTML 이라 site_context 만 갱신하면 경계가 안 보이던 문제 해결.)
+    proposal_rerendered = False
+    if brief_data.get("_proposal"):
+        try:
+            bm = brief_data.get("_brief_meta") or {}
+            html = _render_proposal_html(
+                brief_data, safe_id, briefs_dir,
+                bm.get("facility_type", ""), bm.get("brief_name", "") or safe_id,
+            )
+            _sync_write(briefs_dir / f"{safe_id}_proposal.html", html)
+            proposal_rerendered = True
+        except Exception as e:
+            logger.warning("site-analyze 후 제안서 재렌더 실패 (비치명): %s", e)
+
     return {
         "brief_id":        safe_id,
         "has_site_context": True,
@@ -1054,6 +1069,8 @@ async def analyze_site(brief_id: str, req: SiteAnalyzeRequest):
         "image_filename":  image_filename,
         "analysis":        result["analysis"],
         "has_cadastral":   result.get("has_cadastral", False),
+        "has_parcel":      bool(result.get("parcel_norm")),
+        "proposal_rerendered": proposal_rerendered,
         "image_jpeg_b64":  result.get("image_jpeg_b64", ""),
     }
 
