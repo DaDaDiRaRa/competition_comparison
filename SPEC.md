@@ -94,7 +94,7 @@ competition_comparison/
 │   │   ├── myproject_analyzer.py          # MyProject deep analysis (LLM 1콜)
 │   │   ├── myproject_report_generator.py  # deep HTML (LLM 0)
 │   │   └── brief_proposal_report_generator.py  # 제안서 HTML (LLM 0)
-│   └── tests/                    # 581 테스트 (2026-07-15)
+│   └── tests/                    # 631 테스트 (2026-07-29)
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx               # 7탭 구조, MetaProvider/ApiKeyGate 래핑
@@ -202,7 +202,7 @@ competition_comparison/
 
 #### 3.4.1 AI 종합 해설 (brief_advisor)
 
-`POST /api/brief/{brief_id}/interpret` 또는 `/analyze`의 `include_insight=True`(기본값)로 실행.
+`POST /api/brief/{brief_id}/interpret` 또는 `/analyze`의 `include_insight=True`(기본값)로 실행. (내부 개념명은 "AI 종합 해설"이나 **UI·리포트 렌더 표기는 "종합 해설"** — "AI" 자기지칭 문구 전면 제거, 2026-07-29.)
 
 - **역할 ("해설가"):** 사실 triage만. 지침서가 무엇을 요구·강조·배점하는지 종합. 당락 예측, 전략 처방, 외부 지식 주입 금지.
 - **결정론 백본 `compute_scoring_focus()`:** LLM 0. 배점이 가장 많은 페이지(`max(key=_eval_pts)`)의 `evaluation_categories`에서 각 카테고리 점수·weight_pct·rank 산출. 분모는 `total_points` 또는 합산값. LLM 출력의 `scoring_focus`는 이 결정론 값으로 **항상 덮어씀** (환각 차단).
@@ -216,18 +216,18 @@ competition_comparison/
 `POST /api/brief/{brief_id}/propose` 호출, 또는 `/analyze` 폼 **`include_proposal`(기본 ON)** 로 분석과 동시 생성(단계 4.8) — 수집한 대지·법(site_context)을 버튼 없이 바로 융합. 렌더는 `/propose`·`/analyze` 공용 `_render_proposal_html`.
 
 - **역할 ("전략가"):** 처방형 전략. `brief_advisor`(해설가)와 별개 산출물.
-- **컨셉 표지 (`concept_hook`, 덱 오프닝):** 한 단어 파르티 `keyword`(건원 RED 大) + 3축 `tagline` + 축별 `{term, ko, en, basis}`. 배점 무게중심·`win_themes`·대지에서 도출하고 **각 축 basis 앵커 강제**(못 달면 축 제외, 3축 못 채우면 concept_hook 전체 생략 — graceful). 뻔한 범용 슬로건 금지. **사실 아닌 AI 제안 시안** — 렌더(`_concept_cover_html`)가 "AI 해석" 배지 + "팀이 갈아끼우는 출발점" 라벨로 사실과 구분. 결정론 덮어씀 없음(LLM 생략 시 표지 skip).
-- **대지 근거 배치 (`placement_strategy`, 2026-07-14):** zones=[{program, site, plan(8방위+C), level, required(지침서 명시=사실 vs AI 추론), why, draws_on(대지·법·프로그램·배점 교차), basis}] — SVG 조닝/단면 다이어그램(다부지 부지별 분리). site_context.analysis·measured·law_diagnosis 를 배치 근거로 교차 합성.
+- **컨셉 표지 (`concept_hook`, 덱 오프닝):** 한 단어 파르티 `keyword`(건원 RED 大) + 3축 `tagline` + 축별 `{term, ko, en, basis}`. 배점 무게중심·`win_themes`·대지에서 도출하고 **각 축 basis 앵커 강제**(못 달면 축 제외, 3축 못 채우면 concept_hook 전체 생략 — graceful). 뻔한 범용 슬로건 금지. **사실 아닌 제안 시안** — 렌더(`_concept_cover_html`)가 "제안" 배지 + "팀이 갈아끼우는 출발점" 라벨로 사실과 구분("AI" 자기지칭 문구는 2026-07-29 전면 제거, 2층 구분 구조는 유지). 결정론 덮어씀 없음(LLM 생략 시 표지 skip).
+- **대지 근거 배치 (`placement_strategy`, 2026-07-14 · 다이어그램 재설계 2026-07-29):** zones=[{program, site, plan(8방위+C), level, required(지침서 명시=사실 vs 추론 제안), why, draws_on(대지·법·프로그램·배점 교차), basis}] + `alternatives`(조닝 ALT 최대 3안·렌더는 2안, required 존은 `_lock_placement_alternatives` 로 권장안과 동일 고정 — 사실-락, LLM 0). site_context.analysis·measured·law_diagnosis 를 배치 근거로 교차 합성. **렌더:** hero = 위성 이미지 있으면 `_zone_site_overlay_svg`(위성 배경 + `parcel_norm` 실측 필지경계 빨간선), 없으면 `_zone_site_plan_svg`(top-view 배치도, N▲ 방위 크롬 + 지하 띠). 평면은 방위만 — 층(상/중/저)은 존 카드에 분리 표기(plan축≠section축). 다부지는 부지별 블록 분리.
 - **결정론 백본 재사용:** `brief_advisor._build_advisor_payload()` + `compute_scoring_focus()` 그대로 import (드리프트 차단) — `reference_cases`(시설유형 기존 사례)도 이 payload 를 통해 공유. 기존 `_insight`는 `_prior_insight_digest()`로 요약 주입. `_pattern_signals(facility_type)`로 동일 시설유형 당선/낙선 경향을 `payload["pattern_context"]`에 주입.
 - **사실/제안 2층 분리:** 사실 주장(지침서가 요구하는 것)에는 basis 인용 강제, 전략·접근은 제안 명시.
 - **고정 설계 계약:** `win_themes` 1~2개로 압축, `design_directions` 상호 배타 컨셉 5안 고정 (이 필드만 triage 예외), `risks` 2층 (명시 실격 + 반복 강조 → '흔한 감점 함정' 추론).
-- **AI 해석 확장층 (Phase 2):** `program_directions` / `massing_strategy` / `phasing` 신규 필드 (각 `{claim, basis}` 구조, basis 앵커 없으면 제외).
+- **해석 확장층 (Phase 2):** `program_directions` / `massing_strategy` / `phasing` 신규 필드 (각 `{claim, basis}` 구조, basis 앵커 없으면 제외). 렌더 배지 문구는 "제안".
 - **수치 검산:** `proposal_number_check.check_proposal_numbers()` (LLM 0). `_proposal` prose의 수치를 brief 코퍼스 + `scoring_focus`와 대조 → `_number_flags` 부착 (숫자 수정 0, 비치명).
 - **산출물:** `_proposal` 임베드 + `{brief_id}_proposal.html` 별도 저장.
 
 #### 3.4.3 대지·맥락 + 건축법 진단 (vworld_analyzer · teoilgi_client · arch_law_client)
 
-지침서 분석 완료 후 자동(단계 4.7) 또는 `POST /api/brief/{brief_id}/site-analyze`(주소로 VWorld 재분석).
+지침서 분석 완료 후 자동(단계 4.7) 또는 `POST /api/brief/{brief_id}/site-analyze`(대지 재분석). **site-analyze (2026-07-29 확장):** 주소 미입력 시 기존 `_site_context.matched_address`/`feasibility_export` 주소로 **자동 폴백**(재입력 불필요), `parcel_norm`(실측 필지 경계) 저장, 완료 후 `_proposal` 이 있으면 **LLM 0 으로 제안서 HTML 자동 재렌더**(`_render_proposal_html` 공용) — 응답에 `has_parcel`·`proposal_rerendered` 포함.
 
 - **자동 실행 조건:** `feasibility_export.sites[]` 에 주소가 있거나, `/analyze` 폼의 **`site_address`(선택)** 로 사용자가 직접 입력. `site_address` override 는 지침서 미추출/오추출 주소를 고정(첫 부지 대체·envelope 유지→law 작동, 부지 테이블 없으면 vision+measured만). 모든 하위 취득은 graceful(하나 실패해도 나머지 유지).
 - **부지별 병렬 (다부지 비대칭 해소):** 주소 있는 전 부지를 `asyncio.gather` 로 각각 분석. `_site_context` 대표값(analysis·measured·matched_address)=첫 부지(단일부지·호환), `_site_context.sites[]`=전 부지 {site_id, address, analysis, measured}. 첫 부지 이미지만 히어로로 저장.
@@ -242,7 +242,8 @@ competition_comparison/
 - **병렬 취득:** `asyncio.gather`로 WMTS와 WMS 동시 요청.
 - **폴백:** alpha 채널 전체 0(스케일 미충족), 오프셋 이탈, PIL 오류 시 → 위성 단독 이미지 (비치명, try/except 보장). `has_cadastral` 플래그가 `_site_context`, vision 프롬프트, 제안서 썸네일 캡션까지 전파.
 - **Vision 분석:** `claude-sonnet-4-6`, `max_tokens=1500`, `temperature=0`. 출력 JPEG quality=90. 반환 필드: `{orientation, road_access, surrounding_uses, natural_assets, special_context, overall_summary, confidence, caveats}`.
-- **저장:** `_site_context` → `_brief.json` 내 임베드 + `{brief_id}_site.jpg` 별도 파일.
+- **실측 필지 경계 (2026-07-29):** `_fetch_parcel_polygon()` — VWorld **2D데이터 API** `GET /req/data` (`request=GetFeature, data=LP_PA_CBND_BUBUN, geomFilter=POINT(lng lat), crs=EPSG:4326`) 로 필지 벡터 폴리곤 취득(vision 과 병렬 task). `_geom_outer_rings`(Polygon/MultiPolygon 외곽 링) → `_project_ring_norm`(WGS84→3857→위성 bbox 기준 0~1 정규화) → `parcel_norm`. 실패 시 None(graceful). 소비: 제안서 배치도 위성 오버레이의 빨간 실측 경계선 + "■ 실측 대지경계" 칩.
+- **저장:** `_site_context`(+`parcel_norm`) → `_brief.json` 내 임베드 + `{brief_id}_site.jpg` 별도 파일.
 
 ### 3.5 교차 비교 (Cross-Compare)
 
@@ -503,7 +504,7 @@ Brief 결과에는 미부착. `error` 필드는 `pattern_builder._build_quant_st
 
 ### 6.3 테스트 커버리지
 
-**백엔드 테스트 스위트:** `backend/tests/`, 총 581건 (pytest 확인, 2026-07-15). arch-law 연동은 `test_arch_law_client.py`(20, 네트워크 0 — ⚠mock 은 실제 응답 형태로: applicable_reviews dict·높이_일조.pass null·law_refs), 대지·법 렌더는 `test_brief_pipeline.py`(TestSiteLawSection·TestSiteLawXlsx)·`test_brief_proposal_report.py`(법적 골격 패널·다부지·조문 각주).
+**백엔드 테스트 스위트:** `backend/tests/`, 총 631건 (pytest 확인, 2026-07-29). 주요 최근 증가: `test_brief_proposal_report.py` 72(배치도·오버레이·필지경계·ALT·라벨), `test_vworld_analyzer.py` 13(bbox 기하+필지 투영), `test_brief_pipeline.py` 42, `test_brief_export_serving.py` 6(html_file_response). arch-law 연동은 `test_arch_law_client.py`(20, 네트워크 0 — ⚠mock 은 실제 응답 형태로: applicable_reviews dict·높이_일조.pass null·law_refs), 대지·법 렌더는 `test_brief_pipeline.py`(TestSiteLawSection·TestSiteLawXlsx)·`test_brief_proposal_report.py`(법적 골격 패널·다부지·조문 각주).
 
 | 테스트 파일 | 케이스 수 | 주요 커버리지 |
 |------------|----------|-------------|
@@ -568,6 +569,8 @@ PyWebView 통합: `target='_blank'` 링크 클릭 시 `window.pywebview.api.open
 - 설정: `getSettings`, `updateSettings`, `setDbPath`, `getFacilityTypes`, `getMeta`
 - 리포트 URL 반환: `getReportUrl`, `getSubmissionReportUrl`, `getMyProjectDeepReportUrl`, `getCrossCompareReportUrl`
 - MyProject: `runMyProjectPipeline`
+
+**리포트 서빙/다운로드 (2026-07-29):** 자체완결 HTML 리포트는 백엔드 `utils.html_file_response()` 단일 소스로 서빙 — 기본 inline(브라우저 보기), URL 에 `?download=1` 붙이면 attachment 다운로드. 한글 파일명은 RFC 6266(`filename*=UTF-8''`+ascii 폴백)으로 안전. 프론트 각 탭(BriefMode·ProjectList·CrossCompare·Diagnose)에 열기/다운로드 버튼 분리. 회귀: `test_brief_export_serving.py`.
 
 ### 7.3 스타일 시스템
 
@@ -646,14 +649,14 @@ PyWebView 통합: `target='_blank'` 링크 클릭 시 `window.pywebview.api.open
 
 ## 9. 미결·보류 사항
 
-**당면 TODO (2026-07-14 기준):** 대지·법 연동 대작업 완료 — arch-law-diagnose 되받기(Phase 2, prod 활성)·arch-law-graph 조문 원문(Phase 3)·터읽기 실측·다부지 부지별 분석·선택 대지 주소·`include_proposal` 토글·체크리스트 대지·법 섹션·placement_strategy(부지별 다이어그램). 시퀀스 E Phase 3(매거진 덱)도 완료(2026-07-13). 남은 것: SketchUp MCP 3D 매스(F-③)와 내재적 한계(§8.3).
+**당면 TODO (2026-07-29 기준):** 대지·법 연동(2026-07-14)과 대지 배치 다이어그램 재설계(2026-07-29 — top-view 배치도·위성 오버레이+실측 필지경계·조닝 ALT 2안·"AI" 자기지칭 라벨 제거·재분석 자동 재렌더)까지 완료. **전략 방향:** 통합 제안서(터읽기·site-model·law-graph 융합)보다 **각 앱 개별 산출물의 신뢰성 강화가 우선** — 임원 이해·신뢰가 병목. **다음 작업: '변수' 프로토타입** — A층(지침서 결정론 사실)은 고정하고, 공공성 해석·테마 부여 같은 해석 지점을 사용자가 LLM 과 대화로 조종(steering)해 해석층만 재생성하는 루프(`/interpret`·`/propose` 패턴 확장). 남은 것: SketchUp MCP 3D 매스(F-③)와 내재적 한계(§8.3).
 
 **보류 시퀀스:**
 
 | 시퀀스 | 내용 | 보류 사유 |
 |--------|------|----------|
 | B — 추출 정확도 평가 하네스 | `tools/eval/` B-2까지 구현. 다음: B-3 CI 통합. | 제안서 PDF 5건 + ground_truth JSON 미확보 |
-| C — 멀티파일 지침서 업로드 | 1파일 안정화 완료. 접근 A(multi-file 동시 분석) 권장. | 충돌 우선순위 룰(지침서 vs 과업지시서 중복 시 우선순위) 사용자 결정 필요 |
+| C — 멀티파일 지침서 업로드 | **기본 구현 완료** — `brief_pdf_refs` JSON 배열로 복수 파일 동시 분석, `_merge_multi_brief_data`(first_wins). | 남은 보류: 충돌 해소가 업로드 순서뿐(도메인 룰 없음) — 정량 충돌 시 먼저 올린 파일이 조용히 이김. 개선안: `_quantitative_flags` 식 경고 노출 |
 | D — 오프라인/제로-API 지침서 분석 | Claude Code가 classify/extract 핸드오프 수행. DOCX/HWP/HWPX 텍스트 기반이라 최적. | 배포 앱 불가(Cloud Run은 API만 가능), PDF는 vision 필요, 소량 수동 전용 |
 | ~~E Phase 3 — 수주 제안서 매거진형 덱~~ **✅ 완료 (2026-07-13)** | `to_proposal_html()` 매거진화(명조+Montserrat·흰 페이퍼)+결정 요약 cockpit+권장 종합안+입찰 2층 배점. | 후폴로우: 섹션별 takeaway 한 줄·본문 축약 |
 | F-③ — SketchUp MCP 3D 매스 | 시퀀스 F 대지분석 통합의 3D 매스 시각화. 위성+지적도 하이브리드 이미지는 이미 완료. | 사용자가 자료 줄 때 재개 |
