@@ -135,6 +135,8 @@ export default function BriefMode() {
   const [siteHistoryAddr, setSiteHistoryAddr] = useState('')
   const [siteHistoryBusy, setSiteHistoryBusy] = useState(false)
   const [siteHistoryErr, setSiteHistoryErr] = useState('')
+  const [steerId, setSteerId] = useState(null)                // '변수' 방향 지시 열린 대상 (brief_id 또는 'result')
+  const [steerText, setSteerText] = useState('')              // 새 방향 지시 입력
   const [siteViewId, setSiteViewId] = useState(null)          // 이력 카드 대지분석 보기 열린 brief_id
   const [siteViewData, setSiteViewData] = useState({})        // { [brief_id]: siteContext }
   const [history, setHistory] = useState([])
@@ -313,22 +315,86 @@ export default function BriefMode() {
   }
 
   // 프로젝트 수주 제안서 생성 (수주 전략). 완료 시 새 탭/파일로 제안서 리포트 열기.
-  const handlePropose = async (briefId) => {
+  // opts: '변수' steering — { steering: 새 방향 지시(누적), resetSteering: 초기화+clean 재생성 }
+  const handlePropose = async (briefId, opts = {}) => {
     const id = briefId || result?.brief_id
     if (!id || proposing) return
     setProposing(true)
     setProposeErr('')
     try {
-      const res = await proposeBrief(id)
+      const res = await proposeBrief(id, opts)
       if (result?.brief_id === id) {
         setResult(prev => ({ ...prev, has_proposal: true }))
       }
-      loadHistory()
+      setSteerText('')                 // 성공 시에만 입력 클리어 (실패 시 재시도 가능)
+      loadHistory()                    // steering_log 갱신 반영
       handleHtml(res.proposal_filename || `${id}_proposal.html`)
     } catch (e) {
       setProposeErr(e.message || '수주 제안서 생성 실패')
     }
     setProposing(false)
+  }
+
+  // '변수' 방향 지시 패널 — 결과 화면·이력 카드 공용. 사실(배점·필수 배치)은 고정,
+  // 해석층(컨셉·테마·설계 방향)만 지시 방향으로 재생성. 지시는 누적(초기화 가능).
+  const renderSteerPanel = (briefId) => {
+    const log = history.find(h => h.brief_id === briefId)?.steering_log || []
+    return (
+      <div style={{
+        marginTop: 10, padding: '12px 14px', borderRadius: 8,
+        border: '1px dashed var(--color-border)', background: 'var(--color-bg-surface)',
+      }}>
+        <div style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)', marginBottom: 8 }}>
+          원하는 컨셉 방향을 지시하면 제안서의 <b>해석 부분만</b> 그 방향으로 다시 씁니다
+          (지침서 사실·배점·필수 배치는 그대로 고정 · 지시는 누적 반영 · 재생성마다 API 토큰 사용).
+        </div>
+        <textarea
+          value={steerText}
+          onChange={e => setSteerText(e.target.value)}
+          maxLength={500}
+          rows={2}
+          placeholder={"예) 테마를 '흐름'으로 잡아줘 / 공공성을 재난 대응 거점으로 해석해줘"}
+          style={{
+            width: '100%', boxSizing: 'border-box', resize: 'vertical',
+            padding: '8px 10px', borderRadius: 6, border: '1px solid var(--color-border)',
+            fontSize: 'var(--font-size-sm)', fontFamily: 'inherit',
+            background: 'var(--color-bg-surface)', color: 'var(--color-text-body)',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+          <button
+            style={{ ...s.dlBtn(true), ...((proposing || !steerText.trim()) ? s.btnDisabled : {}) }}
+            onClick={() => handlePropose(briefId, { steering: steerText })}
+            disabled={proposing || !steerText.trim()}
+          >
+            {proposing ? '재생성 중...' : '✦ 방향 반영 재생성'}
+          </button>
+          {log.length > 0 && (
+            <button
+              style={{ ...s.dlBtn(false), ...(proposing ? s.btnDisabled : {}) }}
+              onClick={() => {
+                if (window.confirm('누적된 방향 지시를 모두 지우고 원래 방향으로 다시 생성할까요? (API 토큰 사용)')) {
+                  handlePropose(briefId, { resetSteering: true })
+                }
+              }}
+              disabled={proposing}
+            >
+              ↺ 지시 초기화
+            </button>
+          )}
+        </div>
+        {log.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+            <div style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 4 }}>
+              반영된 지시 ({log.length})
+            </div>
+            <ol style={{ margin: 0, paddingLeft: 18 }}>
+              {log.map((it, i) => <li key={i} style={{ marginBottom: 2 }}>{it}</li>)}
+            </ol>
+          </div>
+        )}
+      </div>
+    )
   }
 
   // 경험 기반 처방 생성 (과거 축적 데이터 → 이 지침서 적용). 과거 데이터 없으면 안내.
@@ -730,10 +796,19 @@ export default function BriefMode() {
                   ⬇ 제안서 저장
                 </button>
               )}
+              {result.has_proposal && (
+                <button
+                  style={s.dlBtn(false)}
+                  onClick={() => { setSteerId(steerId === 'result' ? null : 'result'); }}
+                >
+                  🎛 방향 지시
+                </button>
+              )}
               {proposeErr && (
                 <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{proposeErr}</span>
               )}
             </div>
+            {steerId === 'result' && renderSteerPanel(result.brief_id)}
           </div>
 
           <div style={{
@@ -886,6 +961,18 @@ export default function BriefMode() {
                       {proposing ? '생성 중...' : '제안서 생성'}
                     </button>
                   )}
+                  {item.has_proposal && (
+                    <button
+                      style={{
+                        ...s.historyBtn(false),
+                        ...(item.steering_log?.length ? { color: 'var(--color-accent)' } : {}),
+                      }}
+                      title="제안서 컨셉 방향 지시 (해석층만 조종, 사실 고정)"
+                      onClick={() => { setSteerId(steerId === item.brief_id ? null : item.brief_id); setSteerText('') }}
+                    >
+                      🎛 방향 지시{item.steering_log?.length ? ` (${item.steering_log.length})` : ''}
+                    </button>
+                  )}
                   {item.has_playbook ? (
                     <button style={s.historyBtn(false)} onClick={() => handleHtml(`${item.brief_id}_playbook.html`)}>
                       처방 열기
@@ -949,6 +1036,7 @@ export default function BriefMode() {
                   </button>
                 </div>
               </div>
+              {steerId === item.brief_id && renderSteerPanel(item.brief_id)}
               {siteViewId === item.brief_id && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--color-border)' }}>
                   {siteViewData[item.brief_id] ? (

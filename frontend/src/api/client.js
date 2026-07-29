@@ -442,11 +442,18 @@ export async function getBriefSiteContext(briefId) {
 }
 
 // 프로젝트 수주 제안서 생성 (수주 전략 처방, 추출 재처리 없음, LLM 1콜). 사용자별 키 헤더 필요.
-export async function proposeBrief(briefId) {
+// '변수' steering(선택): steering=새 방향 지시(누적), resetSteering=지시 초기화 후 clean 재생성.
+// 둘 다 없으면 기존처럼 body 없이 POST (하위호환).
+export async function proposeBrief(briefId, { steering, resetSteering } = {}) {
   const headers = {}
   const apiKey = getStoredApiKey()
   if (apiKey) headers['X-Anthropic-Api-Key'] = apiKey
-  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/propose`, { method: 'POST', headers })
+  const opts = { method: 'POST', headers }
+  if ((steering && steering.trim()) || resetSteering) {
+    headers['Content-Type'] = 'application/json'
+    opts.body = JSON.stringify({ steering: steering || '', reset_steering: !!resetSteering })
+  }
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/propose`, opts)
   if (!r.ok) {
     const err = await r.json().catch(() => ({}))
     throw new Error(err.detail || `수주 제안서 생성 실패 (HTTP ${r.status})`)

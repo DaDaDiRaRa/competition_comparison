@@ -433,7 +433,30 @@ def _lock_placement_alternatives(result: dict) -> None:
     ps["alternatives"] = cleaned
 
 
-def _propose_sync(brief_data: dict, facility_type: str) -> dict:
+# ── '변수' steering (대화형 컨셉 조종 v1) ────────────────────────────────────
+# 사용자가 방향 지시(자유 텍스트)를 누적 입력하며 해석층만 재생성하는 루프.
+# A층(결정론 scoring_focus·required=true 배치·지침서 인용)은 프롬프트 규칙 + 후처리
+# 덮어쓰기(_lock_placement_alternatives, compute_scoring_focus)로 구조적으로 불변.
+_STEERING_RULES = (
+    "[지시 적용 규칙]\n"
+    "- 위 지시는 해석층(concept_hook·win_themes·design_directions·권장 종합의 서술·"
+    "placement 의 required=false 존·program_directions·massing_strategy·phasing·"
+    "priorities/risks 의 표현)에만 반영하라.\n"
+    "- 지침서 사실(배점·필수 제약·required=true 배치·(p.N) 인용)은 지시와 충돌해도 "
+    "절대 바꾸지 마라 — 충돌 시 사실이 이기고, 반영 불가한 지시는 open_questions 나 "
+    "caveats 에 그 사유를 한 줄 남겨라.\n"
+    "- 지시를 핑계로 새 숫자를 사실처럼 만들지 마라(가정은 가정으로).\n"
+    "- 지시들은 순서대로 누적된 대화다 — 뒤 지시가 앞 지시를 좁히거나 수정할 수 있다."
+)
+
+
+def _steering_block(steering: list) -> str:
+    """누적 방향 지시 → 프롬프트 3번째 텍스트 블록 (cache_control 없음 — block1/2 캐시 유지)."""
+    lines = "\n".join(f"{i}. {s}" for i, s in enumerate(steering, start=1))
+    return f"[사용자 방향 지시 — 순서대로 누적 반영]\n{lines}\n\n{_STEERING_RULES}"
+
+
+def _propose_sync(brief_data: dict, facility_type: str, steering: list | None = None) -> dict:
     # advisor 와 동일한 결정론 백본 신호 — 단일 소스 재사용 (드리프트 차단). reference_cases
     # (시설유형 기존 사례 참고자료) 도 _build_advisor_payload 가 이미 채워서 넘겨준다.
     payload = _build_advisor_payload(brief_data, facility_type)
@@ -475,18 +498,21 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
         payload["site_context"] = site_ctx
 
     dynamic = "지침서 데이터 (사실 주장은 이 안의 내용만 사용):\n" + _compact(payload)
+    content = [
+        {"type": "text", "text": _PROPOSAL_INSTRUCTION, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": dynamic, "cache_control": {"type": "ephemeral"}},
+    ]
+    # '변수' steering — 지시가 있을 때만 3번째 블록 append (없으면 기존과 바이트 동일).
+    # cache_control 없이 캐시 prefix(block1+2) 뒤에 붙여 반복 루프에서 입력 캐시 히트 유지.
+    steering = [s for s in (steering or []) if isinstance(s, str) and s.strip()]
+    if steering:
+        content.append({"type": "text", "text": _steering_block(steering)})
     raw = call_messages(
         model=settings.model_id_advisor,   # 제안 전용 모델(기본 Opus). 추출은 그대로 Sonnet.
         max_tokens=40000,   # 대형 brief(5안+placement+alternatives 3안+program/massing/phasing) 잘림 방지
         temperature=0,     # Opus 4.7/4.8 은 call_messages 가 temperature 를 자동 생략 (400 회피)
         system=_PROPOSAL_SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": _PROPOSAL_INSTRUCTION, "cache_control": {"type": "ephemeral"}},
-                {"type": "text", "text": dynamic, "cache_control": {"type": "ephemeral"}},
-            ],
-        }],
+        messages=[{"role": "user", "content": content}],
     )
     try:
         result = parse_json_response(raw)
@@ -503,6 +529,8 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     result["brief_id"] = (brief_data.get("_brief_meta") or {}).get("brief_id", "")
     # 렌더러가 재조회 없이 "참고 사례" 섹션을 그릴 수 있게 원본 보존 (없으면 {} — graceful skip)
     result["_reference_cases"] = ref_ctx
+    # '변수' 감사 기록 — 이 제안서에 반영된 누적 지시 (렌더 안 함, _steering_log 와 일치 보장용)
+    result["_steering_applied"] = list(steering)
 
     # 조닝 ALT 사실-락 (LLM 0) — 지침서 명시 배치는 모든 대안에 동일 고정. 비치명.
     try:
@@ -520,8 +548,12 @@ def _propose_sync(brief_data: dict, facility_type: str) -> dict:
     return result
 
 
-async def propose_project(brief_data: dict, facility_type: str = "") -> dict:
+async def propose_project(brief_data: dict, facility_type: str = "",
+                          steering: list | None = None) -> dict:
     """지침서 기반 수주 제안서 생성 (LLM 1콜). 저장된 _brief.json 재해석, 추가 추출 없음.
+
+    steering: '변수' 누적 방향 지시(list[str], 선택) — 해석층만 조종, A층 사실은 불변.
+    None/빈 리스트면 기존 경로와 완전 동일(analyze 자동 제안서 호출부 무수정 호환).
 
     반환은 _proposal 스키마 dict (executive_summary / concept_hook(표지 파르티 — keyword+
     3축 tagline, 각 축 basis 앵커, 근거 없으면 LLM 이 생략) / win_themes / design_directions(+
@@ -533,4 +565,4 @@ async def propose_project(brief_data: dict, facility_type: str = "") -> dict:
     — 1층 사실(배점·강조·대지) 위에서 추론한 제안, 각 항목 basis 앵커 강제. 새 숫자를
     사실로 만들지 않음(가정은 open_questions/caveats 로).
     """
-    return await asyncio.to_thread(_propose_sync, brief_data, facility_type)
+    return await asyncio.to_thread(_propose_sync, brief_data, facility_type, steering)

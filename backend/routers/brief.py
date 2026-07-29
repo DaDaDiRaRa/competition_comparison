@@ -201,6 +201,10 @@ def list_briefs():
                 "has_site_context":   bool(meta.get("_site_context")),
                 "brief_genre":        (meta.get("_brief_genre") or {}).get("genre", "unknown"),
                 "validation_summary": (meta.get("validation") or {}).get("summary", {}),
+                # '변수' 누적 방향 지시 (제안서 조종 이력 — 프론트 이력 표시·초기화용)
+                "steering_log":       [e.get("instruction", "")
+                                       for e in (meta.get("_steering_log") or [])
+                                       if isinstance(e, dict) and e.get("instruction")],
             })
         except Exception:
             pass
@@ -836,13 +840,33 @@ def _render_proposal_html(brief_data: dict, safe_id: str, briefs_dir: Path,
     )
 
 
+class ProposeRequest(BaseModel):
+    """'변수' steering — 선택 body (없으면 기존 무-body 호출과 동일).
+
+    steering: 새 방향 지시 1건(자유 텍스트, 500자 상한). 누적 로그에 append 후
+              전체 지시 리스트로 재생성.
+    reset_steering: True 면 누적 지시를 비우고 clean 재생성 (초기화=항상 재생성 동반
+                    — 로그만 비우고 옛 반영본이 남는 불일치 방지).
+    """
+    steering: str = ""
+    reset_steering: bool = False
+
+
+_STEERING_MAX_LEN = 500     # 지시당 글자 상한 (프롬프트 비대 방지)
+_STEERING_MAX_COUNT = 20    # 누적 지시 개수 상한
+
+
 @router.post("/{brief_id}/propose")
-async def propose_brief(brief_id: str):
+async def propose_brief(brief_id: str, req: ProposeRequest | None = None):
     """저장된 지침서로 '프로젝트 수주 제안서'를 생성 (LLM 1콜, PDF 재처리 없음).
 
     AI 종합 해설(_insight)이 '사실 triage(해설가)'라면 제안서(_proposal)는
     '수주 전략(전략가)' — 같은 결정론 백본 위에서 핵심 테마·접근 방향·우선순위·
     리스크·착수 체크리스트를 제안한다. 사실 주장엔 근거 인용 유지, 당락 예측 아님.
+
+    '변수' steering (선택 JSON body): 방향 지시를 `_steering_log` 에 누적하고
+    해석층만 조종해 재생성 — A층 사실(결정론 scoring_focus·required 배치)은 불변.
+    로그는 **LLM 성공 후에만** persist (실패 시 로그↔제안서 불일치 방지).
 
     _brief.json 의 `_proposal` 갱신 + 별도 `{brief_id}_proposal.html` 렌더.
     """
@@ -867,14 +891,29 @@ async def propose_brief(brief_id: str):
     facility_type = bm.get("facility_type", "")
     brief_name    = bm.get("brief_name", "") or safe_id
 
+    # ── '변수' steering 로그 조립 (로컬 변수로만 — persist 는 LLM 성공 후) ──────
+    log = [e for e in (brief_data.get("_steering_log") or []) if isinstance(e, dict)]
+    if req and req.reset_steering:
+        log = []
+    new_instr = (req.steering if req else "").strip()
+    if new_instr:
+        if len(new_instr) > _STEERING_MAX_LEN:
+            raise HTTPException(400, f"방향 지시는 {_STEERING_MAX_LEN}자 이내로 입력해주세요.")
+        if len(log) >= _STEERING_MAX_COUNT:
+            raise HTTPException(400, f"방향 지시는 최대 {_STEERING_MAX_COUNT}개까지 누적됩니다. 초기화 후 다시 시도해주세요.")
+        log = log + [{"instruction": new_instr,
+                      "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S")}]
+    steering = [e.get("instruction", "") for e in log if (e.get("instruction") or "").strip()]
+
     try:
-        proposal = await propose_project(brief_data, facility_type)
+        proposal = await propose_project(brief_data, facility_type, steering=steering)
     except Exception as e:
         logger.error("propose error: %s", traceback.format_exc())
         raise HTTPException(500, f"수주 제안서 생성 실패: {_user_error_msg(e)}")
 
     proposal["generated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     brief_data["_proposal"] = proposal
+    brief_data["_steering_log"] = log    # 성공 후에만 — _steering_applied 와 항상 일치
     proposal_filename = f"{safe_id}_proposal.html"
 
     try:
@@ -892,6 +931,8 @@ async def propose_brief(brief_id: str):
         "has_proposal":      True,
         "data_confidence":   proposal.get("data_confidence"),
         "proposal_filename": proposal_filename,
+        "steering_count":    len(steering),
+        "steering_log":      steering,
     }
 
 
