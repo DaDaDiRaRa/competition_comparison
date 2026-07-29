@@ -401,3 +401,77 @@ class TestSiteLawXlsx:
         wb = _ox.load_workbook(_io.BytesIO(to_xlsx({"_brief_meta": {"facility_type": "public"}},
                                                    {"flags": [], "summary": {}})))
         assert "대지·법적 골격" not in wb.sheetnames
+
+
+# ── OMA식 면적 프로그램 비례 스택 다이어그램 (LLM 0 · 결정론 SVG) ──────────────────
+class TestProgramAreaStack:
+    from services.brief_checklist_exporter import (
+        _program_stack_blocks as _blocks, _program_area_stack_svg as _svg,
+        _to_area_float as _tof,
+    )
+
+    def test_facility_subtotal_no_double_count(self):
+        # 시설 subtotal 이 있으면 하위 space 를 더하지 않는다 (이중집계 방지).
+        a = {'area_rows': [
+            {'row_type': 'site_total', 'name': '전체', 'subtotal_area': 300000},
+            {'row_type': 'facility', 'name': '서고', 'subtotal_area': 200000},
+            {'row_type': 'space', 'name': '서고1', 'area': 150000},
+            {'row_type': 'facility', 'name': '주차', 'subtotal_area': 100000},
+        ], 'area_table': [], 'rooms': [], 'zones': []}
+        blocks, denom, note = TestProgramAreaStack._blocks(a)
+        assert blocks == [('서고', 200000.0), ('주차', 100000.0)]
+        assert denom == 300000.0          # site_total 은 블록 아님, denom=블록합
+        assert note == ''
+
+    def test_facility_children_summed_when_no_subtotal(self):
+        a = {'area_rows': [
+            {'row_type': 'facility', 'name': 'A', 'subtotal_area': None},
+            {'row_type': 'space', 'name': 'a1', 'area': 30},
+            {'row_type': 'space', 'name': 'a2', 'area': 20},
+            {'row_type': 'facility', 'name': 'B', 'subtotal_area': 40},
+        ], 'area_table': [], 'rooms': [], 'zones': []}
+        blocks, denom, _ = TestProgramAreaStack._blocks(a)
+        assert blocks == [('A', 50.0), ('B', 40.0)]
+
+    def test_gating_under_two_blocks(self):
+        a = {'area_rows': [{'row_type': 'facility', 'name': 'x', 'subtotal_area': None}],
+             'area_table': [], 'rooms': [], 'zones': []}
+        assert TestProgramAreaStack._blocks(a) == ([], None, '')
+
+    def test_area_table_fallback_and_string_coerce(self):
+        a = {'area_rows': [], 'rooms': [], 'zones': [], 'area_table': [
+            {'group_name': 'A', 'total_area_sqm': '12,000 ㎡'},
+            {'group_name': 'B', 'items': [{'area_sqm': 3000}, {'area_sqm': 2000}]},
+        ]}
+        blocks, denom, _ = TestProgramAreaStack._blocks(a)
+        assert blocks == [('A', 12000.0), ('B', 5000.0)]
+        assert denom == 17000.0
+
+    def test_many_blocks_collapse_to_other(self):
+        rows = [{'row_type': 'facility', 'name': f'F{i}', 'subtotal_area': 100 - i}
+                for i in range(20)]
+        a = {'area_rows': rows, 'area_table': [], 'rooms': [], 'zones': []}
+        blocks, _, note = TestProgramAreaStack._blocks(a)
+        assert len(blocks) == 14                      # 상위 13 + 기타
+        assert blocks[-1][0].startswith('기타')
+        assert '기타' in note
+
+    def test_to_area_float(self):
+        tof = TestProgramAreaStack._tof
+        assert tof('12,345.6 ㎡') == 12345.6
+        assert tof(5000) == 5000.0
+        assert tof(None) is None and tof('-5') is None and tof('abc') is None and tof(0) is None
+
+    def test_svg_escapes_and_side_tab(self):
+        blocks = [('큰방', 100000.0), ('행정<b>x</b>', 34000.0), ('열람실', 300.0)]
+        svg = TestProgramAreaStack._svg(blocks, sum(v for _, v in blocks), '연면적 X ㎡', '')
+        assert '<svg' in svg and 'aria-label="면적 프로그램 비례 다이어그램"' in svg
+        assert '행정&lt;b&gt;x&lt;/b&gt;' in svg     # 이름 escape
+        assert '<b>x</b>' not in svg
+        assert '열람실' in svg and '<line' in svg     # 얇은 블록 → 옆 탭 리더선
+
+    def test_diagram_appears_in_to_html(self):
+        # BRIEF_DATA 는 rooms 2개 → 다이어그램 렌더.
+        v = validate_brief(BRIEF_DATA, REQUIREMENTS)
+        h = to_html({**BRIEF_DATA, **v}, v['validation'])
+        assert 'aria-label="면적 프로그램 비례 다이어그램"' in h

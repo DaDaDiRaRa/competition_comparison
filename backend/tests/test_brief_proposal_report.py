@@ -474,6 +474,49 @@ class TestPlacementMultiSite:
         assert "<b>부지1</b>" not in h
 
 
+class TestProgramOrgDiagram:
+    """OMA식 프로그램 조직 스택 — 지침서 필수=본체 플랫폼 / AI 추론=옆탭 aura (LLM 0 SVG)."""
+
+    def _z(self, program, level="저층", required=False):
+        return {"program": program, "plan": "S", "level": level, "required": required, "why": "근거"}
+
+    def test_org_diagram_present_full_width(self):
+        ps = {"zones": [self._z("주민센터", "저층", True), self._z("주차", "지하", True)]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert 'aria-label="프로그램 조직 다이어그램"' in h
+        assert 'grid-column:1/-1' in h                              # 전체폭
+        assert '본체=지침서 필수(플랫폼)' in h
+        # 기존 방위/단면 다이어그램은 유지
+        assert '개념 조닝' in h and '개념 단면' in h
+
+    def test_aura_pushed_to_side_dashed(self):
+        ps = {"zones": [self._z("주민센터", "저층", True),
+                        self._z("전망라운지", "상층", False)]}       # AI 추론 → 옆탭
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert 'stroke-dasharray' in h                              # aura 점선 리더/탭
+        assert '전망라운지' in h and '주민센터' in h
+
+    def test_all_aura_renders_without_platform(self):
+        # 필수 존이 하나도 없어도 (has_plat=False) 본체에 점선 슬래브로 렌더 (crash 없음)
+        ps = {"zones": [self._z("a", "저층", False), self._z("b", "상층", False)]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert 'aria-label="프로그램 조직 다이어그램"' in h
+
+    def test_org_escapes_program_name(self):
+        ps = {"zones": [self._z("<b>x</b>", "저층", True), self._z("y", "상층", True)]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        org = h.split('aria-label="프로그램 조직 다이어그램"')[1][:800]
+        assert '&lt;b&gt;x&lt;/b&gt;' in h and '<b>x</b>' not in org
+
+    def test_multisite_org_per_site(self):
+        ps = {"zones": [
+            {"program": "민원실", "plan": "S", "level": "저층", "required": True, "site": "부지1"},
+            {"program": "보건소", "plan": "S", "level": "저층", "required": True, "site": "부지2"},
+        ]}
+        h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
+        assert h.count('aria-label="프로그램 조직 다이어그램"') == 2   # 부지별 1개씩
+
+
 class TestLawRefsFootnote:
     """Phase 3 — 관련 법조문 각주. graph 원문 있으면 접기, 없으면 law.go.kr 링크만(인용 가드)."""
 

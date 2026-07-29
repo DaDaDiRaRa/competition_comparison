@@ -1354,8 +1354,85 @@ def _zone_sect_svg(zones: list, zc: dict) -> str:
     )
 
 
+def _zone_org_svg(zones: list, zc: dict) -> str:
+    """OMA식 프로그램 조직 스택 — 층 순서(상층→지하)로 프로그램을 쌓되 지침서 필수 존은
+    본체 슬래브(플랫폼), AI 추론 존은 옆으로 밀어낸 in-between(aura) 탭으로 구분한다.
+
+    존별 면적이 없어 **면적 비례가 아니라 조직 다이어그램**(슬래브 높이 균일). 사실(필수)↔
+    제안(추론)을 platform/aura 로 2층 분리 — required 플래그가 근거라 정직한 분류. 번호·색은
+    다른 배치 다이어그램(plan/section)과 통합(zc·_num 재사용).
+    """
+    def _lv(z):
+        return (z.get("level") or "저층").strip()
+
+    def _clip(s, n):
+        s = str(s or "")
+        return s if len(s) <= n else s[:n - 1] + "…"
+
+    rank = {lv: i for i, lv in enumerate(_LEVEL_ORDER)}
+    idx = {id(z): i for i, z in enumerate(zones)}
+    ordered = sorted(zones, key=lambda z: (rank.get(_lv(z), 2), idx[id(z)]))
+    has_plat = any(_zreq(z) for z in ordered)
+    main = [z for z in ordered if _zreq(z)] if has_plat else ordered
+    side = [z for z in ordered if not _zreq(z)] if has_plat else []
+
+    BX, BW, TOP, SLAB_H, GAP = 44, 150, 44, 34, 5
+    FONT = "Montserrat,sans-serif"
+    tx = BX + BW
+
+    slabs, lvl_ys, y = "", {}, TOP
+    for z in main:
+        col = zc[id(z)]
+        lv = _lv(z)
+        lvl_ys.setdefault(lv, []).append(y + SLAB_H / 2)
+        nm = _esc(_clip(f'{z["_num"]}. {z.get("program") or ""}', 15))
+        cy = y + SLAB_H / 2 + 4
+        if _zreq(z):
+            slabs += (f'<rect x="{BX}" y="{y}" width="{BW}" height="{SLAB_H}" rx="3" fill="{col}"/>'
+                      f'<text x="{BX + 9}" y="{cy:.0f}" font-size="11.5" font-weight="700" '
+                      f'font-family="{FONT}" fill="#fff">{nm}</text>')
+        else:  # 플랫폼 없는 케이스: aura 를 본체에 점선 슬래브로
+            slabs += (f'<rect x="{BX}" y="{y}" width="{BW}" height="{SLAB_H}" rx="3" fill="#fff" '
+                      f'stroke="{col}" stroke-width="1.4" stroke-dasharray="3 2"/>'
+                      f'<text x="{BX + 9}" y="{cy:.0f}" font-size="11" font-weight="700" '
+                      f'font-family="{FONT}" fill="{col}">{nm}</text>')
+        y += SLAB_H + GAP
+    main_bottom = y
+
+    lvlab = ""
+    for lv, ys in lvl_ys.items():
+        my = sum(ys) / len(ys)
+        lvlab += (f'<text x="40" y="{my + 3:.0f}" text-anchor="end" font-size="9.5" '
+                  f'font-family="{FONT}" fill="#a9a5a0">{_esc(lv)}</text>')
+
+    cursor, tabs = TOP, ""
+    for z in side:
+        col = zc[id(z)]
+        ys = lvl_ys.get(_lv(z))
+        anchor = (sum(ys) / len(ys)) if ys else (TOP + (main_bottom - TOP) / 2)
+        ty = max(anchor, cursor + 20)
+        cursor = ty
+        nm = _esc(_clip(f'{z["_num"]}. {z.get("program") or ""}', 16))
+        tabs += (f'<line x1="{tx}" y1="{anchor:.0f}" x2="{tx + 16}" y2="{ty:.0f}" stroke="{col}" '
+                 f'stroke-width="1" stroke-dasharray="3 2"/>'
+                 f'<rect x="{tx + 17}" y="{ty - 8:.0f}" width="12" height="16" rx="2" fill="#fff" '
+                 f'stroke="{col}" stroke-width="1.3" stroke-dasharray="2.5 2"/>'
+                 f'<text x="{tx + 34}" y="{ty + 3:.0f}" font-size="10.5" font-family="{FONT}" '
+                 f'fill="{col}">{nm}</text>')
+
+    svg_h = max(main_bottom + 12, cursor + 18)
+    hd = ('<text x="119" y="26" text-anchor="middle" font-size="10.5" font-family="' + FONT
+          + '" fill="#6f6b66">본체=지침서 필수(플랫폼) · 옆=AI 제안(in-between)</text>')
+    return (f'<svg viewBox="0 0 384 {svg_h:.0f}" width="100%" '
+            f'style="max-width:440px;display:block;margin:0 auto" '
+            f'role="img" aria-label="프로그램 조직 다이어그램">'
+            + hd + lvlab + slabs + tabs + '</svg>')
+
+
 def _zone_diagrams(zones: list, zc: dict) -> str:
     return (
+        f'<div class="dia-box" style="grid-column:1/-1">{_zone_org_svg(zones, zc)}'
+        f'<div class="dia-cap">프로그램 조직 · OMA식 (본체=지침서 필수 플랫폼 · 옆=AI 제안 in-between · 층 순서 · 면적 비례 아님)</div></div>'
         f'<div class="dia-box">{_zone_plan_svg(zones, zc)}<div class="dia-cap">개념 조닝 (방위 · 번호는 아래 목록)</div></div>'
         f'<div class="dia-box">{_zone_sect_svg(zones, zc)}<div class="dia-cap">개념 단면 (층대 · 번호는 아래 목록)</div></div>'
     )

@@ -1080,7 +1080,7 @@ footer.doc{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);col
   nav.top .ttl{display:none}nav.top .inner{padding:8px 18px}}
 """
 
-from services.report_theme import THEME_VARS
+from services.report_theme import THEME_VARS, CATEGORY_COLORS
 # 공유 디자인 토큰(--sans/--serif 등) 주입 — 단일 소스. 로컬 :root 근접 값 유지.
 _HTML_CSS = THEME_VARS + _HTML_CSS
 
@@ -1090,6 +1090,174 @@ def _esc(v: Any) -> str:
     if v is None:
         return ""
     return html.escape(str(v), quote=True)
+
+
+# ── OMA식 면적 프로그램 비례 스택 다이어그램 (LLM 0 · 결정론 · 자체완결 SVG) ─────────
+# 추출된 면적표를 면적 비례 색상 스택으로 렌더. '본체=면적표 그룹(플랫폼)', 라벨이
+# 안 들어갈 만큼 얇은 소형 프로그램은 옆으로 밀어 리더선+탭(가독성). 의미론적 aura 판단
+# 아님 — 플랫폼/탭 구분은 오직 면적표 자기 위계 + 블록 높이(가독성) 기준. 데이터 없으면 생략.
+_SVG_FONT = "Montserrat,sans-serif"
+_STACK_NUM_RE = re.compile(r"-?\d[\d,]*\.?\d*")
+
+
+def _to_area_float(v: Any):
+    """면적 값을 양수 float 로. 문자열('12,345.6 ㎡')·숫자 모두 처리. 실패/비양수면 None."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v) if v > 0 else None
+    m = _STACK_NUM_RE.search(str(v))
+    if not m:
+        return None
+    try:
+        f = float(m.group(0).replace(",", ""))
+    except ValueError:
+        return None
+    return f if f > 0 else None
+
+
+def _program_stack_blocks(a: dict):
+    """면적표 → 비례 스택용 (라벨, ㎡) 블록 리스트 + denominator + note.
+
+    플랫폼 granularity = 시설(facility)/그룹 단위 (leaf space 수백 개 방지). 시설
+    subtotal 우선, 없으면 하위 space 합산(이중집계 방지). 유효 블록 2개 미만이면 ([], None, "").
+    LLM 0 · 결정론.
+    """
+    blocks: list[tuple[str, float]] = []
+
+    if a.get("area_rows"):
+        rows = [r for r in a["area_rows"] if isinstance(r, dict)]
+        cur_name = None
+        cur_sub = None
+        cur_children = 0.0
+
+        def _flush():
+            nonlocal cur_name, cur_sub, cur_children
+            if cur_name is not None:
+                area = cur_sub if cur_sub is not None else (cur_children or None)
+                if area:
+                    blocks.append((cur_name, area))
+            cur_name, cur_sub, cur_children = None, None, 0.0
+
+        for r in rows:
+            rt = r.get("row_type") or "space"
+            if rt == "site_total":
+                continue                       # 총합 행은 블록 아님 (중복 방지)
+            if rt == "facility":
+                _flush()
+                cur_name = (r.get("name") or "").strip() or "시설"
+                cur_sub = _to_area_float(r.get("subtotal_area")) or _to_area_float(r.get("area"))
+            else:
+                area = _to_area_float(r.get("area"))
+                if cur_name is not None:
+                    if area and rt == "space" and cur_sub is None:
+                        cur_children += area   # subtotal 없을 때만 하위 합산
+                elif area:
+                    blocks.append(((r.get("name") or "").strip() or "기타", area))
+        _flush()
+
+    elif a.get("area_table"):
+        for grp in a["area_table"]:
+            if not isinstance(grp, dict):
+                continue
+            name = (grp.get("group_name") or "").strip() or "(무제)"
+            area = _to_area_float(grp.get("total_area_sqm"))
+            if area is None:
+                area = sum(f for it in (grp.get("items") or []) if isinstance(it, dict)
+                           for f in (_to_area_float(it.get("area_sqm")),) if f) or None
+            if area:
+                blocks.append((name, area))
+
+    elif a.get("rooms"):
+        for rm in a["rooms"]:
+            if not isinstance(rm, dict):
+                continue
+            area = _to_area_float(rm.get("required_area_sqm")) or _to_area_float(rm.get("area_sqm"))
+            if area:
+                blocks.append(((rm.get("name") or "").strip() or "실", area))
+
+    elif a.get("zones"):
+        for z in a["zones"]:
+            if not isinstance(z, dict):
+                continue
+            area = _to_area_float(z.get("area_sqm"))
+            if area:
+                blocks.append(((z.get("name") or z.get("zone") or "").strip() or "존", area))
+
+    blocks = [(n, v) for (n, v) in blocks if v and v > 0]
+    if len(blocks) < 2:
+        return [], None, ""
+
+    note = ""
+    MAX_BLOCKS = 14
+    if len(blocks) > MAX_BLOCKS:
+        ordered = sorted(blocks, key=lambda b: b[1], reverse=True)
+        keep, rest = ordered[:MAX_BLOCKS - 1], ordered[MAX_BLOCKS - 1:]
+        keep.append((f"기타 {len(rest)}개", sum(v for _, v in rest)))
+        blocks = keep
+        note = f"상위 {MAX_BLOCKS - 1}개 표시 · 나머지 {len(rest)}개는 '기타'로 합산"
+
+    denom = sum(v for _, v in blocks)
+    return blocks, denom, note
+
+
+def _program_area_stack_svg(blocks: list, denom: float, total_label: str, note: str = "") -> str:
+    """(라벨, ㎡) 블록 → OMA식 비례 수직 스택 SVG (자체완결, LLM 0)."""
+    BAR_X, BAR_W, TOP, H, VW = 34, 150, 46, 520.0, 384
+    THIN = 20.0
+
+    def _pct(p):
+        return f"{p:.0f}" if p >= 1 else "<1"
+
+    def _clip(s, n):
+        s = str(s)
+        return s if len(s) <= n else s[:n - 1] + "…"
+
+    segs, y = [], TOP
+    for i, (name, area) in enumerate(blocks):
+        h = area / denom * H
+        segs.append((name, area / denom * 100.0, y, h, CATEGORY_COLORS[i % len(CATEGORY_COLORS)]))
+        y += h
+
+    rects, inside, thin = [], [], []
+    for name, pct, sy, h, color in segs:
+        rects.append(f'<rect x="{BAR_X}" y="{sy:.1f}" width="{BAR_W}" height="{max(h, 1.2):.1f}" '
+                     f'fill="{color}" stroke="#ffffff" stroke-width="0.7"/>')
+        if h >= THIN:
+            cy = sy + h / 2
+            inside.append(
+                f'<text x="{BAR_X + 8}" y="{cy + 4:.1f}" font-size="11.5" font-weight="700" '
+                f'font-family="{_SVG_FONT}" fill="#ffffff">{_esc(_clip(name, 13))}</text>'
+                f'<text x="{BAR_X + BAR_W - 8}" y="{cy + 4:.1f}" text-anchor="end" font-size="10.5" '
+                f'font-family="{_SVG_FONT}" fill="#ffffff" opacity="0.9">{_pct(pct)}%</text>')
+        else:
+            thin.append((name, pct, sy + h / 2, color))
+
+    tx = BAR_X + BAR_W
+    cursor, tabs = TOP, []
+    for name, pct, c, color in thin:
+        ty = max(c, cursor + 17)
+        cursor = ty
+        tabs.append(
+            f'<line x1="{tx}" y1="{c:.1f}" x2="{tx + 14}" y2="{ty:.1f}" stroke="{color}" stroke-width="1"/>'
+            f'<rect x="{tx + 15}" y="{ty - 7:.1f}" width="11" height="13" rx="2" fill="{color}"/>'
+            f'<text x="{tx + 31}" y="{ty + 3:.1f}" font-size="10.5" font-family="{_SVG_FONT}" '
+            f'fill="#3a3a3a">{_esc(_clip(name, 16))} · {_pct(pct)}%</text>')
+
+    svg_h = max(TOP + H + 18, cursor + 22)
+    title = (f'<text x="{BAR_X + BAR_W // 2}" y="30" text-anchor="middle" font-size="12.5" '
+             f'font-weight="700" font-family="{_SVG_FONT}" fill="#141414">{_esc(total_label)}</text>')
+    svg = (f'<svg viewBox="0 0 {VW} {svg_h:.0f}" width="100%" '
+           f'style="max-width:520px;display:block;margin:6px auto 0" '
+           f'role="img" aria-label="면적 프로그램 비례 다이어그램">'
+           + title + "".join(rects) + "".join(inside) + "".join(tabs) + '</svg>')
+    cap = '본체 = 면적표 그룹 · 옆 라벨 = 소형·세부 프로그램(가독성) · 블록 높이 = 면적 비례 · 추출 면적표 기반'
+    if note:
+        cap = _esc(note) + ' · ' + cap
+    return (f'<div style="border:1px solid var(--line);border-radius:10px;padding:14px 12px 12px;'
+            f'margin:4px 0 18px;background:var(--soft)">{svg}'
+            f'<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:10px;'
+            f'font-family:var(--sans)">{cap}</div></div>')
 
 
 _STRENGTH_LABEL = {"strong": "강한 신호", "medium": "중간 신호", "weak": "약한 신호"}
@@ -1552,6 +1720,13 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
     sec(2, "면적 프로그램", "면적")
     _LEVEL = {"site_total": (0, "부지"), "facility": (1, "시설"),
               "bureau": (2, "영역"), "division": (3, "과"), "space": (4, "세부")}
+
+    # OMA식 면적 비례 스택 다이어그램 (표 위 시각 요약, LLM 0). 데이터 부족 시 생략.
+    _sb, _sdenom, _snote = _program_stack_blocks(a)
+    if _sb:
+        _tfa = _v(a.get("total_fa"), " ㎡")
+        _tlabel = f"연면적 {_tfa}" if _tfa != "(없음)" else f"표시 면적 합계 {int(round(_sdenom)):,} ㎡"
+        P.append(_program_area_stack_svg(_sb, _sdenom, _tlabel, _snote))
 
     if a["area_rows"]:
         rows = [ar for ar in a["area_rows"] if isinstance(ar, dict)]

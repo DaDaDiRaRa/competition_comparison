@@ -29,6 +29,14 @@ SANS = "'Montserrat','Pretendard','Malgun Gothic',system-ui,-apple-system,'Segoe
 SERIF = "'Noto Serif KR','Nanum Myeongjo',Georgia,'Batang',serif"
 ACCENT = "#e60012"
 
+# 카테고리형 스택/조닝 다이어그램 공용 팔레트 (건원 RED 선두 + 차분한 8색).
+# brief_proposal_report_generator._ZONE_COLORS / _WAFFLE_COLORS 와 동일 계열 —
+# 면적 프로그램 비례 스택(brief_checklist_exporter) 등이 공유하는 단일 소스.
+CATEGORY_COLORS = [
+    "#e60012", "#2a6496", "#5a8a3e", "#c47b00",
+    "#7a3a8e", "#3a8a8e", "#c45a00", "#6a6a6a",
+]
+
 
 def theme_style_block() -> str:
     """`<style>` 태그로 감싼 토큰 블록 — 자체 <style> 이 없는 리포트가 head 에 삽입."""
