@@ -1935,6 +1935,66 @@ def _bid_structure_html(bid_structure: dict | None) -> str:
     )
 
 
+# ── '한 문서화' (2026-07-29) — 면적 스택·지침서 강조요소를 덱에 이식 ─────────
+# 실무자가 제안서 하나로 착수하도록 (체크리스트·해설 왕복 제거). 전부 LLM 0.
+
+def _program_stack_section(stack_html: str) -> str:
+    """면적 비례 스택(체크리스트 program_stack_html 결과) → '프로그램 면적 구성' 섹션."""
+    if not (stack_html or "").strip():
+        return ""
+    return (
+        '<section id="areas" class="sec">'
+        '<h2><span class="n">·</span>프로그램 면적 구성 '
+        '<span style="font-size:12px;font-weight:600;color:var(--muted)">· 지침서 추출 사실</span></h2>'
+        + stack_html +
+        '</section>'
+    )
+
+
+_EMPH_STRENGTH = {"strong": ("강한 신호", "var(--accent)"),
+                  "medium": ("중간 신호", "var(--med)"),
+                  "weak":   ("약한 신호", "var(--muted)")}
+
+
+def _emphases_html(key_emphases: list | None) -> str:
+    """종합 해설(_insight.key_emphases) → '지침서가 강조하는 요소' 섹션 (사실 신호 층).
+
+    임원 PPT S10 우측('지침서 요약 — 강조 요소')에 대응. basis 인용 유지, LLM 0 렌더만.
+    """
+    items = [e for e in (key_emphases or []) if isinstance(e, dict)
+             and (e.get("topic") or "").strip()]
+    if not items:
+        return ""
+    rows = []
+    for e in items:
+        topic = _esc((e.get("topic") or "").strip())
+        slbl, scol = _EMPH_STRENGTH.get((e.get("signal_strength") or "").lower(), ("", ""))
+        chip = (f'<span style="font-family:var(--sans);font-size:10px;font-weight:700;'
+                f'color:{scol};border:1px solid var(--line);border-radius:20px;'
+                f'padding:1px 8px;margin-left:8px;vertical-align:middle">{_esc(slbl)}</span>'
+                if slbl else "")
+        sigs = [str(x).strip() for x in (e.get("signals") or []) if str(x).strip()]
+        sig_html = (f'<div style="font-size:12.5px;color:var(--text);margin-top:3px;'
+                    f'line-height:1.6">{_esc(" · ".join(sigs))}</div>' if sigs else "")
+        basis = [str(x).strip() for x in (e.get("basis") or []) if str(x).strip()]
+        basis_html = (f'<div style="margin-top:5px"><span class="cite">근거 '
+                      f'{_esc(" · ".join(basis))}</span></div>' if basis else "")
+        rows.append(
+            '<div style="border:1px solid var(--line);border-left:3px solid var(--accent);'
+            'border-radius:0 8px 8px 0;padding:10px 14px;background:#fff">'
+            f'<div style="font-size:14px;font-weight:700;color:var(--ink)">{topic}{chip}</div>'
+            f'{sig_html}{basis_html}</div>'
+        )
+    return (
+        '<section id="emphasis" class="sec">'
+        '<h2><span class="n">·</span>지침서가 강조하는 요소 '
+        '<span style="font-size:12px;font-weight:600;color:var(--muted)">· 반복·강조 신호</span></h2>'
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));'
+        'gap:10px;margin:6px 0">' + "".join(rows) + '</div>'
+        '</section>'
+    )
+
+
 def to_proposal_html(
     proposal: dict,
     brief_name: str = "",
@@ -1943,12 +2003,16 @@ def to_proposal_html(
     site_image_b64: str = "",
     feasibility: dict | None = None,
     bid_structure: dict | None = None,
+    program_stack_html: str = "",
+    key_emphases: list | None = None,
 ) -> str:
     """_proposal dict → 자체완결 HTML 문자열 (PPT형 스크롤 덱, LLM 호출 없음).
 
     - site_image_b64 가 있으면 덱 최상단에 대지 실측(위성+지적도) 히어로.
     - site_context 의 판독 필드는 '대지·맥락' 섹션으로(히어로 있으면 compact).
     - feasibility(feasibility_export) 가 있으면 '사업 규모' 실추출 팩트 밴드.
+    - program_stack_html(체크리스트 공용 헬퍼 결과)·key_emphases(_insight)가 있으면
+      '프로그램 면적 구성'·'지침서가 강조하는 요소' 섹션 ('한 문서화', LLM 0).
     """
     proposal = proposal or {}
     title = (brief_name or "").strip() or "프로젝트 수주 제안서"
@@ -1981,6 +2045,8 @@ def to_proposal_html(
     hero_html = _hero_html(site_context, site_image_b64)
     site_html = _site_context_html(site_context, site_image_b64, compact=bool(hero_html))
     facts_html = _facts_band_html(feasibility)
+    stack_html = _program_stack_section(program_stack_html)   # 한 문서화 (S8 면적표)
+    emph_html = _emphases_html(key_emphases)                  # 한 문서화 (S10 강조 요소)
 
     # Phase 2: AI 해석 확장층 (프로그램·매스·단계). 있을 때만 렌더.
     directions_html = _directions_html(proposal)
@@ -2002,8 +2068,10 @@ def to_proposal_html(
         + legend_html
         + summary_html
         + facts_html
+        + stack_html
         + site_html
         + _scoring_waffle(proposal)
+        + emph_html
         + _bid_structure_html(bid_structure)
         + _win_themes_html(proposal)
         + rec_html
@@ -2029,7 +2097,9 @@ def to_proposal_html(
     nav_links = (
         '<a href="#summary">요약</a>'
         + ('<a href="#facts">규모</a>' if facts_html else "")
+        + ('<a href="#areas">면적</a>' if stack_html else "")
         + ('<a href="#site">대지</a>' if site_html else "")
+        + ('<a href="#emphasis">강조</a>' if emph_html else "")
         + '<a href="#themes">핵심 테마</a>'
         '<a href="#directions">접근 방향</a>'
         + ('<a href="#program">프로그램</a>' if interp_html else "")

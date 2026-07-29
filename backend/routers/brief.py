@@ -822,6 +822,8 @@ def _render_proposal_html(brief_data: dict, safe_id: str, briefs_dir: Path,
     """_proposal → 자체완결 제안서 HTML (대지 위성 썸네일 base64 임베드). /propose·/analyze 공용.
 
     site_context·feasibility·bid_structure 를 함께 넘겨 법적 골격·대지·2층 배점 섹션까지 렌더.
+    '한 문서화'(2026-07-29): 면적 스택(체크리스트 공용 헬퍼)·지침서 강조요소(_insight)도
+    함께 넘겨 실무자가 제안서 하나로 착수 가능하게 (전부 LLM 0, graceful).
     """
     site_context = brief_data.get("_site_context")
     site_image_b64 = ""
@@ -832,11 +834,14 @@ def _render_proposal_html(brief_data: dict, safe_id: str, briefs_dir: Path,
                 site_image_b64 = base64.standard_b64encode(site_img_path.read_bytes()).decode()
             except Exception:
                 site_image_b64 = ""
+    from services.brief_checklist_exporter import program_stack_html
     return to_proposal_html(
         brief_data["_proposal"], brief_name, facility_label(facility_type),
         site_context=site_context, site_image_b64=site_image_b64,
         feasibility=brief_data.get("feasibility_export"),
         bid_structure=brief_data.get("_bid_structure"),
+        program_stack_html=program_stack_html(brief_data),
+        key_emphases=(brief_data.get("_insight") or {}).get("key_emphases"),
     )
 
 

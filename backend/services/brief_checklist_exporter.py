@@ -1260,6 +1260,26 @@ def _program_area_stack_svg(blocks: list, denom: float, total_label: str, note: 
             f'font-family:var(--sans)">{cap}</div></div>')
 
 
+def program_stack_html(brief_data: dict) -> str:
+    """면적표 → 비례 스택 다이어그램 HTML (LLM 0, 결정론) — 단일 소스 공용 헬퍼.
+
+    체크리스트(to_html)와 수주 제안서 덱(brief_proposal_report_generator)이 공유
+    ('한 문서화' 2026-07-29 — 실무자가 제안서 하나로 착수). 유효 블록 부족·오류 시 ""
+    (graceful — 소비 측은 빈 문자열이면 섹션 생략).
+    """
+    try:
+        a = _extract_sections(brief_data)["area"]
+        blocks, denom, note = _program_stack_blocks(a)
+        if not blocks:
+            return ""
+        tfa = _v(a.get("total_fa"), " ㎡")
+        label = (f"연면적 {tfa}" if tfa != "(없음)"
+                 else f"표시 면적 합계 {int(round(denom)):,} ㎡")
+        return _program_area_stack_svg(blocks, denom, label, note)
+    except Exception:
+        return ""
+
+
 _STRENGTH_LABEL = {"strong": "강한 신호", "medium": "중간 신호", "weak": "약한 신호"}
 _CONF_LABEL = {"high": "높음", "medium": "보통", "low": "낮음 (근거 부족)"}
 

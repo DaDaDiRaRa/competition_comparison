@@ -713,3 +713,54 @@ class TestZoningAlternatives:
                   {"label": "B", "zones": [{"program": "y", "plan": "N", "level": "상층", "required": False}]}]}
         h = to_proposal_html({"executive_summary": "x", "placement_strategy": ps})
         assert "<b>x</b>" not in h and "&lt;b&gt;x&lt;/b&gt;" in h
+
+
+class TestOneDocSections:
+    """'한 문서화'(2026-07-29) — 면적 스택·지침서 강조요소를 제안서 덱에 이식 (LLM 0)."""
+
+    _EMPH = [
+        {"topic": "감염 동선 분리", "signal_strength": "strong",
+         "signals": ["본문 3회 반복", "1층 필수 명시"], "basis": ["p.18", "보건시설"]},
+        {"topic": "공공 개방", "signal_strength": "weak", "signals": [], "basis": []},
+    ]
+
+    def test_program_stack_section_rendered(self):
+        h = to_proposal_html({"executive_summary": "x"},
+                             program_stack_html='<svg data-stack="1"></svg>')
+        assert "프로그램 면적 구성" in h
+        assert 'data-stack="1"' in h
+        assert '<a href="#areas">면적</a>' in h                    # nav 링크
+
+    def test_program_stack_graceful_skip(self):
+        h = to_proposal_html({"executive_summary": "x"})
+        assert "프로그램 면적 구성" not in h
+        assert '<a href="#areas">' not in h
+
+    def test_emphases_rendered_with_basis(self):
+        h = to_proposal_html({"executive_summary": "x"}, key_emphases=self._EMPH)
+        assert "지침서가 강조하는 요소" in h
+        assert "감염 동선 분리" in h and "강한 신호" in h
+        assert "본문 3회 반복" in h and "p.18" in h                # 근거 인용 유지
+        assert '<a href="#emphasis">강조</a>' in h
+
+    def test_emphases_graceful_skip(self):
+        assert "지침서가 강조하는 요소" not in to_proposal_html({"executive_summary": "x"})
+        assert "지침서가 강조하는 요소" not in to_proposal_html(
+            {"executive_summary": "x"}, key_emphases=[{"topic": ""}])
+
+    def test_emphases_escaped(self):
+        h = to_proposal_html({"executive_summary": "x"},
+                             key_emphases=[{"topic": "<img src=x>", "signals": ["<b>s</b>"]}])
+        assert "<img src=x>" not in h and "&lt;img src=x&gt;" in h
+        assert "<b>s</b>" not in h
+
+    def test_program_stack_helper_single_source(self):
+        # 체크리스트 공용 헬퍼 — 면적 데이터 있으면 SVG, 없으면 "" (graceful)
+        from services.brief_checklist_exporter import program_stack_html
+        assert program_stack_html({}) == ""
+        brief = {"brief_program": [{"area_table": [
+            {"group_name": "구청", "total_area_sqm": 36019.0},
+            {"group_name": "보건소", "total_area_sqm": 8594.0}]}]}
+        out = program_stack_html(brief)
+        assert "면적 프로그램 비례 다이어그램" in out
+        assert "구청" in out and "보건소" in out
