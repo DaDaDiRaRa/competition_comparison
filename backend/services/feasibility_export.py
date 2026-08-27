@@ -303,6 +303,15 @@ def build_feasibility_export(brief_data: dict) -> dict:
             "floor_area_ratio_pct": st.get("floor_area_ratio_pct"),
             "building_coverage_pct": st.get("building_coverage_pct"),
             "max_height_m": st.get("max_height_m"),
+            # 목표 연면적·공개공지 (2026-08-27 추가, arch-law-diagnose 요청).
+            # `brief_project_info.sites` 에 **이미 있던 값**인데 이 블록에만 안 실려 있어,
+            # 소비 앱이 그것 때문에 자기 파서를 못 지우고 있었다. 재배치라 새 추출 0.
+            # ⚠ schema_version 은 2 그대로 — 추가만이라 하위호환이고, 소비 측 게이트가
+            #   `>=2` 라 올리면 **옛 판본을 읽던 코드가 갈라진다**. 판본 구분이 필요해지면
+            #   그때 두 앱이 같이 정한다.
+            "floor_area_sqm": st.get("floor_area_sqm"),
+            "open_space_sqm": st.get("open_space_sqm"),
+            "open_space_notes": st.get("open_space_notes"),
         })
 
     # C: 인증 코드화

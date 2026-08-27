@@ -579,10 +579,12 @@ def _hero_html(site_context: dict | None, image_b64: str = "") -> str:
 # ── 사업 규모 팩트 밴드 (지침서 실추출 — 날조 0) ─────────────────────
 
 _FACT_FIELDS = [
-    ("site_area_sqm",          "㎡",   "부지면적", lambda v: f"{v:,.0f}"),
-    ("floor_area_ratio_pct",   "%",    "용적률",   lambda v: f"{v:g}"),
-    ("building_coverage_pct",  "%",    "건폐율",   lambda v: f"{v:g}"),
-    ("max_height_m",           "m",    "최고높이", lambda v: f"{v:g}"),
+    ("site_area_sqm",          "㎡",   "부지면적",     lambda v: f"{v:,.0f}"),
+    # 「목표」인 이유 — 지침서가 요구하는 값이지 실측이 아니다(사실 밴드의 라벨 규율).
+    ("floor_area_sqm",         "㎡",   "목표 연면적",  lambda v: f"{v:,.0f}"),
+    ("floor_area_ratio_pct",   "%",    "용적률",       lambda v: f"{v:g}"),
+    ("building_coverage_pct",  "%",    "건폐율",       lambda v: f"{v:g}"),
+    ("max_height_m",           "m",    "최고높이",     lambda v: f"{v:g}"),
 ]
 _FACT_TOPLEVEL = [
     ("construction_cost_100m_won", "억",   "공사비",   lambda v: f"{v:,.0f}"),
