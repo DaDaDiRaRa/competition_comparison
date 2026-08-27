@@ -538,13 +538,20 @@ def _propose_sync(brief_data: dict, facility_type: str, steering: list | None = 
     except Exception as e:
         logger.warning("조닝 ALT 사실-락 실패 (비치명): %s", e)
 
-    # 근거 없는 수치 검산 (LLM 0, 숫자 수정 0). 비치명 — 실패해도 제안서는 유지.
+    # 수치 검산 2종 (LLM 0, 숫자·텍스트 수정 0). 비치명 — 실패해도 제안서는 유지.
+    #   · _number_flags     = 지침서 어디에도 없는 숫자        → 지어냈다
+    #   · _unanchored_flags = 숫자는 있는데 출처를 안 밝힌 주장 → 확인할 수 없다
+    # 임원이 「그 숫자 어디서 났습니까」라고 묻는 자리는 후자다.
     try:
-        from services.proposal_number_check import check_proposal_numbers
+        from services.proposal_number_check import (
+            check_proposal_numbers, check_unanchored_claims,
+        )
         result["_number_flags"] = check_proposal_numbers(result, brief_data)
+        result["_unanchored_flags"] = check_unanchored_claims(result)
     except Exception as e:
         logger.warning("제안서 수치 검산 실패 (비치명): %s", e)
-        result["_number_flags"] = []
+        result.setdefault("_number_flags", [])
+        result.setdefault("_unanchored_flags", [])
     return result
 
 

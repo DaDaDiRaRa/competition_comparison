@@ -961,32 +961,44 @@ def _interp_section(proposal: dict, key: str, sec_id: str, title: str) -> str:
     )
 
 
-def _number_flags_html(proposal: dict) -> str:
-    """근거 미확인 수치 검산 결과(`_number_flags`)를 경고 밴드로. 없으면 ''.
-
-    제안서 서술에 나왔지만 지침서 추출 데이터에서 확인 안 된 숫자 — 일반지식·추정일
-    수 있으니 인용 전 원문 확인하라는 투명성 신호 (숫자 수정 0, 플래그만).
-    """
-    flags = [f for f in (proposal.get("_number_flags") or []) if isinstance(f, dict)]
-    if not flags:
-        return ""
+def _flag_rows(flags: list) -> str:
     rows = []
-    for f in flags[:20]:
+    for f in [x for x in (flags or []) if isinstance(x, dict)][:20]:
         val = _esc((f.get("value") or "").strip())
         ctx = _esc((f.get("context") or "").strip())
-        if not val:
-            continue
-        rows.append(f'<li><span class="nv">{val}</span> · <span class="nctx">…{ctx}…</span></li>')
-    if not rows:
+        if val:
+            rows.append(f'<li><span class="nv">{val}</span> · <span class="nctx">…{ctx}…</span></li>')
+    return "".join(rows)
+
+
+def _number_flags_html(proposal: dict) -> str:
+    """수치 검산 2종을 경고 밴드로. 둘 다 비었으면 ''.
+
+    **잡는 것이 다르다** — 섞으면 고칠 방법이 달라진다:
+      · `_number_flags`     = 지침서 어디에도 없는 숫자 → *이 숫자가 진짜인가*
+      · `_unanchored_flags` = 숫자는 있는데 그 주장이 출처를 안 밝혔다 → *어느 쪽인가*
+    후자가 임원이 「그 숫자 어디서 났습니까」라고 묻는 자리다.
+    둘 다 숫자·텍스트 **수정 0**, 플래그만.
+    """
+    unverified = _flag_rows(proposal.get("_number_flags"))
+    unanchored = _flag_rows(proposal.get("_unanchored_flags"))
+    if not unverified and not unanchored:
         return ""
+
+    body = ""
+    if unverified:
+        body += ('<div class="nc-h">⚠ 아래 수치는 지침서 추출 데이터에서 확인되지 않았습니다 '
+                 '— 일반지식·추정일 수 있으니 인용 전 원문 확인 필요</div>'
+                 f'<ul>{unverified}</ul>')
+    if unanchored:
+        body += ('<div class="nc-h" style="margin-top:10px">⚠ 아래 주장은 수치를 들면서 '
+                 '<b>근거를 밝히지 않았습니다</b> — 숫자가 틀렸다는 뜻이 아니라, '
+                 '읽는 사람이 출처를 확인할 수 없다는 뜻입니다</div>'
+                 f'<ul>{unanchored}</ul>')
     return (
         '<section id="numcheck" class="sec">'
         '<h2><span class="n">·</span>근거 미확인 수치</h2>'
-        '<div class="numcheck">'
-        '<div class="nc-h">⚠ 아래 수치는 지침서 추출 데이터에서 확인되지 않았습니다 '
-        '— 일반지식·추정일 수 있으니 인용 전 원문 확인 필요</div>'
-        '<ul>' + "".join(rows) + '</ul>'
-        '</div></section>'
+        f'<div class="numcheck">{body}</div></section>'
     )
 
 

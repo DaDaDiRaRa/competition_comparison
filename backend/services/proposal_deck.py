@@ -469,7 +469,8 @@ def _kickoff(proposal: dict) -> dict | None:
 def _caveats(proposal: dict) -> dict | None:
     cav = _strs(proposal, "caveats")
     flags = [f for f in (proposal.get("_number_flags") or []) if isinstance(f, dict)]
-    if not cav and not flags:
+    unanchored = [f for f in (proposal.get("_unanchored_flags") or []) if isinstance(f, dict)]
+    if not cav and not flags and not unanchored:
         return None
     body = [f"· {_s(c, 96)}" for c in cav[:8]]
     if flags:
@@ -479,6 +480,14 @@ def _caveats(proposal: dict) -> dict | None:
             "본문에 있다. 발표 전 대조 필요."
         )
         body += [f"  · {_s(f.get('value'))} ({_s(f.get('field'), 40)})" for f in flags[:5]]
+    if unanchored:
+        # 숫자가 틀렸다는 게 아니라 출처를 못 밝혔다는 뜻 — 발표장에서 받는 질문이 다르다.
+        body.append("")
+        body.append(
+            f"근거를 밝히지 않은 수치 주장 {len(unanchored)}건 — 숫자가 틀렸다는 뜻이 "
+            "아니라 출처를 확인할 수 없다는 뜻이다."
+        )
+        body += [f"  · {_s(f.get('value'))} ({_s(f.get('field'), 40)})" for f in unanchored[:5]]
     conf = _s(proposal.get("data_confidence"))
     return _slide(
         "text", title="한계 · 전제", subtitle="CAVEATS", body=body,

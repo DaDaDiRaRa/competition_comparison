@@ -131,3 +131,86 @@ def check_proposal_numbers(proposal: dict, brief_data: dict, min_digits: int = 2
             ctx = text[max(0, i - 18): i + len(raw) + 12].strip()
             flags.append({"value": raw, "field": field, "context": ctx})
     return flags
+
+
+# ── 구조 검사: 근거를 안 밝힌 수치 주장 ─────────────────────────────────────
+#
+# 위 코퍼스 검사(`check_proposal_numbers`)와 **잡는 것이 다르다**:
+#   · 코퍼스 = 그 숫자가 지침서 어디에도 없다        → 지어냈다
+#   · 구조   = 숫자는 지침서에 있는데 이 주장이 출처를 안 밝혔다 → 읽는 사람이 확인 못 한다
+# 임원이 「그 숫자 어디서 났습니까」라고 묻는 자리는 후자다. 둘 다 필요하다.
+#
+# concept-studio `render/numbers.py` 의 원리를 우리 데이터 모델에 옮긴 것 —
+# 그쪽은 "사람이 읽는 글에 숫자가 있으면 `data-ev` 를 단 조상 안에 있어야 한다"를
+# HTML 구조로 강제한다. 우리는 `basis` 앵커가 계약에 이미 있으므로 데이터에서 본다.
+#
+# ⚠ **빌드를 세우지 않는다.** concept-studio 는 모든 수치가 레지스터 소속이라 그럴 수
+#    있지만, 우리 제안서는 지침서 수치를 산문에 그대로 인용하는 자리가 정당하게 많다.
+#    렌더를 막으면 정당한 산출물이 안 나온다 → flag 로만.
+
+#: `basis` 앵커가 **계약상 필수**인 블록만 본다. executive_summary·kickoff_checklist·
+#: caveats 는 basis 칸 자체가 없어(스키마 참조) 검사 대상이 아니다 — 없는 칸을 비었다고
+#: 나무라면 헛경고다.
+_ANCHORED_SECTIONS = {
+    "win_themes":         ("theme", "rationale", "scoring_link"),
+    "design_directions":  ("direction", "narrative", "addresses",
+                           "scoring_play", "tradeoffs", "site_rationale"),
+    "program_directions": ("claim", "detail"),
+    "massing_strategy":   ("claim", "detail"),
+    "phasing":            ("claim", "detail"),
+}
+
+
+def _has_basis(item: dict) -> bool:
+    """`basis` 가 실제로 채워졌는가. ⚠ `risks[].basis` 만 문자열이다(나머지는 리스트)."""
+    b = item.get("basis")
+    if isinstance(b, str):
+        return bool(b.strip())
+    if isinstance(b, list):
+        return any(str(x).strip() for x in b)
+    return False
+
+
+def check_unanchored_claims(proposal: dict, min_digits: int = 2) -> list:
+    """근거를 안 밝힌 수치 주장 flag. 각 flag: {value, field, context}.
+
+    숫자가 **맞는지**는 안 본다(그건 코퍼스 검사 몫) — 이 주장이 어디서 왔는지
+    문서가 말할 수 있는지만 본다. 숫자·텍스트 수정 0.
+    """
+    flags: list[dict] = []
+    if not isinstance(proposal, dict):
+        return flags
+
+    def _scan(text, field):
+        t = str(text or "").strip()
+        if not t:
+            return
+        for m in _NUM.finditer(t):
+            tok = m.group(0)
+            digits = tok.replace(",", "").replace(".", "")
+            unit_follows = _RISKY_HEAD.match(t[m.end():])
+            if len(digits) < min_digits and not unit_follows:
+                continue           # 한 자리 구조 숫자(1순위·5안)는 위험이 낮다
+            lo, hi = max(0, m.start() - 18), min(len(t), m.end() + 18)
+            flags.append({"value": tok, "field": field, "context": t[lo:hi]})
+            return                 # 항목당 하나면 충분하다 — 목록이 길면 아무도 안 읽는다
+
+    for sec, keys in _ANCHORED_SECTIONS.items():
+        for i, item in enumerate(proposal.get(sec) or []):
+            if not isinstance(item, dict) or _has_basis(item):
+                continue
+            for k in keys:
+                _scan(item.get(k), f"{sec}[{i}].{k}")
+
+    # 배치 존 — 지침서가 위치를 명시한 required 존은 사실이라 basis 가 더 중요하다.
+    ps = proposal.get("placement_strategy")
+    if isinstance(ps, dict):
+        for i, z in enumerate(ps.get("zones") or []):
+            if isinstance(z, dict) and not _has_basis(z):
+                _scan(z.get("why"), f"placement_strategy.zones[{i}].why")
+
+    for i, r in enumerate(proposal.get("risks") or []):
+        if isinstance(r, dict) and not _has_basis(r):
+            for k in ("risk", "mitigation"):
+                _scan(r.get(k), f"risks[{i}].{k}")
+    return flags
