@@ -107,13 +107,19 @@ def _briefs_dir() -> Path:
     return d
 
 
-def _merge_multi_brief_data(data_list: list[dict]) -> dict:
+def _merge_multi_brief_data(data_list: list[dict],
+                            source_names: list[str] | None = None) -> dict:
     """여러 파일의 brief_data를 첫 번째 파일 우선(first_wins)으로 병합.
 
     - design_guidelines_grouped: 모든 파일 연결 후 재정규화 (cross-file dedup)
     - _quantitative: 필드별 first non-null wins
     - page_map / total_pages: 합산
     - 나머지: 첫 번째 파일 비어있는 경우만 뒤 파일 값 사용
+
+    **해소는 그대로 first_wins 지만 조용하지 않다**(2026-08-27): 진 값을
+    `_merge_conflicts` 에 남긴다(`brief_merge_conflicts`, LLM 0 · 값 수정 0).
+    자동 판정을 안 하는 이유는 지침서·과업지시서가 **전부 같은 발주처 문서**라
+    권위 서열이 실재하지 않아서다 — 어느 쪽이 이겨야 하는지는 공모마다 다르다.
     """
     if len(data_list) == 1:
         return data_list[0]
@@ -160,6 +166,15 @@ def _merge_multi_brief_data(data_list: list[dict]) -> dict:
         base["_brief_genre"] = detect_brief_genre(base)
     except Exception:
         pass
+
+    # 병합에서 진 값 — 값은 안 고치고 flag 만(silent skip 0). 비치명.
+    try:
+        from services.brief_merge_conflicts import detect_conflicts
+        conflicts = detect_conflicts(data_list, source_names)
+        if conflicts:
+            base["_merge_conflicts"] = conflicts
+    except Exception:
+        logger.warning("병합 충돌 탐지 실패 (비치명)", exc_info=True)
 
     return base
 
@@ -476,7 +491,8 @@ async def analyze_brief(
                 yield sse({"type": "done", "step": "extract_brief", "_timestamp": ts})
 
             # ── 파일 합산 ──────────────────────────────────────────────────
-            brief_data   = _merge_multi_brief_data(all_brief_data)
+            brief_data   = _merge_multi_brief_data(
+                all_brief_data, [m["filename"] for m in source_files_meta])
             total_pages  = brief_data.get("total_pages", 0)
             # source_format: 단일 포맷이면 그대로, 혼합이면 "multi"
             fmt_set      = {m["source_format"] for m in source_files_meta}

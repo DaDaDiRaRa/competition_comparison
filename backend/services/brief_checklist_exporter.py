@@ -578,6 +578,8 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     # 0. AI 종합 해설 (insight 있을 때만 — 문서 맨 앞)
     # ══════════════════════════════════════════════════════════════════════════
     _md_insight_block(L, brief_data.get("_insight"))
+    from services.brief_merge_conflicts import md_lines as _conflict_md
+    L.extend(_conflict_md(brief_data.get("_merge_conflicts")))   # 0.4 파일 간 충돌
     _md_site_law_block(L, brief_data)   # 0.5 대지·법적 골격 (site_context 있을 때만)
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1752,6 +1754,13 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
     if insight:
         nav_items.append(("insight", "해설"))
         P.append(_insight_section_html(insight))
+
+    # ══ 파일 간 충돌 (복수 파일 분석에서 값이 어긋났을 때만) ═══════════════════════
+    # 데이터 품질 신호라 본문보다 **앞**에 둔다 — 뒤에 두면 표를 다 읽고 나서야 안다.
+    from services.brief_merge_conflicts import band_html as _conflict_band
+    _conf = _conflict_band(brief_data.get("_merge_conflicts"))
+    if _conf:
+        P.append(_conf)
 
     # ══ 대지 · 법적 골격 (site_context 있을 때만 — 제안서 없이도 대지·법 표시) ════════
     _sitelaw = _site_law_section_html(brief_data)
