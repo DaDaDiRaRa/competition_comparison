@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 import httpx
 
@@ -98,11 +99,50 @@ def graph_url() -> str:
     return (os.environ.get("GRAPH_API_URL") or _DEFAULT_GRAPH_URL).rstrip("/")
 
 
+def effective_label(tx: dict | None) -> str:
+    """조문 원문 → 시행일 표기. 값이 없으면 '' (graph `doc/API.md` §ef_yd 규칙 그대로).
+
+    두 필드는 **의미가 다르므로 섞지 않는다**:
+      · `ef_yd`     = 그 **조문**이 시행된 날. 중앙법령 조문에만 값이 있다.
+      · `law_ef_yd` = 그 조문이 속한 **법규 판본** 전체가 시행된 날. 법제처가 자치법규·
+                      행정규칙엔 조문시행일자를 안 주므로(조례 88개 조문 전부 null)
+                      조례·고시·별표는 이쪽에만 값이 있다.
+
+    그래서 조문 시행일이 없을 땐 **법규임을 라벨에 밝힌다**("법규 시행 2026-07-13") —
+    graph 웹앱(`data.js efInfo`)과 같은 규칙이라 두 화면이 같은 말을 한다.
+    판례·해석례는 시행일 개념이 없어 `law_ef_yd: null` 이고, 그때는 아무것도 안 쓴다.
+    """
+    if not isinstance(tx, dict):
+        return ""
+    art = _fmt_ef(tx.get("ef_yd"))
+    if art:
+        return f"시행 {art}"
+    law = _fmt_ef(tx.get("law_ef_yd"))
+    return f"법규 시행 {law}" if law else ""
+
+
+def _fmt_ef(raw: Any) -> str:
+    """raw `YYYYMMDD` → `YYYY-MM-DD`. 빈 값·모양이 다르면 '' (추측하지 않는다).
+
+    graph 는 **키를 항상 준다** — `""`(그 조문은 시행일 미보유)와 키 없음(API 가 안 줌)은
+    소비자에게 다른 정보지만, 화면에 쓸 수 있는 게 없다는 점에선 같아서 둘 다 ''.
+    """
+    s = str(raw or "").strip()
+    if len(s) != 8 or not s.isdigit():
+        return ""
+    return f"{s[:4]}-{s[4:6]}-{s[6:]}"
+
+
 async def fetch_law_texts(names: list[str], timeout: float = 20.0) -> dict[str, dict]:
-    """law_ref name 리스트 → {name: {title, content, source_url, law_nm, article_no}} (graph 원문).
+    """law_ref name 리스트 → {name: {title, content, source_url, law_nm, article_no,
+    ef_yd, law_ef_yd}} (graph 원문 + 시행일).
 
     Phase 3 — arch-law-graph /api/lookup 배치 조회. found=false 는 제외(인용 금지, 링크만).
     graph 죽어도/미보유해도 graceful({} 또는 부분) — 진단 골격은 유효. name dedup·최대 50개.
+
+    시행일 2종은 2026-08-24 graph F-1·F-4 로 추가된 필드다(우리 연동 2026-07-14 이후).
+    **키를 그대로 보존**한다 — 빈 문자열과 키 없음의 구분이 소비자 정보이고, 옛 브리프에
+    저장된 `law_texts` 엔 이 키가 아예 없다(`effective_label` 이 둘 다 '' 로 흡수).
     """
     names = [n for n in dict.fromkeys(names) if n]   # dedup, 순서 보존
     if not names:
@@ -117,7 +157,8 @@ async def fetch_law_texts(names: list[str], timeout: float = 20.0) -> dict[str, 
         return {
             x["query"]: {"title": x.get("title"), "content": x.get("content"),
                          "source_url": x.get("source_url"), "law_nm": x.get("law_nm"),
-                         "article_no": x.get("article_no")}
+                         "article_no": x.get("article_no"),
+                         "ef_yd": x.get("ef_yd"), "law_ef_yd": x.get("law_ef_yd")}
             for x in results
             if isinstance(x, dict) and x.get("found") and x.get("query") and (x.get("content") or "").strip()
         }

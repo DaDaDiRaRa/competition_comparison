@@ -533,6 +533,26 @@ def _md_site_law_block(L: list[str], brief_data: dict) -> None:
         if d.get("low_confidence"):
             L.append("- ⚠ 신뢰도 낮음 (일부 값 자동조회·추정)")
         L.append("")
+
+    # 근거 조문 + 시행일 — HTML 각주(`_law_diagnosis_html`)와 같은 출처를 md 에도.
+    # "이 한도 언제 기준이냐"는 문서 종류를 안 가리고 나온다. 전 부지 dedup.
+    from services.arch_law_client import effective_label
+    texts = sc.get("law_texts") if isinstance(sc.get("law_texts"), dict) else {}
+    seen, refs = set(), []
+    for d in law:
+        for ref in (d.get("law_refs") or []):
+            nm = (ref.get("name") or "").strip() if isinstance(ref, dict) else ""
+            if nm and nm not in seen:
+                seen.add(nm)
+                refs.append((nm, (ref.get("url") or "").strip()))
+    if refs:
+        L.append("**근거 조문**")
+        L.append("")
+        for nm, url in refs:
+            ef = effective_label(texts.get(nm))
+            L.append(f"- {f'[{nm}]({url})' if url else nm}{f' — {ef}' if ef else ''}")
+        L.append("")
+
     L.append("> 위성 판독·건축법 자동진단 기반(추론 포함) — 현장·원문 확인 필요.")
     L.append("")
 

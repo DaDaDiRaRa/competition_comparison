@@ -126,6 +126,7 @@ section.sec>h2 .conf.low{color:var(--accent);border-color:#f3c2c6}
 .law-ref,.law-ref-lnk{font-size:12px;line-height:1.5;padding:3px 0;border-bottom:1px dotted var(--line)}
 .law-ref>summary{cursor:pointer;color:var(--ink)}
 .law-ref-body{margin:6px 0 4px;padding:8px 12px;background:var(--soft);border-radius:6px;font-size:11.5px;color:var(--muted);white-space:pre-wrap;line-height:1.6}
+.law-ef{margin-left:8px;font-size:10.5px;font-weight:700;color:var(--muted);white-space:nowrap}
 .law-ref a,.law-ref-lnk a{color:var(--accent);text-decoration:none}
 .law-ref a:hover,.law-ref-lnk a:hover{text-decoration:underline}
 
@@ -717,14 +718,19 @@ def _law_diagnosis_html(site_context: dict | None) -> str:
             link = (f'<a href="{_esc(url)}" target="_blank" rel="noopener">{_esc(nm)}</a>'
                     if url else _esc(nm))
             tx = law_texts.get(nm) if isinstance(law_texts, dict) else None
+            # 시행일 — "이 수치 언제 기준이냐"에 장표·리포트만 보고 답하게(graph F-1·F-4).
+            # 옛 브리프엔 이 키가 없다 → ''(graceful).
+            from services.arch_law_client import effective_label
+            ef = effective_label(tx)
+            ef_html = f'<span class="law-ef">{_esc(ef)}</span>' if ef else ""
             content = (tx or {}).get("content") if isinstance(tx, dict) else None
             if content and str(content).strip():
                 excerpt = str(content).strip()
                 excerpt = excerpt[:400] + ("…" if len(excerpt) > 400 else "")
-                items += (f'<details class="law-ref"><summary>{link}</summary>'
+                items += (f'<details class="law-ref"><summary>{link}{ef_html}</summary>'
                           f'<div class="law-ref-body">{_esc(excerpt)}</div></details>')
             else:
-                items += f'<div class="law-ref-lnk">{link}</div>'
+                items += f'<div class="law-ref-lnk">{link}{ef_html}</div>'
         refs_html = f'<div class="law-refs"><div class="law-refs-hd">관련 법조문</div>{items}</div>'
 
     note = "건축법 자동진단(arch-law-diagnose) 되받기 — 허용 한도로 최대 매스 역산 후 진단한 법적 골격."
