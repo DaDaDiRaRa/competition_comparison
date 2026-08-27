@@ -835,6 +835,7 @@ def _render_proposal_html(brief_data: dict, safe_id: str, briefs_dir: Path,
             except Exception:
                 site_image_b64 = ""
     from services.brief_checklist_exporter import program_stack_html
+    from services.brief_massing import massing_html
     return to_proposal_html(
         brief_data["_proposal"], brief_name, facility_label(facility_type),
         site_context=site_context, site_image_b64=site_image_b64,
@@ -842,6 +843,7 @@ def _render_proposal_html(brief_data: dict, safe_id: str, briefs_dir: Path,
         bid_structure=brief_data.get("_bid_structure"),
         program_stack_html=program_stack_html(brief_data),
         key_emphases=(brief_data.get("_insight") or {}).get("key_emphases"),
+        massing_html=massing_html(brief_data),
     )
 
 

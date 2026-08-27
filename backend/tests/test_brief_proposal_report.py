@@ -754,6 +754,18 @@ class TestOneDocSections:
         assert "<img src=x>" not in h and "&lt;img src=x&gt;" in h
         assert "<b>s</b>" not in h
 
+    def test_massing_section_rendered(self):
+        h = to_proposal_html({"executive_summary": "x"},
+                             massing_html='<svg data-massing="1"></svg>')
+        assert "개념 매스" in h
+        assert 'data-massing="1"' in h
+        assert '<a href="#massing">매스</a>' in h                   # nav 링크
+
+    def test_massing_graceful_skip(self):
+        h = to_proposal_html({"executive_summary": "x"})
+        assert "개념 매스" not in h
+        assert '<a href="#massing">' not in h
+
     def test_program_stack_helper_single_source(self):
         # 체크리스트 공용 헬퍼 — 면적 데이터 있으면 SVG, 없으면 "" (graceful)
         from services.brief_checklist_exporter import program_stack_html

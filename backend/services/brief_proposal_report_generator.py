@@ -1995,6 +1995,20 @@ def _emphases_html(key_emphases: list | None) -> str:
     )
 
 
+def _massing_section(massing_html: str) -> str:
+    """부지별 개념 매스(brief_massing.massing_html 결과) → '개념 매스 · 용적 봉투' 섹션."""
+    if not (massing_html or "").strip():
+        return ""
+    return (
+        '<section id="massing" class="sec">'
+        '<h2><span class="n">·</span>개념 매스 · 용적 봉투 '
+        '<span style="font-size:12px;font-weight:600;color:var(--muted)">'
+        '· 건폐·용적·높이한도 결정론 · 개념 스케일</span></h2>'
+        + massing_html +
+        '</section>'
+    )
+
+
 def to_proposal_html(
     proposal: dict,
     brief_name: str = "",
@@ -2005,6 +2019,7 @@ def to_proposal_html(
     bid_structure: dict | None = None,
     program_stack_html: str = "",
     key_emphases: list | None = None,
+    massing_html: str = "",
 ) -> str:
     """_proposal dict → 자체완결 HTML 문자열 (PPT형 스크롤 덱, LLM 호출 없음).
 
@@ -2046,6 +2061,7 @@ def to_proposal_html(
     site_html = _site_context_html(site_context, site_image_b64, compact=bool(hero_html))
     facts_html = _facts_band_html(feasibility)
     stack_html = _program_stack_section(program_stack_html)   # 한 문서화 (S8 면적표)
+    massing_sec = _massing_section(massing_html)              # 개념 매스 (적층 + 용량 핏)
     emph_html = _emphases_html(key_emphases)                  # 한 문서화 (S10 강조 요소)
 
     # Phase 2: AI 해석 확장층 (프로그램·매스·단계). 있을 때만 렌더.
@@ -2069,6 +2085,7 @@ def to_proposal_html(
         + summary_html
         + facts_html
         + stack_html
+        + massing_sec
         + site_html
         + _scoring_waffle(proposal)
         + emph_html
@@ -2098,6 +2115,7 @@ def to_proposal_html(
         '<a href="#summary">요약</a>'
         + ('<a href="#facts">규모</a>' if facts_html else "")
         + ('<a href="#areas">면적</a>' if stack_html else "")
+        + ('<a href="#massing">매스</a>' if massing_sec else "")
         + ('<a href="#site">대지</a>' if site_html else "")
         + ('<a href="#emphasis">강조</a>' if emph_html else "")
         + '<a href="#themes">핵심 테마</a>'
