@@ -60,6 +60,11 @@ MAX_ROWS = 12
 #: 한 장에 카드 3개. 넷까지 되지만 셋이면 카드가 넓어져 본문(narrative)이 읽힌다.
 CARDS_PER_SLIDE = 3
 
+#: 카드 본문 글자 상한. 터읽기 `_cards` 의 본문 박스는 **고정 높이**(약 11.7cm × 6.0cm,
+#: 12pt)라 넘치면 줄어드는 게 아니라 카드 밖으로 **흘러넘친다**. 한 줄 ~27자 × ~11줄.
+#: 실측(영등포 제안서, 2026-08-27): 296~348자가 나와 실제로 넘쳤다.
+CARD_BODY_MAX = 290
+
 #: 표지 하단 고정 고지 — 창작·제안층이 실린 장표라는 것을 문서가 스스로 밝힌다.
 DISCLAIMER = "수주 전략 가설 · 실제 심사 결과를 보장하지 않음 · 최종 판단은 설계팀"
 
@@ -71,11 +76,19 @@ _SEV_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
 def _s(v: Any, n: int = 0) -> str:
-    """PPTX 한 칸에 들어갈 한 줄. 개행·중복 공백을 눌러 붙이고 길면 자른다."""
+    """PPTX 한 칸에 들어갈 한 줄. 개행·중복 공백을 눌러 붙이고 길면 자른다.
+
+    자를 땐 **어절 경계**를 찾는다 — 실측에서 「…재조성이 예정돼(placem…」 처럼
+    낱말 한가운데가 끊겼다. 경계가 너무 멀면(12자 밖) 그냥 자른다.
+    """
     t = "" if v is None else str(v)
     t = " ".join(t.split())
     if n and len(t) > n:
-        t = t[:n].rstrip(" ,·-—") + "…"
+        head = t[:n]
+        sp = head.rfind(" ")
+        if sp >= n - 12:
+            head = head[:sp]
+        t = head.rstrip(" ,·-—(") + "…"
     return t
 
 
@@ -305,13 +318,16 @@ def _direction_cards(dirs: list[dict]) -> list[dict]:
         chunk = dirs[i:i + CARDS_PER_SLIDE]
         cards = []
         for d in chunk:
-            body = _s(d.get("narrative"), 260) or _s(d.get("addresses"), 260)
-            tr = _s(d.get("tradeoffs"), 80)
-            sr = _s(d.get("site_rationale"), 80)
+            # 셋을 이어 붙이므로 각자 예산을 준 뒤 **합쳐서 한 번 더** 자른다 —
+            # 부분만 자르면 합계가 박스를 넘고, PPTX 는 넘친 글자를 카드 밖에 흘린다.
+            body = _s(d.get("narrative"), 170) or _s(d.get("addresses"), 170)
+            sr = _s(d.get("site_rationale"), 50)
+            tr = _s(d.get("tradeoffs"), 50)
             if sr:
                 body += f"  ▸ 이 부지라서 — {sr}"
             if tr:
                 body += f"  ▸ 포기 — {tr}"
+            body = _s(body, CARD_BODY_MAX)
             cards.append({
                 "head": _s(_dir_name(d), 22),
                 "tag": _s(d.get("scoring_play"), 30),
@@ -345,19 +361,20 @@ def _recommended(proposal: dict, missing: list) -> dict | None:
             f'배점이 {rec["topcat"]} {rec["toppts"]}점'
             + (f'(전체 {int(rec["topw"])}%)' if _num(rec.get("topw")) else "")
             + "에 쏠려 있어, 이 안이 최대 승부처를 정면으로 가져간다. "
-            + _s(bb.get("addresses"), 120), 280),
+            + _s(bb.get("addresses"), 120), CARD_BODY_MAX),
     }]
     for i in rec["grafts"][:2]:
         cards.append({
             "head": _s(_dir_name(dds[i]), 22),
             "tag": "접목 · 득점축이 달라 양립",
-            "body": _s(dds[i].get("addresses"), 200),
+            "body": _s(dds[i].get("addresses"), CARD_BODY_MAX),
         })
     if rec["conditional"]:
         cards.append({
             "head": "조건부 옵션",
             "tag": "심의·부지 여건에 따라",
-            "body": " · ".join(_s(_dir_name(dds[i]), 24) for i in rec["conditional"]),
+            "body": _s(" · ".join(_s(_dir_name(dds[i]), 24) for i in rec["conditional"]),
+                       CARD_BODY_MAX),
         })
 
     return _slide(

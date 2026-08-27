@@ -259,3 +259,35 @@ def test_cockpit_matches_html_deck(proposal, feasibility):
     if len(cells) >= 3:
         assert tbl, "HTML 은 cockpit 을 그리는데 PPTX 엔 없다"
         assert len(tbl[0]["rows"]) == len(cells)
+
+
+# ── 실측이 잡은 것 (영등포 제안서, 2026-08-27) ──────────────────────────────
+
+
+def test_card_body_fits_the_fixed_box(proposal, feasibility):
+    """터읽기 카드 본문 박스는 **고정 높이**라 넘친 글자는 카드 밖으로 흘러넘친다.
+
+    실측에서 296~348자가 나와 실제로 넘쳤다(narrative 260 + 부지 80 + 포기 80).
+    """
+    from services.proposal_deck import CARD_BODY_MAX
+    long_dirs = []
+    for i in range(5):
+        d = _dir(f"안{i}", i)
+        d["narrative"] = "긴 문장이 이어진다. " * 40
+        d["site_rationale"] = "이 부지는 코너 블록으로 다면 접도된다. " * 5
+        d["tradeoffs"] = "저층 임대와 업무 효율을 양보해야 한다. " * 5
+        long_dirs.append(d)
+    p = {**proposal, "design_directions": long_dirs}
+    deck = build_deck(p, "X", "공공", feasibility=feasibility)
+    for s in deck["slides"]:
+        for c in s.get("cards", []):
+            assert len(c["body"]) <= CARD_BODY_MAX, f"{s['title']}: {len(c['body'])}자"
+
+
+def test_truncation_breaks_on_a_word_boundary():
+    """실측에서 「…재조성이 예정돼(placem…」 처럼 낱말 한가운데가 끊겼다."""
+    from services.proposal_deck import _s
+    t = _s("북측 당산근린공원 재조성이 예정돼 placement 전략을 세운다", 30)
+    assert t.endswith("…")
+    assert not t.rstrip("…").endswith("(")
+    assert "placem…" not in t          # 낱말 중간 절단 금지

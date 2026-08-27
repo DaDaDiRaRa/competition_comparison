@@ -976,7 +976,7 @@ async def proposal_deck(brief_id: str):
     bm         = brief_data.get("_brief_meta") or {}
     brief_name = bm.get("brief_name", "") or safe_id
 
-    from services.proposal_deck import build_deck
+    from services.proposal_deck import build_deck, _ascii_filename
     from services.teoilgi_client import render_deck
 
     try:
@@ -1000,7 +1000,10 @@ async def proposal_deck(brief_id: str):
         raise HTTPException(502, str(e))
 
     name = f"{brief_name}_수주제안서.pptx"
-    ascii_name = name.encode("ascii", "ignore").decode().strip() or "proposal_deck.pptx"
+    # ascii 폴백은 `_ascii_filename` 과 같은 규칙으로 — 단순 encode(ignore) 로 하면
+    # 한글 이름이 통째로 날아가 `_.pptx` 가 된다(실측: 영등포 제안서, 2026-08-27).
+    # RFC 5987 을 무시하는 클라이언트가 저장하는 이름이라 뜻이 통해야 한다.
+    ascii_name = _ascii_filename(name)
     return Response(
         content=pptx,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
