@@ -338,6 +338,16 @@ export default function BriefMode() {
     setProposing(false)
   }
 
+  // 형제앱 arch-law-diagnose(사업성 모드)로 넘어가기.
+  // 그쪽은 우리 GCS `_briefs/` 를 직접 읽어 목록에 띄운다(HTTP 아님) — 딥링크가 없어서
+  // **이 지침서로 바로 열리지 않는다**. 그쪽 화면에서 목록에서 고르는 단계가 한 번 있다.
+  // 문구를 "이 지침서 열기"로 쓰면 안 되는 이유가 그것.
+  const FEASIBILITY_URL =
+    import.meta.env.VITE_FEASIBILITY_URL ||
+    'https://arch-law-diagnose-30350777436.asia-northeast3.run.app'
+
+  const openFeasibility = () => window.open(FEASIBILITY_URL, '_blank', 'noopener')
+
   // 제안서 → A3 편집가능 PPTX 장표 (LLM 0 · API 키 불필요). 그리기는 형제앱 터읽기.
   // 임원 발표 순서(사실 → 배점 → 5안 → 권장)로 조립되고 근거는 캡션 밴드에 따라간다.
   const handleDeck = async (briefId) => {
@@ -837,6 +847,13 @@ export default function BriefMode() {
                   🎛 방향 지시
                 </button>
               )}
+              <button
+                style={s.dlBtn(false)}
+                onClick={openFeasibility}
+                title="형제앱 arch-law-diagnose 사업성 모드 — 이 지침서가 목록에 뜬다(부지별 면적·한도 자동 채움, 다부지 비교). 딥링크가 없어 목록에서 고르는 단계가 한 번 있다."
+              >
+                📈 사업성 분석
+              </button>
               {proposeErr && (
                 <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{proposeErr}</span>
               )}
