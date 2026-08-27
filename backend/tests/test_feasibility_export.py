@@ -261,9 +261,43 @@ class TestNormalizeZoneUse:
     def test_standard_matched(self):
         assert _normalize_zone_use("도시지역, 준공업지역, 공원") == ("준공업지역", None)
 
-    def test_longest_match(self):
+    def test_single_match(self):
         zu, raw = _normalize_zone_use("제2종일반주거지역")
         assert zu == "제2종일반주거지역" and raw is None
+
+    # ── 다중 매칭은 **판단 보류** (2026-08-27, arch-law-diagnose 가 넘긴 버그) ──
+    #
+    # 옛 코드는 `max(matches, key=len)` 로 「최장 매칭」을 골랐는데, `_ZONE_USES` 16개엔
+    # 포함관계가 하나도 없어서(bare '일반주거지역'이 목록에 없다) 그 max 는 길이 동점에서
+    # **리스트 앞 항목**을 고르는 것밖에 안 했다. 조용히 틀리고 예외도 안 난다.
+    # 이 값은 `arch_law_client` 의 `zone_use_override` 로 가서 건폐/용적 한도를 좌우한다.
+
+    def test_upzoning_note_does_not_pick_the_former_zone(self):
+        """'제3종(제2종에서 종상향)' 에서 **종상향 前** 값을 고르던 버그."""
+        zu, raw = _normalize_zone_use("제3종일반주거지역 (제2종일반주거지역에서 종상향)")
+        assert zu is None, "모호한데 단정했다"
+        assert raw == "제3종일반주거지역 (제2종일반주거지역에서 종상향)"
+
+    def test_multi_zone_site_is_not_arbitrarily_resolved(self):
+        """여러 용도지역에 걸친 부지 — 임의로 하나를 고르면 안 된다."""
+        zu, raw = _normalize_zone_use("제1종일반주거지역, 제2종일반주거지역")
+        assert zu is None and raw
+
+    def test_zone_list_has_no_substring_pairs(self):
+        """「최장 매칭」의 전제가 애초에 없었다는 것을 못박는다 —
+        나중에 포함관계가 있는 이름이 추가되면 이 테스트가 먼저 깨진다."""
+        from services.feasibility_export import _ZONE_USES
+        assert not [(a, b) for a in _ZONE_USES for b in _ZONE_USES if a != b and a in b]
+
+    def test_ambiguous_zone_leaves_override_empty(self):
+        """비워 두면 진단 엔진이 주소로 직접 조회한다 — 틀린 값 주입보다 낫다."""
+        from services.arch_law_client import to_request
+        site = {"site_id": "부지1", "zone_use": None,
+                "zone_use_raw": "제3종일반주거지역 (제2종일반주거지역에서 종상향)",
+                "address": "경기도 광명시 하안동 1", "site_area_sqm": 10000,
+                "building_coverage_pct": 60, "floor_area_ratio_pct": 300}
+        req = to_request(site)
+        assert req is None or req.get("zone_use_override") is None
 
     def test_no_match_keeps_raw(self):
         assert _normalize_zone_use("지목 대지로 변경 예정") == (None, "지목 대지로 변경 예정")

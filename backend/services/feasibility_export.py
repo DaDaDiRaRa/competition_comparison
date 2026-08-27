@@ -227,8 +227,20 @@ def _normalize_zone_use(zoning: Any) -> tuple[str | None, str | None]:
     if not text.strip():
         return None, None
     matches = [z for z in _ZONE_USES if z in text]
-    if matches:
-        return max(matches, key=len), None   # 최장 매칭 (제2종일반주거지역 > 일반주거지역)
+    if len(matches) == 1:
+        return matches[0], None
+    # 2개 이상 = **판단 보류**. 원문을 그대로 넘긴다(설계 원칙: 「불확실 시 raw」).
+    #
+    # 옛 코드는 `max(matches, key=len)` 였다. 주석이 근거로 든 「제2종일반주거지역 >
+    # 일반주거지역」은 **일어날 수 없는 케이스**다 — `_ZONE_USES` 16개에 포함관계가
+    # 하나도 없다(bare '일반주거지역'은 목록에 없다). 그래서 그 max 는 길이 동점에서
+    # **리스트 앞 항목을 고르는 것**밖에 안 했고, 조용히 틀렸다:
+    #   · '제3종일반주거지역 (제2종일반주거지역에서 종상향)' → 종상향 **前** 값을 채택
+    #   · '제1종일반주거지역, 제2종일반주거지역'(다중 용도지역) → 임의로 제1종
+    # 250% vs 300% 짜리 오선택이고 예외도 안 난다. 이 값은 `arch_law_client.to_request`
+    # 의 `zone_use_override` 로 가서 **건폐/용적 한도를 통째로 좌우한다** — 비워 두면
+    # 진단 엔진이 주소로 직접 조회하므로, 틀린 값을 주입하는 것보다 낫다.
+    # (형제앱 arch-law-diagnose 의 `zone_use_normalizer` 도 다중 매칭은 None 으로 떨어진다.)
     return None, text
 
 
