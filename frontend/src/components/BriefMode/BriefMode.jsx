@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useMeta } from '../../hooks/useMeta'
-import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, buildBriefPlaybook, listBriefs, analyzeSite, getBriefSiteImageUrl, getBriefSiteContext, deleteBrief } from '../../api/client'
+import { runBriefAnalyze, getBriefExportUrl, reinterpretBrief, proposeBrief, downloadProposalDeck, buildBriefPlaybook, listBriefs, analyzeSite, getBriefSiteImageUrl, getBriefSiteContext, deleteBrief } from '../../api/client'
 import DropZone from '../common/DropZone'
 import ProgressLog from '../common/ProgressLog'
 
@@ -125,6 +125,9 @@ export default function BriefMode() {
   const [regenErr, setRegenErr] = useState('')
   const [proposing, setProposing] = useState(false)           // 수주 제안서 생성 진행 중
   const [proposeErr, setProposeErr] = useState('')
+  const [deckBusy, setDeckBusy] = useState(null)              // PPTX 장표 생성 중인 brief_id
+  const [deckErr, setDeckErr] = useState('')
+  const [deckNote, setDeckNote] = useState('')                // 장 수 · 못 담은 장 안내
   const [playbooking, setPlaybooking] = useState(false)       // 경험 기반 처방 생성 진행 중
   const [playbookErr, setPlaybookErr] = useState('')
   const [siteAddr, setSiteAddr] = useState('')                 // 대지 분석 주소 입력
@@ -333,6 +336,26 @@ export default function BriefMode() {
       setProposeErr(e.message || '수주 제안서 생성 실패')
     }
     setProposing(false)
+  }
+
+  // 제안서 → A3 편집가능 PPTX 장표 (LLM 0 · API 키 불필요). 그리기는 형제앱 터읽기.
+  // 임원 발표 순서(사실 → 배점 → 5안 → 권장)로 조립되고 근거는 캡션 밴드에 따라간다.
+  const handleDeck = async (briefId) => {
+    const id = briefId || result?.brief_id
+    if (!id || deckBusy) return
+    setDeckBusy(id)
+    setDeckErr('')
+    setDeckNote('')
+    try {
+      const { slides, missing } = await downloadProposalDeck(id)
+      // '못 담은 것' 은 덱 마지막 장에도 실린다 — 여기선 개수만 짚어준다.
+      setDeckNote(missing
+        ? `장표 ${slides}장 저장 · 못 담은 장 ${missing}건(덱 마지막 장에 사유 있음)`
+        : `장표 ${slides}장 저장`)
+    } catch (e) {
+      setDeckErr(e.message || '장표 생성 실패')
+    }
+    setDeckBusy(null)
   }
 
   // '변수' 방향 지시 패널 — 결과 화면·이력 카드 공용. 사실(배점·필수 배치)은 고정,
@@ -798,6 +821,16 @@ export default function BriefMode() {
               )}
               {result.has_proposal && (
                 <button
+                  style={{ ...s.dlBtn(false), ...(deckBusy ? s.btnDisabled : {}) }}
+                  onClick={() => handleDeck(result.brief_id)}
+                  disabled={!!deckBusy}
+                  title="임원 발표용 A3 편집가능 PPTX (사실 → 배점 → 5안 → 권장)"
+                >
+                  {deckBusy === result.brief_id ? '장표 만드는 중...' : '📊 발표 장표 (PPTX)'}
+                </button>
+              )}
+              {result.has_proposal && (
+                <button
                   style={s.dlBtn(false)}
                   onClick={() => { setSteerId(steerId === 'result' ? null : 'result'); }}
                 >
@@ -806,6 +839,12 @@ export default function BriefMode() {
               )}
               {proposeErr && (
                 <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{proposeErr}</span>
+              )}
+              {deckErr && (
+                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>{deckErr}</span>
+              )}
+              {deckNote && !deckErr && (
+                <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>{deckNote}</span>
               )}
             </div>
             {steerId === 'result' && renderSteerPanel(result.brief_id)}
@@ -946,6 +985,16 @@ export default function BriefMode() {
                   {item.has_playbook && (
                     <button style={s.historyBtn(false)} title="처방 HTML 저장" onClick={() => handleHtmlDownload(`${item.brief_id}_playbook.html`)}>
                       ⬇ 처방
+                    </button>
+                  )}
+                  {item.has_proposal && (
+                    <button
+                      style={{ ...s.historyBtn(false), ...(deckBusy ? s.btnDisabled : {}) }}
+                      title="임원 발표용 A3 편집가능 PPTX"
+                      onClick={() => handleDeck(item.brief_id)}
+                      disabled={!!deckBusy}
+                    >
+                      {deckBusy === item.brief_id ? '장표...' : '📊 장표'}
                     </button>
                   )}
                   {item.has_proposal ? (

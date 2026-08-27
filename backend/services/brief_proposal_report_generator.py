@@ -1222,10 +1222,13 @@ def _recommended_synthesis_html(proposal: dict) -> str:
     )
 
 
-def _decision_cockpit_html(proposal: dict, bid_structure: dict | None = None) -> str:
-    """결정 요약(Decision Brief) — 흩어진 판단을 6칸으로. 결정론, 이미 있는 값만.
+def cockpit_cells(proposal: dict, bid_structure: dict | None = None) -> list[tuple]:
+    """결정 요약(Decision Brief) 셀 — 흩어진 판단을 6칸으로. 결정론, 이미 있는 값만.
 
-    각 칸 = (라벨, 값, 어떻게 나왔나, 앵커). 최소 요약 하나라도 있어야 렌더.
+    각 칸 = (라벨, 값, 어떻게 나왔나, 앵커[, big]). 값이 빈 칸은 빠진다.
+
+    **단일 소스** — HTML 덱(`_decision_cockpit_html`)과 PPTX 덱(`proposal_deck.py`)이
+    같은 제안서에서 **같은 결론**을 보여야 한다. 두 렌더러가 각자 뽑으면 드리프트한다.
     """
     def _first_sentence(t):
         t = (t or "").strip()
@@ -1266,8 +1269,17 @@ def _decision_cockpit_html(proposal: dict, bid_structure: dict | None = None) ->
     if conf:
         cells.append(("근거 신뢰도", conf, "판단이 선 데이터", "scoring"))
 
-    cells = [c for c in cells if c[1]]
-    if len(cells) < 3:
+    return [c for c in cells if c[1]]
+
+
+#: 결정 요약을 낼 최소 칸 수 — 서너 칸도 못 채우면 '요약'이 아니라 파편이다.
+COCKPIT_MIN_CELLS = 3
+
+
+def _decision_cockpit_html(proposal: dict, bid_structure: dict | None = None) -> str:
+    """결정 요약 카드 그리드. 칸이 모자라면 ''."""
+    cells = cockpit_cells(proposal, bid_structure)
+    if len(cells) < COCKPIT_MIN_CELLS:
         return ""
 
     grid = ""

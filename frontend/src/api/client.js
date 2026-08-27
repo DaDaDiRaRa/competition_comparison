@@ -461,6 +461,34 @@ export async function proposeBrief(briefId, { steering, resetSteering } = {}) {
   return r.json()
 }
 
+// 수주 제안서 → A3 편집가능 PPTX 장표 (LLM 0 · API 키 불필요).
+// 내용은 우리가 만들고 그리는 것은 형제앱 터읽기(POST /deck/render)다.
+// 응답이 바이너리라 fetch 후 blob 으로 받아 직접 내려받는다.
+export async function downloadProposalDeck(briefId) {
+  const r = await fetch(`${BASE}/brief/${encodeURIComponent(briefId)}/deck`, { method: 'POST' })
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}))
+    throw new Error(err.detail || `장표 생성 실패 (HTTP ${r.status})`)
+  }
+  const missing = Number(r.headers.get('X-Deck-Missing') || 0)
+  const slides = Number(r.headers.get('X-Deck-Slides') || 0)
+  const blob = await r.blob()
+  // 파일명은 Content-Disposition 의 RFC 6266 filename*(UTF-8) 우선.
+  const cd = r.headers.get('Content-Disposition') || ''
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(cd)
+  const plain = /filename="([^"]+)"/i.exec(cd)
+  let name = 'proposal_deck.pptx'
+  if (star) { try { name = decodeURIComponent(star[1]) } catch { /* 깨진 인코딩은 폴백 */ } }
+  else if (plain) name = plain[1]
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = name
+  document.body.appendChild(a); a.click(); a.remove()
+  URL.revokeObjectURL(url)
+  return { slides, missing }
+}
+
 // 경험 기반 처방 생성 (과거 축적 데이터 → 이 지침서 적용, 추출 재처리 없음, 최대 LLM 1콜).
 // 과거 데이터 없으면 has_playbook:false + reason 반환 (LLM 미호출). 사용자별 키 헤더 필요.
 export async function buildBriefPlaybook(briefId) {

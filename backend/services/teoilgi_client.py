@@ -64,3 +64,31 @@ async def fetch_board_context(
     except Exception as e:  # noqa: BLE001 — 형제앱 미배포·네트워크·타임아웃 전부 graceful
         logger.warning("터읽기 /board 호출 오류 (비치명): %s", e)
         return None
+
+
+async def render_deck(payload: dict, timeout: float = 60.0) -> bytes:
+    """`deck_render/1.0` → A3 편집가능 PPTX bytes (터읽기 `POST /deck/render`).
+
+    **내용은 우리가, 그리기는 터읽기가** — 그쪽 `app/deck/style.py` 의 A3 네이티브
+    편집가능 조각을 복제하지 않는다(services/proposal_deck.py 문서 참조).
+
+    `board_brief` 와 달리 **graceful 하지 않다** — 사용자가 버튼을 눌러 파일을 기다리는
+    자리라, 조용히 None 을 돌려주면 「왜 안 받아지지」가 된다. 실패는 이유를 들고 raise.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.post(f"{board_url()}/deck/render", json=payload)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(f"터읽기 장표 서버에 연결하지 못했습니다: {type(e).__name__}") from e
+
+    if r.status_code != 200:
+        detail = ""
+        try:
+            detail = str((r.json() or {}).get("detail") or "")[:200]
+        except Exception:  # noqa: BLE001 — 본문이 JSON 이 아닐 수 있다
+            detail = r.text[:200]
+        raise RuntimeError(f"터읽기 장표 생성 실패 ({r.status_code}) {detail}".strip())
+
+    if not r.content:
+        raise RuntimeError("터읽기가 빈 파일을 돌려줬습니다.")
+    return r.content

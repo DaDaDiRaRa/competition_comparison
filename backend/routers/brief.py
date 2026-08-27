@@ -943,6 +943,78 @@ async def propose_brief(brief_id: str, req: ProposeRequest | None = None):
     }
 
 
+# ── 수주 제안서 → A3 편집가능 PPTX 장표 (내용은 우리, 그리기는 터읽기 · LLM 0) ──
+
+@router.post("/{brief_id}/deck")
+async def proposal_deck(brief_id: str):
+    """저장된 `_proposal` → **A3 편집가능 PPTX** (LLM 0 · 추출 재처리 0 · API 키 불필요).
+
+    내용은 우리가 만들고(`services/proposal_deck.py`) 그리는 것은 터읽기
+    (`POST /deck/render`, `deck_render/1.0`)다 — 그쪽 A3 네이티브 편집가능 조각을
+    복제하지 않는다. 임원 발표 순서(사실 → 배점 → 5안 → 권장)로 조립하고,
+    슬라이드마다 `sources` 에 근거를 실어 캡션 밴드에 찍히게 한다.
+
+    ⚠ 한글 파일명은 **우리 응답에서** 붙인다 — 터읽기에 넘기는 `filename` 은 ASCII
+    (그쪽이 헤더에 그대로 박는데 ASGI 헤더는 latin-1).
+    """
+    safe_id = Path(brief_id).name
+    if safe_id != brief_id:
+        raise HTTPException(400, "잘못된 brief_id 입니다.")
+
+    json_path = settings.db_path / "_briefs" / f"{safe_id}.json"
+    if not json_path.exists():
+        raise HTTPException(404, "지침서 분석을 찾을 수 없습니다.")
+
+    try:
+        brief_data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"지침서 JSON 로드 실패: {type(e).__name__}")
+
+    if not brief_data.get("_proposal"):
+        raise HTTPException(400, "수주 제안서가 아직 없습니다. 먼저 제안서를 생성해주세요.")
+
+    bm         = brief_data.get("_brief_meta") or {}
+    brief_name = bm.get("brief_name", "") or safe_id
+
+    from services.proposal_deck import build_deck
+    from services.teoilgi_client import render_deck
+
+    try:
+        payload = build_deck(
+            brief_data["_proposal"], brief_name,
+            facility_label(bm.get("facility_type", "")),
+            feasibility=brief_data.get("feasibility_export"),
+            bid_structure=brief_data.get("_bid_structure"),
+            filename=f"{_slugify(brief_name) or 'proposal'}_deck.pptx",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error("deck build error: %s", traceback.format_exc())
+        raise HTTPException(500, f"장표 조립 실패: {_user_error_msg(e)}")
+
+    try:
+        pptx = await render_deck(payload)
+    except Exception as e:
+        logger.warning("deck render error: %s", e)
+        raise HTTPException(502, str(e))
+
+    name = f"{brief_name}_수주제안서.pptx"
+    ascii_name = name.encode("ascii", "ignore").decode().strip() or "proposal_deck.pptx"
+    return Response(
+        content=pptx,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={
+            "Content-Disposition":
+                f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}",
+            # 한글은 헤더에 못 넣는다(latin-1) — 개수만. 내용은 덱 마지막 장에 있다.
+            "X-Deck-Slides": str(len(payload["slides"])),
+            "X-Deck-Missing": str(len(payload["missing"])),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 # ── 경험 기반 처방 생성 (과거 축적 데이터 → 이 지침서 적용, 추출 재처리 없음) ──
 
 @router.post("/{brief_id}/playbook")
