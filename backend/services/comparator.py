@@ -540,6 +540,10 @@ def _run_diagnose_sync(
         result["_citation_flags"] = check_citations_diagnosis(result, submission_data)
     except Exception:
         result["_citation_flags"] = []
+    # 요구 완결성 감사 (LLM 0): 지침서 요구 중 매트릭스에 안 나온 것. 매트릭스는 안 고친다.
+    # LLM 이 requirement_mapping 에 무엇을 넣을지 고르므로, 빠진 줄은 표만 봐선 안 보인다.
+    from services.requirement_coverage import check_diagnosis as _check_req_coverage
+    result["_requirement_coverage"] = _check_req_coverage(result, brief_data)
     return result
 
 

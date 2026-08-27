@@ -205,9 +205,19 @@ def _render_brief_compliance(brief_compliance: dict, axes_meta: dict) -> str:
     )
 
 
-def _render_requirement_mapping(mapping: list, axes_meta: dict) -> str:
+def _render_requirement_mapping(mapping: list, axes_meta: dict, coverage: dict | None = None) -> str:
+    """지침서 요구사항 충족도 표 + **완결성**(N개 중 M개 · 누락 경고).
+
+    표는 LLM 이 고른 것만 보여준다 — 빠진 줄은 눈에 안 띈다. 그래서 결정론 감사
+    (`requirement_coverage`, LLM 0)가 센 분모를 제목 옆에 붙이고, 답하지 않은 요구는
+    표 아래 경고 밴드로 이름을 댄다. **탈락은 누락에서 난다.**
+    """
+    from services.requirement_coverage import band_html, summary_line
+
+    band = band_html(coverage or {})
     if not mapping:
-        return ""
+        # 표가 통째로 없어도 요구는 있을 수 있다 — 그 경우 경고만이라도 낸다(silent skip 0).
+        return band
     rows = ""
     for row in mapping:
         axis_key = row.get("axis", "")
@@ -223,14 +233,18 @@ def _render_requirement_mapping(mapping: list, axes_meta: dict) -> str:
             f'<td style="color:#6b7280">{_esc(row.get("evidence", ""))}</td>'
             f'</tr>'
         )
+    line = summary_line(coverage or {})
+    sub = (f'<span style="font-weight:600;font-size:12px;color:#6b7280;margin-left:10px">{_esc(line)}</span>'
+           if line else "")
     return (
         f'<div class="sec">'
-        f'<div class="sec-title">지침서 요구사항 충족도</div>'
+        f'<div class="sec-title">지침서 요구사항 충족도{sub}</div>'
         f'<table class="req-table">'
         f'<thead><tr><th style="width:35%">요구사항</th><th style="width:18%">평가축</th>'
         f'<th style="width:12%;text-align:center">충족여부</th><th>근거</th></tr></thead>'
         f'<tbody>{rows}</tbody>'
         f'</table>'
+        f'{band}'
         f'</div>'
     )
 
@@ -361,7 +375,8 @@ def generate_diagnosis_report(diagnosis: dict) -> str:
         body += _render_pattern_deviation(deviation)
 
     body += _render_brief_compliance(diagnosis.get("brief_compliance") or {}, axes_meta)
-    body += _render_requirement_mapping(diagnosis.get("requirement_mapping") or [], axes_meta)
+    body += _render_requirement_mapping(diagnosis.get("requirement_mapping") or [], axes_meta,
+                                        diagnosis.get("_requirement_coverage"))
     body += _render_axes(diagnosis.get("axes") or {}, axes_meta)
     body += _render_recommendations(diagnosis.get("recommendations") or [])
     body += citation_flags_band(diagnosis.get("_citation_flags"))
