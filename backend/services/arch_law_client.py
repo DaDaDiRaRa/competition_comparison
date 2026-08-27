@@ -167,6 +167,47 @@ async def fetch_law_texts(names: list[str], timeout: float = 20.0) -> dict[str, 
         return {}
 
 
+def merge_law_texts(old: dict | None, new: dict | None) -> dict:
+    """저장된 `law_texts` + 새로 받은 것 → 병합본. **지우지 않는다.**
+
+    통째로 갈아끼우면 안 되는 이유: `fetch_law_texts` 는 `found` + 본문 있는 것만
+    돌려준다. graph 가 그 사이 조문을 못 찾게 되거나(재빌드·이름 변경) 잠깐 죽으면
+    **이미 갖고 있던 원문이 사라진다.** 없던 키를 채우는 게 목적이지 버리는 게 아니다.
+
+    같은 이름이 양쪽에 있으면 **새 값이 이긴다**(시행일이 그렇게 들어온다). 단 새 쪽이
+    비운 필드는 옛 값을 남긴다 — 부분 응답에 옛 본문을 잃지 않으려고.
+    """
+    out = dict(old) if isinstance(old, dict) else {}
+    for name, tx in (new.items() if isinstance(new, dict) else ()):
+        if not isinstance(tx, dict):
+            continue
+        prev = out.get(name)
+        if isinstance(prev, dict):
+            merged = dict(prev)
+            merged.update({k: v for k, v in tx.items() if v not in (None, "")})
+            # 시행일은 **빈 값도 사실**이다("이 조문은 미보유") — 키가 새로 왔으면 그대로 둔다.
+            for k in ("ef_yd", "law_ef_yd"):
+                if k in tx:
+                    merged[k] = tx[k]
+            out[name] = merged
+        else:
+            out[name] = tx
+    return out
+
+
+def law_ref_names(site_context: dict | None) -> list[str]:
+    """`_site_context` 전 부지의 `law_refs[].name` — 순서 보존 dedup."""
+    names: list[str] = []
+    for d in ((site_context or {}).get("law_diagnosis") or []):
+        if not isinstance(d, dict):
+            continue
+        for ref in (d.get("law_refs") or []):
+            nm = (ref.get("name") or "").strip() if isinstance(ref, dict) else ""
+            if nm and nm not in names:
+                names.append(nm)
+    return names
+
+
 def digest_diagnosis(diag: dict, site: dict | None = None) -> dict | None:
     """진단 응답 → 배치 근거용 최소 다이제스트 (null 가드 + 신뢰도 캡처).
 

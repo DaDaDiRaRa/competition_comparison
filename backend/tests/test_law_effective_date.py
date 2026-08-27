@@ -157,3 +157,69 @@ def test_markdown_refs_are_deduped_across_sites():
     _md_site_law_block(L, {"_site_context": sc})
     md = "\n".join(L)
     assert md.count("건축법/제42조") == 1
+
+
+# ── 백필 병합 (tools/backfill_law_ef.py) ────────────────────────────────────
+
+
+def test_merge_never_deletes_what_we_already_had():
+    """graph 가 잠깐 죽거나 조문을 못 찾게 되면, 통째로 갈아끼울 때 원문이 사라진다."""
+    from services.arch_law_client import merge_law_texts
+    old = {"건축법/제42조": {"content": "제42조 본문", "source_url": "u"},
+           "사라진 조문/제1조": {"content": "옛 본문"}}
+    new = {"건축법/제42조": {"content": "제42조 본문", "ef_yd": "20260227",
+                             "law_ef_yd": "20260227"}}
+    out = merge_law_texts(old, new)
+    assert out["사라진 조문/제1조"]["content"] == "옛 본문", "안 온 조문을 지웠다"
+    assert out["건축법/제42조"]["ef_yd"] == "20260227"
+    assert out["건축법/제42조"]["source_url"] == "u", "새 응답에 없는 옛 필드를 잃었다"
+
+
+def test_merge_keeps_empty_effective_date_because_it_is_a_fact():
+    """`ef_yd: ""` 는 「이 조문은 시행일 미보유」라는 **사실**이다 — 빈 값이라고 버리면
+    다음 백필이 매번 대상으로 잡는다."""
+    from services.arch_law_client import merge_law_texts
+    out = merge_law_texts({"조례/제55조": {"content": "본문"}},
+                          {"조례/제55조": {"ef_yd": "", "law_ef_yd": "20260713"}})
+    assert out["조례/제55조"]["ef_yd"] == ""
+    assert effective_label(out["조례/제55조"]) == "법규 시행 2026-07-13"
+
+
+def test_merge_adds_articles_we_never_had():
+    from services.arch_law_client import merge_law_texts
+    out = merge_law_texts({}, {"건축법/제42조": {"content": "본문", "ef_yd": "20260227"}})
+    assert "건축법/제42조" in out
+
+
+@pytest.mark.parametrize("old,new", [(None, None), ({}, None), (None, {}), ("x", "y")])
+def test_merge_garbage_is_safe(old, new):
+    from services.arch_law_client import merge_law_texts
+    assert isinstance(merge_law_texts(old, new), dict)
+
+
+def test_law_ref_names_dedup_across_sites():
+    from services.arch_law_client import law_ref_names
+    sc = {"law_diagnosis": [
+        {"site_id": "부지1", "law_refs": [{"name": "건축법/제42조"}, {"name": "조례/제55조"}]},
+        {"site_id": "부지2", "law_refs": [{"name": "건축법/제42조"}, {"name": ""}, None]},
+    ]}
+    assert law_ref_names(sc) == ["건축법/제42조", "조례/제55조"]
+    assert law_ref_names(None) == [] and law_ref_names({}) == []
+
+
+def test_backfill_target_detection_is_idempotent():
+    """이미 시행일 키가 다 있으면 네트워크를 안 탄다."""
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "backfill_law_ef",
+        Path(__file__).resolve().parent.parent.parent / "tools" / "backfill_law_ef.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    names = ["건축법/제42조"]
+    done = {"건축법/제42조": {"content": "본문", "ef_yd": "20260227", "law_ef_yd": "20260227"}}
+    assert mod._needs_backfill(done, names) is False
+    old = {"건축법/제42조": {"content": "본문"}}                 # 키 없음 = 백필 대상
+    assert mod._needs_backfill(old, names) is True
+    assert mod._needs_backfill({}, names) is True               # 원문조차 못 받았던 조문
