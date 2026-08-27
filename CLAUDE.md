@@ -462,7 +462,7 @@ _bid_structure: {
 - **시퀀스 E — 수주 제안서 비주얼 덱 출력 (`brief_proposal` 출력 고도화):** Phase 1(히어로+팩트밴드) ✅ / Phase 2(AI 해석 확장층·범례·근거 미확인 수치 밴드) ✅ / **Phase 3(매거진형 덱 재설계) ✅ 완료 (2026-07-13)** — 명조+Montserrat, 회색 위 흰 페이퍼, **결정 요약 cockpit**(6칸, AI 판단 응축+근거 앵커) + **권장 종합안**(5안을 뭉개지 않고 최고 배점축 뼈대+접목+조건부, KT 참고본의 "권장안+비교" 방식) + 입찰 2층 배점. 참고본(KT 명당 수동 생성본)의 **매거진 형식은 취하되 날조 수치는 거부**(근거·AI배지·근거미확인 경고 유지)가 핵심 결정. **남은 후보: takeaway 섹션별 한 줄(프로토타입엔 있으나 백엔드 미이식)·본문 문장 축약·논리 사슬/결정 변수 강화.** 현재 `brief_proposal_report_generator.to_proposal_html` 은 *보고서형*(스크롤 섹션). 사용자 피드백으로 **PPT형 스크롤 덱**이 더 낫다고 확정 — 향후 그 양식을 앱 기본 출력으로 이식. 디자인 계약(수동 검증 완료): ① **하나의 통일 캔버스**(섹션별 배경색 분리 금지 — "페이지 나눈 느낌" 역효과) ② 글을 줄일 땐 **삭제 말고 도식·아이콘으로 치환**(SVG: 맥락 개념도·100칸 와플 배점·매트릭스+상세카드·단면 긴장도·인허가 타임라인) ③ **밀도 높게**(나란히 배치) ④ 5안은 매트릭스(한눈) + **상세 카드**(공간전략/득점/포기/이 부지라서 + 매스 실루엣)로 — 이게 사용자가 "최종적으로 얻고 싶은" 산출물 ⑤ 매스는 *평면 만화 금지*(실무자 역효과), 측면 개념 실루엣까지만. 참고 산출물은 수동 생성본(시퀀스 D 경로) 존재. Phase 1 히어로는 사용자가 디자인·표현·이미지 해석 로직 불만족(2026-06-29) → Phase 3에서 히어로 재설계 포함.
 - **시퀀스 F — 대지·맥락 분석 통합:** ✅ 구현·자동 파이프라인 통합 완료 (2026-06-26~29, 위성+지적도 하이브리드 단일 이미지). 상세는 Core Services 표의 `vworld_analyzer.py` 참조. 남은 보류: ③ SketchUp MCP 3D 매스 — 사용자가 자료 줄 때 재개.
 
-## 당면 TODO (2026-07-29 기준)
+## 당면 TODO (2026-08-27 갱신)
 
 **전략 방향 (2026-07-29 사용자 결정):** 큰 그림은 터읽기·site-model·law-graph 를 합친 통합 제안서지만, **임원이 통합 산출물을 이해 못 하고 특히 믿지 못하는 게 병목** → 통합보다 **각 앱 개별 산출물의 신뢰성 강화가 우선**. 렌즈: "임원이 이 숫자·판단의 출처를 즉시 믿을 수 있나". 관련: A층(지침서만으로 나온 사실·전략, 결정론) 우선 노출, 임원 발표 PPT(사실→배점→방향성 5안+권장) 순서가 기준 레퍼런스.
 
@@ -488,6 +488,100 @@ _bid_structure: {
 - **내재적 한계**(수정 불가/외부 앱 소관): 터읽기 measured=시군구 평균(대지 고유 방위 없음, 방위는 VWorld vision), law mode A(층수 추정·건폐/용적 pass 항상 통과), 외부 엔진 지연(진단 부지당 65~110초·graceful).
 - **시퀀스 E 후폴로우**: 섹션별 takeaway 한 줄·본문 축약(project_proposal_magazine_deck 메모리).
 - **feasibility 백필**: `tools/backfill_feasibility.py` — 옛 brief(기능 도입 전) 재빌드로 주소·envelope 확보(prod 14건 완료).
+
+### 형제앱에서 가져올 것 — D:\APPS 조사 (2026-08-27)
+
+D:\APPS 30개 폴더 중 **2026-08 이후 활발한 12개**를 CLAUDE.md·코드까지 읽고 뽑은 목록.
+근거·상세는 `kunwon-ops/docs/benchmark-2026-siblings.md`(사내 앱 × 상용 비교, 우리 앱은 §6)와
+`kunwon-ops/docs/benchmark-2026.md §3`(훔칠 것 7개). 형제앱 위치는 `kunwon-ops/docs/app-registry.md`.
+
+**이미 가져온 것 (2026-08-27)** — 넷 다 **형제앱 코드 수정 0**, 그쪽이 이미 배포해둔 계약을 소비만 했다:
+발표 장표 PPTX(터읽기 `/deck/render`) · 요구 완결성 감사(kunwon-ops 벤치마크) ·
+법조문 시행일(arch-law-graph F-1·F-4) · 근거 안 밝힌 수치 구조 검사(concept-studio `render/numbers.py`).
+
+⚠️ **착수하면 전제가 다를 수 있다** — 오늘 세 번 겪었다. 「컴플라이언스 매트릭스」는 **이미 있었고**
+(진짜 갭은 그 목록을 LLM 이 고른다는 것), 「하드 게이트」는 우리에겐 **틀린 설계**였다(지침서 수치를
+산문에 인용하는 자리가 정당하게 많다). **벤치마크 항목은 착수 전에 우리 코드부터 열어볼 것.**
+
+**A. 반나절 이하 · LLM 0**
+
+- [ ] **A-1 arch-law-diagnose 역방향 소비 경로 문서화**(비용 0) — 그쪽이 `BRIEF_DIR`(우리 GCS `_briefs/`
+      GCSFUSE 마운트)를 **직접 읽어** 사업성 모드 prefill + MultiSiteCompare 를 돌린다
+      (`backend/services/brief_importer.py`·`/api/feasibility/briefs`). 우리 문서엔 `feasibility_export` 가
+      "연동 앱 arch-law-diagnose 용"이라고만 있고 이 경로가 없다. 곁들여 **그쪽 활성 TODO 2건에 우리가
+      답할 수 있다**: "brief 추가 샘플(민간·다부지)"(우리 DB에 있음) · "사내 시설용도 매핑표"
+      (우리 `feasibility_export.sites[].building_law_uses` 가 재료 — 그쪽 `brief_importer` 가 19용도 매핑표가
+      없어 `facility_use` 자동 채움을 포기 중).
+- [ ] **A-2 시행일 백필** — 오늘 붙인 `ef_yd`·`law_ef_yd` 는 **새로 분석/재분석한 브리프부터** 보인다
+      (옛 `law_texts` 엔 키가 없다 → graceful 하게 안 보임). graph `/api/lookup` 만 다시 부르면 되므로
+      **진단 재실행 불필요**(LLM 0·부지당 수 초). `tools/backfill_feasibility.py` 옆에 스크립트 하나.
+- [ ] **A-3 `/analyze` 응답에 `coverage`** — 새 지침서에서 추출 0건일 때 **파서 문제인지 규칙 미적중인지
+      구분이 안 된다**. concept-studio P8 의 핵심 발견("문서를 못 읽은 것이 아니다 — 규칙이 그 대지 표기를
+      겨눈 정규식이라 안 걸린 것이고, 둘은 고치는 방법이 완전히 다르다"). **0건을 0건이라고만 말하면
+      아무도 원인을 모른다.** 그쪽 `tools/rule_gap.py` 의 4갈래(`O` 잡음/`△` 못 잡음/`~` 말만 있음/`·` 없음)도 참고.
+
+**B. 1~2일 · 정확도·신뢰**
+
+- [ ] **B-1 멀티파일 충돌 — `first_wins` 대체** ★다음 실질 작업 추천. **우리 문서가 스스로 인정한 구멍**
+      (시퀀스 C 잔여: "충돌해소는 업로드 순서뿐, 도메인 규칙 없음"). 지침서 vs 과업지시서가 정량을 다르게
+      규정하면 먼저 올린 파일이 **조용히** 이긴다 — 정확히 임원이 못 믿는 종류의 결함이다.
+      concept-studio `services/evidence/conflict.py` + `data/source_priority.json` 이 푼 문제:
+      출처 등급(`gazette > guideline > press > public_api > sibling_app > upload > user`) → 등급 같으면
+      **나중 문서 승**(`conflict.newest`) → 날짜는 **파일 이름에서**(수정 시각 아님 — 무관하게 다시 저장된
+      사례가 있었다) → `user` 값은 자동으로 안 밀어냄(사람이 고시를 이기려면 이유를 적는다) →
+      충돌을 **화면 맨 위에**(그것만 사람이 해야 하는 일이라서). 실측 64건 중 충돌 6, 5건 자동 제안.
+- [ ] **B-2 모순 탐지**(ContraVault) — kunwon-ops 가 우리 앱에 지목한 상용 갭 3개 중 **마지막 미착수**
+      (①매트릭스 ✅ ②Go/No-Go 보류 ③모순). 지침서 내부 모순 + 우리 제안 내부 모순.
+      ⚠**착수 전 확인** — `quant_validator` 가 정량 모순은 이미 본다. **서술 모순**이 진짜 갭인지 먼저 볼 것
+      (A-1 과 같은 「이미 있었다」 위험). 참고: concept-studio `guards/factcheck.py` 는 LLM 0 대조 3종
+      (기각값 재등장 · 단위 같은데 값 다름 · 남의 목록 시설)에 오탐 교훈 3개까지 있다.
+- [ ] **B-3 kordoc HWPX 내보내기** — 심의·조합·발주처 제출은 HWP 가 사실상 표준인데 우리는 html/md/xlsx뿐.
+      우리 `brief_checklist_exporter.to_markdown` 이 이미 재료고, 터읽기가 `POST /board/hwp` 로 **Dockerfile
+      배선까지 실빌드 검증**해뒀다(`app/deck/board_report_md.py` + `services/kordoc_client.py` subprocess).
+      ⚠**버전은 `kordoc@3.4.1` 고정**(검증본) — latest 아님. `--omit=optional` 로 무거운 OCR/PDF 의존성 제외.
+
+**C. 큼 / 조건부**
+
+- [ ] **C-1 MCP provider 전환** — 사내 5개 앱(arch-law-graph·arch-site-model·터읽기·law-qa·arch-law-diagnose)이
+      MCP 를 열었는데 **우리만 빠져 있다**. `archive_search`·`list_briefs`·`get_brief` 는 전부 읽기 전용이라
+      `arch-law-graph-mcp` 패턴(**별도 Cloud Run 서비스**) 그대로. 함정 5개는 `kunwon-ops/docs/plan-mcp-gateway.md §9`
+      에 문서화돼 있다(Starlette Mount 트레일링슬래시 · **mcp 2.0.0 이 `mcp.server.fastmcp` 제거 → 버전 상한 먼저** ·
+      Secret Manager 개행 · FastMCP DNS 리바인딩 · **백엔드 venv 에 `mcp` 넣으면 starlette 가 fastapi 핀을 깨므로
+      서비스 분리 필수**). ⚠ 이건 **우리가 provider 가 되는 방향** — 서버간 REST 호출을 MCP 로 바꾸는 것은
+      kunwon-ops 가 코드까지 읽고 "이득 없음" 결론냈다(E 참조).
+- [ ] **C-2 `/deck/glb`·`/deck/dxf` + `/board {model:}`** — 보류한 Phase 4 3D 매스의 **실질적 대체**.
+      터읽기가 대지계획도 DXF(실제 미터·대지=원점)·건물 GLB 를 낸다. `/board {model:...}` 은 **우리가
+      assembler 로서** arch-site-model `/api/generate` 출력을 넘겨야 물리 3D 요약 + 축측 매싱이 온다
+      (터읽기는 arch-site-model 을 스스로 안 부른다 — provider 경계). ⚠`plan_radius`(도면 범위 ≤2000)와
+      `radius`(데이터 반경)는 **다른 축**.
+- [ ] **C-3 세 개의 언어** — concept-studio `guards/translate.py`(심의/총회/분양)를 우리 맥락으로
+      (심사위원용/발주처 보고용/내부 착수용). '변수' 로드맵 P3(프리셋)과 묶는다.
+      규율 한 줄: **세 문장이 다른 숫자를 들면 그건 번역이 아니라 세 개의 안이다.**
+- [ ] **C-4 `/context-pack` 총량제·걸침** — 주거·재개발 지침서일 때만. 조사범위 걸침 인구·세대(면적비율 합산)
+      + 주민공동시설 총량제 부족/충족 판정이 제안서에 실측 근거로 붙는다.
+
+**D. 작은 이식 (각 2~3시간)**
+
+- [ ] **D-1 `render/qa.py`** — SVG 겹침·잘림·대비·**빈 영역**을 **브라우저 없이**("크롬이 필요하면 CI 에서
+      skip 되고, skip 되는 검사는 없는 검사다"). 글자 폭은 모노 메트릭(라틴 0.6em·한글 1em), **재는 자와
+      놓는 자가 같은 자를 쓴다**. 만들자마자 6건 적발했다 → 우리 `brief_massing`·조닝 SVG 에 바로.
+- [ ] **D-2 `usage.Clock`** — 어디에 시간이 갔나(단계별). ⚠`ok`(돌았나)와 `changed_doc`(바꿨나)을 **가른다**
+      — 0건은 실패가 아니라 맞는 답이다. 앱은 이 로그를 **안 읽는다**(읽으면 로그가 아니라 상태).
+- [ ] **D-3 kunwon-ui `--kw-*` 토큰 통일** — 사내 공통 셸(`AppShell.tsx`·`theme.css`). 우리 `kunwon-tokens.css`
+      와 이름이 다르다(`--color-accent` vs `--kw-primary`). ⚠ 자체완결 리포트는 `report_theme.py` 유지.
+- [ ] **D-4 승인 맥락 기록**(EU AI Act Art.12·13) — 우리 `_steering_log` 는 지시·시각만 남긴다.
+      **그때 무엇을 제치고 이걸 골랐는지**가 없다. "맥락 없는 승인 태그는 증거로서 실패한다."
+      심의·발주처 질의가 요구하는 게 감사와 같은 성격이다.
+
+**E. 보류 — 재제안 금지**
+
+| 항목 | 왜 |
+| --- | --- |
+| **Go/No-Go** | kunwon-ops 판단(2026-08-27) — "참여할지 말지를 **남에게 권하는** 기능"이라 **설문으로 본인 외 실사용자가 확인된 뒤**. 컴플라이언스 매트릭스와 **같이 붙이지 말 것**도 그쪽 결론 |
+| **임원 보고 모드** | 사용자 결정 — 만들지 않는다(메모리 `project_byeonsu_conversational_steering`) |
+| **SketchUp MCP 3D 매스** | 근거 풍부해진 뒤. 당분간 C-2 가 대체 |
+| **서버간 REST → MCP 전환** | kunwon-ops 가 우리 `teoilgi_client.py`·`arch_law_client.py` 를 직접 읽고 "이미 env override·버전 명시 계약·graceful degrade 를 갖춘 잘 만들어진 연동" + "결정론 파이프라인 호출엔 MCP 가 안 맞는다" 결론. 국면 3 후보에서 제외됨 |
+
 
 ## Local Dev
 
