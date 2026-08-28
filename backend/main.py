@@ -11,10 +11,15 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
+import hmac
+import os
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+
+from mcp_server.server import mcp as _mcp
 
 from config import set_request_api_key
 from routers import accumulate, diagnose, settings, patterns, upload, archive, brief
@@ -33,6 +38,60 @@ async def _bind_request_api_key(x_anthropic_api_key: str | None = Header(default
     set_request_api_key(x_anthropic_api_key)
 
 
+# --- MCP (/mcp) ---------------------------------------------------------------
+# kunwon-ops docs/plan-mcp-gateway.md §9 의 검증된 패턴 그대로: lifespan 결합 ·
+# Bearer 토큰 미들웨어 · Starlette Mount 대신 raw ASGI 프리픽스 래퍼.
+_mcp_asgi_app = _mcp.streamable_http_app()
+
+#: `/mcp` 전용 공유키. **없으면 항상 401**(fail closed) — 우리 DB 는 공모 자료라
+#: 실수로 열리면 안 된다. 도구 자체는 읽기 전용·LLM 0 이라 과금 위험은 없다.
+_MCP_SHARED_KEY = os.environ.get("COMPETITION_MCP_KEY")
+
+
+class _McpAuthMiddleware:
+    """Bearer 토큰이 COMPETITION_MCP_KEY 와 일치해야 통과."""
+
+    def __init__(self, app):
+        self._app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self._app(scope, receive, send)
+            return
+        headers = dict(scope.get("headers") or [])
+        token = headers.get(b"authorization", b"").decode("latin-1")
+        expected = f"Bearer {_MCP_SHARED_KEY}" if _MCP_SHARED_KEY else None
+        # compare_digest — 비교 시간이 일치 길이에 따라 달라지지 않도록
+        if not expected or not hmac.compare_digest(token, expected):
+            await PlainTextResponse("Unauthorized", status_code=401)(scope, receive, send)
+            return
+        await self._app(scope, receive, send)
+
+
+class _McpMount:
+    """`/mcp` 와 `/mcp/*` 를 FastMCP 로 보낸다.
+
+    Starlette `Mount` 는 트레일링 슬래시 없는 `/mcp` 자체를 못 잡아 캐치올(정적 파일 `/`)로
+    새는 문제가 있다(형제앱 arch-site-model 실측, plan-mcp-gateway §9). 그래서 라우팅
+    이전 단계인 순수 ASGI 래퍼에서 프리픽스를 직접 잘라 우회한다.
+    """
+
+    def __init__(self, inner_app, mcp_app, prefix="/mcp"):
+        self._app = inner_app
+        self._mcp_app = mcp_app
+        self._prefix = prefix
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            path = scope["path"]
+            if path == self._prefix or path.startswith(self._prefix + "/"):
+                sub_scope = dict(scope)
+                sub_scope["path"] = path[len(self._prefix):] or "/"
+                await self._mcp_app(sub_scope, receive, send)
+                return
+        await self._app(scope, receive, send)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -44,7 +103,11 @@ async def lifespan(app: FastAPI):
         print(f"[INFO] 아카이브 인덱싱 완료 — {n}개 공모")
     except Exception as e:
         print(f"[WARNING] 아카이브 인덱싱 실패 ({e}) — /api/archive 검색 결과가 비어있을 수 있습니다.")
-    yield
+    if not _MCP_SHARED_KEY:
+        print("[INFO] COMPETITION_MCP_KEY 미설정 — /mcp 는 항상 401 입니다(fail closed).")
+    # MCP 세션 매니저를 앱 lifespan 에 결합 (§9)
+    async with _mcp.session_manager.run():
+        yield
 
 
 app = FastAPI(
@@ -136,3 +199,10 @@ if _FRONTEND_DIST is not None:
         if target.is_file() and str(target).startswith(str(_FRONTEND_DIST.resolve())):
             return FileResponse(target)
         return FileResponse(_FRONTEND_DIST / "index.html")
+
+# --- MCP 마운트 (맨 마지막) ----------------------------------------------------
+# 정적 SPA 캐치올(`/{full_path:path}`)이 등록된 **뒤**에 감싼다. 이 래퍼가 라우팅보다
+# 먼저 `/mcp` 를 가로채므로 캐치올로 새지 않는다. FastAPI 인스턴스(`_fastapi_app`)는
+# lifespan 을 위해 그대로 두고, ASGI 진입점만 래퍼로 바꾼다.
+_fastapi_app = app
+app = _McpMount(_fastapi_app, _McpAuthMiddleware(_mcp_asgi_app))

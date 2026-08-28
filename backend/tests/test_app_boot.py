@@ -47,16 +47,21 @@ def test_main_imports():
 ])
 def test_core_routes_are_registered(path, method):
     """import 는 되는데 라우터 등록만 빠지는 일이 실제로 있었다."""
-    from main import app
-    routes = {(r.path, m) for r in app.routes for m in getattr(r, "methods", ()) or ()}
+    # ⚠ `main.app` 은 **MCP 래퍼**(`_McpMount`)라 `.routes` 가 없다 — 라우트는 그 안의
+    #   FastAPI 인스턴스가 들고 있다. uvicorn 진입점은 래퍼가 맞다(`/mcp` 가로채기).
+    from main import _fastapi_app
+    routes = {(r.path, m) for r in _fastapi_app.routes
+              for m in getattr(r, "methods", ()) or ()}
     assert (path, method) in routes, f"{method} {path} 가 등록돼 있지 않다"
 
 
 def test_no_broken_dependencies():
     """`pip check` 상당 — 설치된 패키지들의 요구사항이 서로 맞는가.
 
-    ⚠ MCP provider(C-1) 착수 시 여기가 먼저 깨질 것이다. 그때 답은 핀을 푸는 게
-    아니라 **서비스를 분리하는 것**이다(kunwon-ops plan-mcp-gateway §9).
+    C-1(MCP provider)에서 `mcp` 를 같은 venv 에 넣었다. arch-law-diagnose 는 이걸로 앱이
+    안 떴지만(`fastapi==0.115.5` → `starlette<0.42`) 우리 fastapi 는 0.136 대라
+    `sse-starlette` 가 요구하는 `starlette>=0.49` 를 이미 만족한다. **이 테스트가 그
+    조건을 계속 지킨다** — fastapi 를 내려 핀하거나 mcp 를 올리면 여기서 먼저 터진다.
     """
     from importlib.metadata import distributions
 
@@ -88,3 +93,125 @@ def test_no_broken_dependencies():
             except InvalidVersion:
                 continue
     assert not broken, "의존성 충돌:\n  " + "\n  ".join(broken)
+
+
+# ── MCP 표면 (C-1) ──────────────────────────────────────────────────────────
+
+
+def test_mcp_is_mounted_ahead_of_the_spa_catchall():
+    """Starlette Mount 는 트레일링 슬래시 없는 `/mcp` 를 캐치올(정적 `/`)로 흘린다
+    (형제앱 실측). 라우팅 이전 단계의 ASGI 래퍼여야 한다."""
+    import main
+    assert type(main.app).__name__ == "_McpMount"
+    assert main._fastapi_app is not main.app
+
+
+@pytest.mark.parametrize("path", ["/mcp", "/mcp/", "/mcp/anything"])
+def test_mcp_requires_auth(path, monkeypatch):
+    """키가 없으면 **항상 401**(fail closed) — 우리 DB 는 공모 자료다."""
+    from fastapi.testclient import TestClient
+
+    import main
+    monkeypatch.setattr(main, "_MCP_SHARED_KEY", None)
+    app = main._McpMount(main._fastapi_app, main._McpAuthMiddleware(main._mcp_asgi_app))
+    r = TestClient(app).post(path, json={})
+    assert r.status_code == 401, f"{path} 가 인증 없이 통과했다"
+
+
+def test_wrong_token_is_rejected(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    import main
+    monkeypatch.setattr(main, "_MCP_SHARED_KEY", "right-key")
+    app = main._McpMount(main._fastapi_app, main._McpAuthMiddleware(main._mcp_asgi_app))
+    c = TestClient(app)
+    assert c.post("/mcp", json={}, headers={"Authorization": "Bearer wrong"}).status_code == 401
+    assert c.post("/mcp", json={}, headers={"Authorization": "right-key"}).status_code == 401
+
+
+def test_rest_api_still_works_through_the_wrapper():
+    """회귀 — `/mcp` 가로채기가 나머지 REST 를 막으면 안 된다."""
+    from fastapi.testclient import TestClient
+
+    from main import app
+    assert TestClient(app).get("/api/health").json() == {"status": "ok"}
+
+
+def test_mcp_tools_are_read_only():
+    """쓰기 도구를 열면 안 된다 — 분석·제안서 생성은 과금·장시간 작업이라 REST 전용."""
+    import asyncio
+
+    from mcp_server.server import mcp
+    names = {t.name for t in asyncio.run(mcp.list_tools())}
+    assert names == {"search_competitions", "list_briefs", "get_brief", "get_facility_pattern"}
+
+
+# ── MCP 도구 동작 (읽기 전용 · 네트워크 0) ──────────────────────────────────
+
+
+@pytest.fixture
+def mcp_db(tmp_path, monkeypatch):
+    from config import settings
+    monkeypatch.setitem(settings._data, "db_path", str(tmp_path))
+    (tmp_path / "_briefs").mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+
+def _tool_json(raw):
+    import json
+    return json.loads(raw)
+
+
+def test_get_brief_returns_summary_not_the_whole_file(mcp_db):
+    """`_brief.json` 은 1MB 가 넘는다 — 통째로 올리면 컨텍스트가 손해다."""
+    import json
+
+    from mcp_server.server import get_brief
+    (mcp_db / "_briefs" / "b1.json").write_text(json.dumps({
+        "_brief_meta": {"facility_type": "public", "brief_name": "테스트 청사"},
+        "_quantitative": {"site_area_sqm": 10438.0},
+        "feasibility_export": {"schema_version": 2, "sites": [{"site_id": "부지1"}]},
+        "brief_program": [{"huge": "x" * 5000}],          # 요약에 안 실려야 한다
+        "_contradictions": [{"label": "총 대지면적", "spread_ratio": 5.38, "sources": []}],
+    }, ensure_ascii=False), encoding="utf-8")
+    out = _tool_json(get_brief("b1"))
+    assert out["brief_name"] == "테스트 청사"
+    assert out["_contradictions"], "경고는 있으면 실어야 한다"
+    assert "brief_program" not in out, "본문 블록이 요약에 샜다"
+
+
+def test_get_brief_rejects_path_traversal(mcp_db):
+    from mcp_server.server import get_brief
+    assert _tool_json(get_brief("../../etc/passwd"))["error"] == "BAD_ID"
+    assert _tool_json(get_brief("nope"))["error"] == "NOT_FOUND"
+
+
+def test_clean_brief_has_no_empty_warning_keys(mcp_db):
+    """빈 키가 늘면 읽는 쪽이 신호를 놓친다 — 경고는 있을 때만."""
+    import json
+
+    from mcp_server.server import get_brief
+    (mcp_db / "_briefs" / "b2.json").write_text(
+        json.dumps({"_brief_meta": {"facility_type": "public"}}), encoding="utf-8")
+    out = _tool_json(get_brief("b2"))
+    assert "_contradictions" not in out and "_merge_conflicts" not in out
+
+
+def test_unknown_facility_type_lists_the_valid_ones(mcp_db):
+    from mcp_server.server import get_facility_pattern
+    out = _tool_json(get_facility_pattern("존재하지않는유형"))
+    assert out["error"] == "UNKNOWN_TYPE" and "public" in out["message"]
+
+
+def test_empty_inputs_are_honest_errors(mcp_db):
+    from mcp_server.server import get_facility_pattern, search_competitions
+    assert _tool_json(search_competitions(""))["error"] == "EMPTY_QUERY"
+    assert _tool_json(get_facility_pattern("  "))["error"] == "EMPTY_TYPE"
+
+
+def test_limits_are_clamped(mcp_db):
+    """MCP 응답은 컨텍스트에 그대로 실린다 — 크게 열면 손해다."""
+    from mcp_server.server import MAX_LIMIT, _clamp
+    assert _clamp(9999, 10) == MAX_LIMIT
+    assert _clamp(0, 10) == 1
+    assert _clamp("x", 10) == 10 and _clamp(None, 10) == 10

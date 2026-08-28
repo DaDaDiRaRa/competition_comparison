@@ -20,6 +20,40 @@ Competition Analyzer — 건축 공모 제안서 추출·비교 풀스택 앱.
 
 **MyProject 심층 분석:** 별도 라우터 없음. `accumulate.py` 가 단일 등록 시 `myproject_analyzer.deep_analyze()` 호출 → `_deep.json` + `_deep.html`. `GET /projects/{ft}/{cid}/submissions/{company}/deep-report` 로 서빙.
 
+### MCP Provider (`/mcp`) — 읽기 전용 4도구
+
+사내 5개 앱(arch-law-graph·arch-site-model·터읽기·law-qa·arch-law-diagnose)이 이미 MCP 를 열었는데 우리만 빠져 있던 것(C-1). **우리가 가진 것 — 과거 공모 축적(당선/낙선 제출물·시설유형 패턴·아카이브 FTS)과 분석된 지침서 — 은 다른 앱에 없다.**
+
+`backend/mcp_server/server.py` 가 도구를, `main.py` 가 마운트·인증을 맡는다. **별도 서비스 아님** — 터읽기와 같이 기존 Cloud Run 서비스에 `/mcp` 를 얹었다.
+
+| 도구 | 무엇 |
+| --- | --- |
+| `search_competitions` | 자연어로 과거 공모 검색 (FTS5 BM25). 2자 미만 토큰은 trigram 미매칭 |
+| `list_briefs` | 분석된 지침서 목록 (facility_type 필터) |
+| `get_brief` | 지침서 하나의 **핵심 요약** — `_brief.json` 은 1MB 넘어 통째로 안 싣는다. `_contradictions`·`_merge_conflicts` 는 **있을 때만** |
+| `get_facility_pattern` | 시설유형별 당선 패턴 + `loser_stats` |
+
+**쓰기 도구는 없다** — 분석·제안서 생성은 과금·장시간이라 REST 전용.
+
+**버전이 좁다.** `requirements-server.txt` 의 `fastapi==0.115.12`·`pydantic==2.10.6` 과 같이 살 수 있는 건 **`mcp==1.12.4`** 뿐이다: mcp>=1.15 는 `pydantic>=2.11` 요구 · `sse-starlette>=3.4` 는 `starlette>=0.49.1` 을 **무조건** 요구(fastapi 0.115 는 <0.47, 3.0.3 은 그 요구가 `examples` extra 안에만 있어 공존). **로컬 venv 도 같은 버전으로 맞춘다** — 로컬만 최신이면 `server.py` 의 `from __future__ import annotations` 가 안 걸리고 **프로덕션에서만** `TypeError: issubclass()` 로 죽는다(실측). 그래서 그 파일엔 그 import 를 **쓰지 않는다**.
+
+**Mount 대신 raw ASGI 래퍼** — Starlette `Mount` 는 트레일링 슬래시 없는 `/mcp` 를 캐치올(정적 `/`)로 흘린다(arch-site-model 실측). `main.app` 은 `_McpMount` 래퍼이고 FastAPI 인스턴스는 `main._fastapi_app` 이다(라우트 점검은 후자로).
+
+**배포 (수동 1회):** 키가 없으면 `/mcp` 는 **항상 401**(fail closed)이라 지금 배포해도 안전하다. 켜려면:
+
+```bash
+gcloud secrets create COMPETITION_MCP_KEY --project arch-diagnose --replication-policy=automatic
+python -c "import secrets;print(secrets.token_urlsafe(32))" |   gcloud secrets versions add COMPETITION_MCP_KEY --project arch-diagnose --data-file=-
+# 그다음 deploy.yml 의 gcloud run deploy 에 아래 한 줄 추가
+#   --update-secrets COMPETITION_MCP_KEY=COMPETITION_MCP_KEY:latest
+```
+
+**시크릿을 만들기 전에 `--update-secrets` 를 넣으면 배포 자체가 실패한다** — 그래서 deploy.yml 에 미리 안 박아 뒀다.
+
+**연결:** `claude mcp add competition --transport http <서비스URL>/mcp --header "Authorization: Bearer $COMPETITION_MCP_KEY"`
+
+회귀: `tests/test_app_boot.py` (25 — import·라우트·의존성·401 fail closed·읽기전용 4도구·path traversal·요약 누수).
+
 ### Core Services
 
 | 파일 | 책임 |
@@ -547,14 +581,7 @@ D:\APPS 30개 폴더 중 **2026-08 이후 활발한 12개**를 CLAUDE.md·코드
 
 **C. 큼 / 조건부**
 
-- [ ] **C-1 MCP provider 전환** — 사내 5개 앱(arch-law-graph·arch-site-model·터읽기·law-qa·arch-law-diagnose)이
-      MCP 를 열었는데 **우리만 빠져 있다**. `archive_search`·`list_briefs`·`get_brief` 는 전부 읽기 전용이라
-      `arch-law-graph-mcp` 패턴(**별도 Cloud Run 서비스**) 그대로. 함정 5개는 `kunwon-ops/docs/plan-mcp-gateway.md §9`
-      에 문서화돼 있다(Starlette Mount 트레일링슬래시 · **mcp 2.0.0 이 `mcp.server.fastmcp` 제거 → 버전 상한 먼저** ·
-      Secret Manager 개행 · FastMCP DNS 리바인딩 · **백엔드 venv 에 `mcp` 넣으면 starlette 가 fastapi 핀을 깨므로
-      서비스 분리 필수**). ⚠ 이건 **우리가 provider 가 되는 방향** — 서버간 REST 호출을 MCP 로 바꾸는 것은
-      kunwon-ops 가 코드까지 읽고 "이득 없음" 결론냈다(E 참조).
-- [ ] **C-2 `/deck/glb`·`/deck/dxf` + `/board {model:}`** — 보류한 Phase 4 3D 매스의 **실질적 대체**.
+- [x] ~~**C-1 MCP provider 전환**~~ ✅ 2026-08-28 — `/mcp` 읽기 전용 4도구. **별도 서비스가 아니라 기존 서비스에 얹었다**(터읽기 방식) — 우리를 막을 거라던 starlette 충돌은 **실측해보니 없었고**, 대신 `pydantic` 이 걸려 `mcp==1.12.4` 로 좁혀졌다. 상세는 위 「MCP Provider」 절. 남은 것: **Secret Manager 키 생성 + deploy.yml `--update-secrets`**(수동 1회, 그 전엔 401 fail closed). - [ ] **C-2 `/deck/glb`·`/deck/dxf` + `/board {model:}`** — 보류한 Phase 4 3D 매스의 **실질적 대체**.
       터읽기가 대지계획도 DXF(실제 미터·대지=원점)·건물 GLB 를 낸다. `/board {model:...}` 은 **우리가
       assembler 로서** arch-site-model `/api/generate` 출력을 넘겨야 물리 3D 요약 + 축측 매싱이 온다
       (터읽기는 arch-site-model 을 스스로 안 부른다 — provider 경계). ⚠`plan_radius`(도면 범위 ≤2000)와

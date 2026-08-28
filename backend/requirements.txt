@@ -10,3 +10,7 @@ openpyxl>=3.1.0
 python-docx>=1.1.0
 rhwp-python>=0.7.0
 markdown>=3.7
+
+# MCP provider (/mcp, 읽기 전용 4도구) — C-1. `mcp<2.0.0` 은 형제앱 실측 교훈:
+# 2.0.0 이 `mcp.server.fastmcp` 를 제거한다(kunwon-ops plan-mcp-gateway §9).
+mcp>=1.12,<1.15   # >=1.15 는 pydantic>=2.11 요구 (server 핀과 충돌)
