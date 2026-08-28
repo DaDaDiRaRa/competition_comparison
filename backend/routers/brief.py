@@ -508,6 +508,18 @@ async def analyze_brief(
             )
             yield sse({"type": "done", "step": "brief_reqs", "_timestamp": ts})
 
+            # 지침서 **내부 모순** — 같은 양(총 대지면적·총 연면적)을 여러 곳이 다르게
+            # 말하면 flag. 값은 안 고치고 어느 쪽이 맞는지도 안 정한다(LLM 0, 비치명).
+            # 계기: `_quantitative.site_area_sqm` 이 연면적을 들고 있어 핵심수치 카드에
+            # 5.4배 틀린 대지면적이 떴다(prod 21건 중 7건, 2026-06~08).
+            try:
+                from services.brief_contradiction import detect_contradictions
+                _contra = detect_contradictions(brief_data)
+                if _contra:
+                    brief_data["_contradictions"] = _contra
+            except Exception:
+                logger.warning("지침서 내부 모순 탐지 실패 (비치명)", exc_info=True)
+
             # 입찰(bid) 2층 배점 구조 — genre=="bid" 일 때만. requirements(상위 연면적 밴드)
             # + brief_evaluation(하위 PQ 100점표) 재배치. 결정론·LLM 0, 실패해도 무중단.
             try:

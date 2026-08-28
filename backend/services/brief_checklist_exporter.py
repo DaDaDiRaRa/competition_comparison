@@ -187,11 +187,25 @@ def _extract_sections(brief_data: dict) -> dict:
         or at.get("total_required_area_sqm")
         or quant.get("total_floor_area_sqm")
     )
-    # 단일값: 구 top-level → sites[0] → area_table → quant 순
+    # 단일값: 구 top-level → sites[0] → area_table → **부지 합** → quant 순.
+    #
+    # ⚠ `quant.get("site_area_sqm")` 을 **맨 뒤로 미룬 이유**(2026-08-28): 그 값이 오결합되는
+    #   일이 실제로 있다. 영등포 지침서에서 `_quantitative.site_area_sqm` 이 대지면적이 아니라
+    #   **부지1의 연면적 합계**(56,189.72)를 들고 있었고, 앞 셋이 전부 비어 이 폴백이 이겨서
+    #   **핵심수치 카드에 5.4배 틀린 대지면적**이 떴다(실제 10,438㎡ · prod 21건 중 7건).
+    #   앞에 `feasibility_export.sites[]` 합을 세운다 — 그건 부지별로 정규화된 값이라
+    #   같은 오결합이 일어나지 않는다(법적 골격·팩트 밴드가 이미 그걸 쓴다).
+    #   ⚠ 다부지면 **합**이 맞다("총 대지면적"). 부지별 값은 아래 부지 표가 따로 보여준다.
+    _fe_sites = _as_list(brief_data.get("feasibility_export") or {}, "sites")
+    _fe_site_area = sum(
+        st["site_area_sqm"] for st in _fe_sites
+        if isinstance(st, dict) and isinstance(st.get("site_area_sqm"), (int, float))
+    ) or None
     site_area = (
         bp.get("site_area_sqm")
         or s0.get("site_area_sqm")
         or at.get("site_area_sqm")
+        or _fe_site_area
         or quant.get("site_area_sqm")
     )
     # BRIEF_PROJECT_INFO sites 폴백 — 복수 부지면 "부지1: 60% / 부지2: 50%" 형식
@@ -578,7 +592,9 @@ def to_markdown(brief_data: dict, validation: dict) -> str:
     # 0. AI 종합 해설 (insight 있을 때만 — 문서 맨 앞)
     # ══════════════════════════════════════════════════════════════════════════
     _md_insight_block(L, brief_data.get("_insight"))
+    from services.brief_contradiction import md_lines as _contra_md
     from services.brief_merge_conflicts import md_lines as _conflict_md
+    L.extend(_contra_md(brief_data.get("_contradictions")))      # 0.3 지침서 내부 모순
     L.extend(_conflict_md(brief_data.get("_merge_conflicts")))   # 0.4 파일 간 충돌
     _md_site_law_block(L, brief_data)   # 0.5 대지·법적 골격 (site_context 있을 때만)
 
@@ -1757,7 +1773,11 @@ def to_html(brief_data: dict, validation: dict, insight: dict | None = None) -> 
 
     # ══ 파일 간 충돌 (복수 파일 분석에서 값이 어긋났을 때만) ═══════════════════════
     # 데이터 품질 신호라 본문보다 **앞**에 둔다 — 뒤에 두면 표를 다 읽고 나서야 안다.
+    from services.brief_contradiction import band_html as _contra_band
     from services.brief_merge_conflicts import band_html as _conflict_band
+    _contra = _contra_band(brief_data.get("_contradictions"))
+    if _contra:
+        P.append(_contra)
     _conf = _conflict_band(brief_data.get("_merge_conflicts"))
     if _conf:
         P.append(_conf)
