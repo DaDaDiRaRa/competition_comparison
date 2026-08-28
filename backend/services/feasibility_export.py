@@ -303,15 +303,20 @@ def build_feasibility_export(brief_data: dict) -> dict:
             "floor_area_ratio_pct": st.get("floor_area_ratio_pct"),
             "building_coverage_pct": st.get("building_coverage_pct"),
             "max_height_m": st.get("max_height_m"),
-            # 목표 연면적·공개공지 (2026-08-27 추가, arch-law-diagnose 요청).
-            # `brief_project_info.sites` 에 **이미 있던 값**인데 이 블록에만 안 실려 있어,
-            # 소비 앱이 그것 때문에 자기 파서를 못 지우고 있었다. 재배치라 새 추출 0.
+            # 목표 연면적 (2026-08-27). `brief_project_info.sites` 에 **이미 있던 값**인데
+            # 이 블록에만 안 실려서, 제안서·장표의 「사업 규모」 팩트 밴드에 **연면적이
+            # 통째로 빠져 있었다** — 제안서에서 제일 중요한 숫자다. 재배치라 새 추출 0.
+            # 실측: prod 부지 31개 중 **31/31** 채워진다. 대안(`_quantitative.
+            # total_floor_area_sqm`)은 21건 중 11건뿐이고, prod 의 **절반이 다부지**라
+            # 총합 하나로는 부지별 값을 대신 못 한다.
+            #
+            # ⚠ `open_space_sqm`·`open_space_notes` 는 **일부러 안 싣는다.** 우리 소비처가
+            #   없다 — 소비처 없는 필드는 같은 값의 출처만 둘로 만든다(형제앱
+            #   arch-law-diagnose 지적, 2026-08-27: 「얻는 건 0, 새로 생기는 건 갈라질 자리」).
+            #   필요해지는 쪽이 생기면 그때 넣는다.
             # ⚠ schema_version 은 2 그대로 — 추가만이라 하위호환이고, 소비 측 게이트가
-            #   `>=2` 라 올리면 **옛 판본을 읽던 코드가 갈라진다**. 판본 구분이 필요해지면
-            #   그때 두 앱이 같이 정한다.
+            #   `>=2` 라 올리면 **옛 판본을 읽던 코드가 갈라진다**.
             "floor_area_sqm": st.get("floor_area_sqm"),
-            "open_space_sqm": st.get("open_space_sqm"),
-            "open_space_notes": st.get("open_space_notes"),
         })
 
     # C: 인증 코드화

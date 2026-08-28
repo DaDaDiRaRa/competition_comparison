@@ -349,26 +349,26 @@ class TestMergeIntegration:
 
 # ── 목표 연면적·공개공지 (2026-08-27, arch-law-diagnose 요청) ─────────────────
 class TestTargetAreaFields:
-    """`brief_project_info.sites` 에 **이미 있던 값**을 이 블록에도 싣는다(재배치·새 추출 0).
-    소비 앱이 이 셋 때문에 자기 파서를 못 지우고 있었다."""
+    """목표 연면적만 싣는다 — 우리 팩트 밴드가 쓰기 때문이다(재배치·새 추출 0).
+    공개공지는 소비처가 없어 **일부러 뺐다**."""
 
     def _fe(self, site):
         from services.feasibility_export import build_feasibility_export
         return build_feasibility_export(
             {"brief_project_info": {"sites": [dict({"site_id": "부지1"}, **site)]}})
 
-    def test_target_area_and_open_space_are_carried(self):
-        fe = self._fe({"floor_area_sqm": 69628.19, "open_space_sqm": 1200,
-                       "open_space_notes": "대지 남측 전면 배치"})
-        s = fe["sites"][0]
+    def test_target_area_is_carried(self):
+        s = self._fe({"floor_area_sqm": 69628.19})["sites"][0]
         assert s["floor_area_sqm"] == 69628.19
-        assert s["open_space_sqm"] == 1200
-        assert s["open_space_notes"] == "대지 남측 전면 배치"
 
-    def test_absent_values_stay_none_not_zero(self):
-        s = self._fe({"site_area_sqm": 100})["sites"][0]
-        assert s["floor_area_sqm"] is None
-        assert s["open_space_sqm"] is None and s["open_space_notes"] is None
+    def test_open_space_is_deliberately_not_carried(self):
+        """소비처가 없는 필드는 같은 값의 출처만 둘로 만든다(형제앱 지적).
+        쓰는 쪽이 생기면 그때 넣는다 — 이 테스트가 그 결정을 못박는다."""
+        s = self._fe({"open_space_sqm": 1200, "open_space_notes": "남측 전면"})["sites"][0]
+        assert "open_space_sqm" not in s and "open_space_notes" not in s
+
+    def test_absent_value_stays_none_not_zero(self):
+        assert self._fe({"site_area_sqm": 100})["sites"][0]["floor_area_sqm"] is None
 
     def test_schema_version_stays_2(self):
         """추가만이라 하위호환 — 올리면 소비 측 `>=2` 게이트가 옛 판본과 갈라진다."""
